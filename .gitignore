@@ -1,0 +1,57 @@
+# ---------------------------------------------------------------------------
+# ShopInsight — Group 15 (CO5173)
+#
+# Rule: no data ever moves through git. Each person downloads the raw CSV and
+# runs load_bronze.py + batch_silver.py on their own machine. The sampling rule
+# is deterministic, so all four machines produce byte-identical datasets.
+# ---------------------------------------------------------------------------
+
+# Data lake — raw CSV, bronze/silver/gold Parquet, stream landing, checkpoints.
+# The empty directory skeleton is kept via .gitkeep files (see !data/**/.gitkeep).
+data/*
+!data/raw/
+!data/bronze/
+!data/silver/
+!data/gold/
+!data/stream_landing/
+!data/checkpoints/
+data/*/*
+!data/*/.gitkeep
+
+# Python
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Spark — local metastore and warehouse created by local[*] runs
+spark-warehouse/
+metastore_db/
+derby.log
+*.crc
+
+# Node / React
+node_modules/
+web/dist/
+web/build/
+.vite/
+*.tsbuildinfo
+
+# Secrets and local overrides
+.env
+.env.*
+!.env.example
+
+# Editors and OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
