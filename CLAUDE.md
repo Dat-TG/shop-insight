@@ -107,7 +107,7 @@ the streaming foundation in W40 — so nobody waits on anybody inside a week.
   also appends to it, but batch jobs must not wait for the stream to exist.
 - `data/` is gitignored, so no data ever moves between machines. Each person downloads
   the raw CSV themselves and runs `load_bronze.py` + `batch_silver.py` locally. The
-  sampling rule must be deterministic — `pmod(hash(user_id), 100) < 12`, never a
+  sampling rule must be deterministic — `pmod(hash(user_id), 100) < 7`, never a
   random seed — so all four machines produce byte-identical datasets.
 - `batch_silver.py` shifts `event_time` to UTC+7, so it must also RECOMPUTE
   `event_date` from the shifted time. Keeping the old date misfiles every event

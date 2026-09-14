@@ -57,9 +57,9 @@ màn hình. Mỗi người một BR batch và một BR streaming.
 ### Nguyên tắc giữ cho bốn người chạy song song
 
 **Ai cũng tự sinh được dữ liệu của mình.** `.gitignore` chặn `data/`, nên dữ liệu không
-đi qua git. Thay vào đó mỗi người tự tải `2019-Oct.csv` về máy ở W38, rồi tự chạy
+đi qua git. Thay vào đó mỗi người tự tải `2019-Nov.csv` về máy ở W38, rồi tự chạy
 `load_bronze.py` và `batch_silver.py` ở **đầu W39**. Bốn máy ra đúng cùng một tập nhờ
-công thức lấy mẫu tất định `pmod(hash(user_id),100) < 12`; mỗi người post số dòng bronze
+công thức lấy mẫu tất định `pmod(hash(user_id),100) < 7`; mỗi người post số dòng bronze
 vào nhóm để đối chiếu ngay ở W39 thay vì tới W44 mới vỡ.
 
 **Thứ dùng chung luôn đi trước một tuần.** Đắt viết `load_bronze`/`batch_silver` ở W38 để
