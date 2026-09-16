@@ -10,9 +10,17 @@ Input: one 5-million-row CSV of user behaviour events (view / cart / purchase).
 Output: a web dashboard with 8 screens, each answering one business question in
 under 2 seconds.
 
-The value of the project sits in between: turn raw logs into pre-aggregated tables,
-and lay out the keys so every query reads only the slice it needs. That gap must be
-**measured and proven**, not asserted.
+The value of the project sits in between: turn raw logs into a dimensional
+warehouse and then into pre-aggregated tables, and lay out the keys so every query
+reads only the slice it needs. That gap must be **measured and proven**, not asserted.
+
+The pipeline is bronze -> silver -> **star schema** -> gold. The star schema (five
+conformed dimensions, three facts, one per Kimball fact type) is materialised twice:
+Parquet as primary, PostgreSQL as a second physical realisation of the same logical
+model. Gold is derived from the star, not from silver. The exception is the streaming
+path: BR1, BR3, BR5 and BR8 still read silver-shaped events, because a micro-batch
+cannot range-join a Type 2 dimension rebuilt nightly. Only BR6 is genuinely
+star-derived. `SYSTEM_DESIGN.md` section 1 says why.
 
 Full design: `SYSTEM_DESIGN.md`. Schedule and gates: `PLAN.md` (Vietnamese,
 internal only — you rarely need it).
@@ -101,8 +109,15 @@ the streaming foundation in W40 — so nobody waits on anybody inside a week.
   so design keys backwards from the question the screen will ask.
 - Structured Streaming cannot rank a streaming DataFrame. BR3's top-N is computed
   inside `foreachBatch`, not with a window function on the stream.
-- `stockout_risk` and `abandoned_carts` cluster on a value that changes between runs,
-  so a plain upsert leaves the old row behind. Delete the partition, then insert.
+- Three Cassandra tables leave stale rows, and the fix differs for each. Getting this
+  wrong shows up on screen as duplicates, or as a list that empties itself mid-demo.
+  `stockout_risk` is batch and rewrites every warehouse in full, so delete the
+  partition (`WHERE warehouse_id = ?`) then insert. `trending_products` re-emits each
+  window, so delete `WHERE window_start = ?` then insert the new top-N. But
+  `abandoned_carts` is streaming and accumulates through the day: deleting its
+  partition would erase every cart found in earlier micro-batches. Its key is
+  therefore `((event_date), user_session)` with `cart_value` as a plain column, which
+  makes the upsert idempotent and needs no delete at all.
 - Silver is produced by `processing/batch_silver.py` from bronze. The streaming job
   also appends to it, but batch jobs must not wait for the stream to exist.
 - `data/` is gitignored, so no data ever moves between machines. Each person downloads
