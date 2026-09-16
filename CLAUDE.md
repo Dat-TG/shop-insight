@@ -6,7 +6,9 @@ Group 15 — Dat, Khang, Nguyen, Tin. Domain: eCommerce. Final deadline: ISO wee
 
 ## What this system is
 
-Input: one 5-million-row CSV of user behaviour events (view / cart / purchase).
+Input: `2019-Nov.csv`, 67,501,979 user behaviour events (view / cart /
+remove_from_cart / purchase, 9.0 GB), sampled by a deterministic 7% user hash to
+~4.69M rows. Hard rule 5 caps that working set, not the file.
 Output: a web dashboard with 8 screens, each answering one business question in
 under 2 seconds.
 
@@ -19,7 +21,8 @@ conformed dimensions, three facts, one per Kimball fact type) is materialised tw
 Parquet as primary, PostgreSQL as a second physical realisation of the same logical
 model. Gold is derived from the star, not from silver. The exception is the streaming
 path: BR1, BR3, BR5 and BR8 still read silver-shaped events, because a micro-batch
-cannot range-join a Type 2 dimension rebuilt nightly. Only BR6 is genuinely
+cannot range-join a Type 2 dimension rebuilt nightly. All batch BRs (BR2, BR4, BR6,
+BR7) read the star; of the five Cassandra tables, only BR6's `stockout_risk` is
 star-derived. `SYSTEM_DESIGN.md` section 1 says why.
 
 Full design: `SYSTEM_DESIGN.md`. Schedule and gates: `PLAN.md` (Vietnamese,
@@ -61,7 +64,10 @@ internal only — you rarely need it).
 
 ## Code conventions
 
-- Python 3.11+, virtualenv at `.venv/`, dependencies pinned in `requirements.txt`
+- Python 3.14.x, `pyspark==4.1.3`, OpenJDK 21 — pinned exactly, not minimums. PySpark
+  3.5.x **segfaults** on 3.14 and 3.11-3.13 are not in the Ubuntu 26.04 repos.
+  `SYSTEM_DESIGN.md` section 11.1 says why each pin is load-bearing
+- virtualenv at `.venv/`, dependencies pinned in `requirements.txt`
 - Every script runs standalone: `python processing/batch_gold.py`
 - The event schema is declared in exactly one place: `processing/schema.py`
 - The source reader is isolated in `processing/source.py` — swapping File source for
@@ -85,13 +91,14 @@ one must be demonstrable.
 | BR6 | Stock-out risk per SKU and warehouse | batch | Cassandra |
 | BR7 | Frequently bought together, from a co-occurrence matrix | batch | Parquet |
 | BR8 | Order velocity anomaly detection | streaming | Cassandra |
-| BR9 | (bonus) Ad-hoc product lookup with combined filters | batch | Parquet |
+| BR9 | (bonus, **cut** in `PLAN.md`) Ad-hoc product lookup with combined filters | batch | Parquet |
 
 BR6 is batch only, even though it sinks to Cassandra.
 
 Each BR has one owner who writes all three layers of it — Spark query, API endpoint,
-React screen. Dat owns BR2 (W39) and BR1 (W40); Khang BR4 (W39) and BR3 (W41);
-Nguyen BR7 (W39) and BR5 (W41); Tin BR6 (W40), BR8 (W41) and BR9 (W45).
+React screen. Dat owns BR2 and BR1; Khang BR4 and BR3; Nguyen BR7 and BR5; Tin BR6
+and BR8. BR9 was cut to pay for the warehouse layer. Which week each BR lands in
+lives only in `PLAN.md`, the schedule of record — it moved once already.
 Everyone writes Spark; that is deliberate.
 
 The three streaming BRs that are not Dat's all sit in W41 — one week after Dat builds
@@ -118,8 +125,12 @@ the streaming foundation in W40 — so nobody waits on anybody inside a week.
   partition would erase every cart found in earlier micro-batches. Its key is
   therefore `((event_date), user_session)` with `cart_value` as a plain column, which
   makes the upsert idempotent and needs no delete at all.
-- Silver is produced by `processing/batch_silver.py` from bronze. The streaming job
-  also appends to it, but batch jobs must not wait for the stream to exist.
+- Silver has exactly one writer: `processing/batch_silver.py`, from bronze. The
+  streaming job does **not** write silver — its only outputs are the Cassandra gold
+  tables. A Parquet file sink there would create `data/silver/_spark_metadata/` and make
+  Spark blind to the files `batch_silver.py` wrote while DuckDB still globs the whole
+  directory; a `foreachBatch` write would duplicate rows, because the replayer replays
+  bronze that silver already contains. `SYSTEM_DESIGN.md` section 8 has both arguments.
 - `data/` is gitignored, so no data ever moves between machines. Each person downloads
   the raw CSV themselves and runs `load_bronze.py` + `batch_silver.py` locally. The
   sampling rule must be deterministic — `pmod(hash(user_id), 100) < 7`, never a

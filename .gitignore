@@ -7,11 +7,14 @@
 # ---------------------------------------------------------------------------
 
 # Data lake — raw CSV, bronze/silver/gold Parquet, stream landing, checkpoints.
-# The empty directory skeleton is kept via .gitkeep files (see !data/**/.gitkeep).
+# The empty directory skeleton is kept via .gitkeep files (see !data/*/.gitkeep).
 data/*
 !data/raw/
 !data/bronze/
 !data/silver/
+!data/warehouse/
+!data/catalog/
+!data/inventory/
 !data/gold/
 !data/stream_landing/
 !data/checkpoints/
@@ -40,6 +43,10 @@ web/dist/
 web/build/
 .vite/
 *.tsbuildinfo
+
+# Claude Code — .claude/ is committed team config, so it stays tracked; only
+# one person's own overrides (JAVA_HOME, status line, model) stay local.
+.claude/settings.local.json
 
 # Secrets and local overrides
 .env
