@@ -140,3 +140,90 @@ they change what four people do for nine weeks. Open questions recorded at the t
 whether BR9 was ever promised to the lecturer, whether the 1.50 h reuse credit
 really splits evenly across BR2/BR4/BR7, and whether Nguyên accepts carrying 8 of
 the 15 cut items.
+
+## Session 3 — 16 September 2026 (W38)
+
+**Tool:** Claude Code (Opus 5).
+**Scope:** Claude Code configuration for the repo (`.claude/`), a `README.md`, a
+`.gitignore` repair, five `CLAUDE.md` corrections, and protection for `main` on GitHub.
+No application code was written: no Spark, no SQL, no API, no web.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| `README.md` — new; status, architecture, BR table, getting started, branch workflow | AI-drafted, human review pending |
+| `.claude/settings.json` — permission lists and hook wiring | AI-drafted, hooks executed against test input |
+| `.claude/hooks/` — `guard_data.py`, `check_python.py`, `session_status.py` (stdlib Python) | AI-drafted, run and verified |
+| `.claude/skills/` — `br-slice`, `spark-job`, `streaming-job`, `cassandra-table`, `checkpoint`, `ai-usage-log` | AI-drafted, human review pending |
+| `.claude/agents/` — `spark-reviewer`, `data-fact-checker`, `br-slice-auditor` | AI-drafted, human review pending |
+| `.claude/README.md` — what each file does, for teammates new to Claude Code | AI-drafted, human review pending |
+| `.gitignore` — negations for `data/warehouse`, `data/catalog`, `data/inventory`; `.claude/settings.local.json` ignored | AI-drafted, verified with `git check-ignore` |
+| `CLAUDE.md` — five corrections (listed under Judgement) | AI-drafted, human-approved (Dat) |
+| Branch protection on `main` (GitHub) | Applied by AI at Dat's request, read back from the API |
+
+### How it was checked
+
+Drafting ran as a 12-agent workflow: two researchers (Claude Code file formats from the
+official docs; a fact sheet built from `SYSTEM_DESIGN.md`, `PLAN.md` and the actual repo),
+six writers on disjoint files, and four verifiers — one executing the hooks, one
+fact-checking every README number against its source, one parsing skill and agent
+frontmatter, one completeness critic. Four repair agents followed. A session restart cut
+that run off before its own re-check, so a separate two-agent read-only consistency check
+ran afterwards; its findings were applied by hand.
+
+The hooks were then re-run by hand: `guard_data.py` against 51 commands (0 mismatches)
+plus 8 malformed inputs; `check_python.py` against a docstring-only file, a real defect, a
+correct file and a syntax error; `session_status.py` output compared with the disk.
+
+| Claim | How it was measured |
+|---|---|
+| `.gitignore` did not re-include `data/warehouse/`, although SYSTEM_DESIGN 10 said the new directories were "already handled" | `git check-ignore -v data/warehouse/.gitkeep`, before the fix |
+| The raw file is 9,006,762,395 bytes | `ls -l data/raw/2019-Nov.csv` |
+| `main` requires a PR, binds admins, needs 0 approvals, refuses force-push and deletion | `gh api repos/Dat-TG/shop-insight/branches/main/protection` |
+
+### What the AI got wrong, and was corrected on
+
+- `guard_data.py` read a multi-line command as one line: `ls -la` then `rm -rf data/gold`
+  passed, while `rm -rf node_modules` then `ls data/bronze` was denied. It now splits per
+  line. It also missed an `rm` inside a `for` loop, behind `do`.
+- The guard and a `settings.json` deny rule both blocked `git add data/warehouse/.gitkeep`
+  — the very commit the `.gitignore` repair needed. The prefix-matched deny rules also
+  blocked `rm -r datasets_backup`. The shell deny rules for `data/` were removed; the hook
+  is now the one precise check.
+- `find` was auto-allowed and not parsed, so `find data/raw -delete` would have run
+  without a prompt. The guard now parses `find`, and `find` and `awk` prompt again.
+- The guard read heredoc bodies as commands and blocked one of the AI's own edits whose
+  file text quoted a trap command. Heredoc bodies are now skipped.
+- The first `check_python.py` fired on docstrings that merely describe a trap — the
+  shape of the commented reference implementation CLAUDE.md asks for. Fixed. The AI then
+  reported a second defect there that was really a flaw in its own test file.
+- README drafts said BR6 is the only star-derived BR (BR2, BR4 and BR7 read the star
+  too), drew the star feeding the streaming path, named BR8's table
+  `order_velocity_anomaly` (it is `order_velocity_alerts`), and called star row counts
+  "measured" without saying no build exists to reproduce them.
+- `cassandra-table` put clustering order inside `PRIMARY KEY`, which does not parse;
+  `spark-reviewer` misnumbered the silver cleaning rules; the three stale-row rules had
+  been copied into seven places. Now one full copy (`streaming-job` section 4) and pointers.
+- `checkpoint` fired the W39 `fact_event` handover if `fact_event` itself had not landed
+  by Wednesday. PLAN.md dates only the `batch_warehouse.py` skeleton mid-week.
+
+### Judgement that stayed with the team
+
+Dat approved: the five `CLAUDE.md` corrections (silver has one writer; the exact
+toolchain pins; the input is 67,501,979 rows sampled to ~4.69M; all batch BRs read the
+star; weeks removed from the BR ownership line and BR9 marked cut, following `PLAN.md`);
+protecting `main`; and dropping the Claude co-author trailer from his own commits, set in
+his user settings rather than the project's so the other three keep their own choice.
+
+Made by AI, flagged for review: required approvals on `main` are **0**, because Dat is the
+only collaborator and GitHub does not count an author's own approval — raise to 1 once
+Khang, Nguyen and Tin are added (`README.md`, "Branches and pull requests").
+`requirements.txt` and `docker-compose.yml` were deliberately not written: they are W38
+deliverables that must be run before commit. A critic recommended deleting the
+`cassandra-table` skill; the AI kept it, trimmed.
+
+Because commits no longer carry a co-author trailer, **this file is now the only record of
+AI involvement** in the history. The three earlier commits keep theirs; history was not
+rewritten. Still open from Session 2: whether BR9 was ever promised to the lecturer —
+`CLAUDE.md` now records it as cut.
