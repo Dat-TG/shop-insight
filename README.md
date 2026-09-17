@@ -1,7 +1,7 @@
 # ShopInsight — CO5173 Data Engineering, Group 15
 
-`2019-Nov.csv` — 67,501,979 rows, 9.0 GB of behaviour events (view / cart / remove_from_cart / purchase) — sampled by a
-deterministic 7% user hash to 4,694,166 rows (CLAUDE.md rule 5 caps the *working* dataset at 5 million; the cap is not
+`2019-Nov.csv` — 67,501,979 rows, 9.0 GB of behaviour events (view / cart / purchase; no `remove_from_cart` in this
+file) — sampled by a deterministic 7% user hash to 4,767,012 rows (CLAUDE.md rule 5 caps the *working* dataset at 5 million; the cap is not
 a property of the file) becomes a dimensional warehouse, then pre-aggregated tables, then a dashboard of 8 screens,
 each answering one business question in under 2 seconds. That middle part is what the course requires to be **measured
 and proven**, not asserted. HCMUT, Semester 1 2026-2027. Group 15: Dat, Khang, Nguyen, Tin. Submit ISO W46 (9-15 Nov).
@@ -14,11 +14,11 @@ and proven**, not asserted. HCMUT, Semester 1 2026-2027. Group 15: Dat, Khang, N
 
 | | |
 |---|---|
-| What exists | The Spark setup: [docs/SETUP_SPARK.md](docs/SETUP_SPARK.md), [requirements.txt](requirements.txt), [conf/spark-defaults.conf](conf/spark-defaults.conf), [processing/schema.py](processing/schema.py), [processing/kata.py](processing/kata.py). Plus [CLAUDE.md](CLAUDE.md), [SYSTEM_DESIGN.md](SYSTEM_DESIGN.md), [PLAN.md](PLAN.md), [docs/AI_USAGE.md](docs/AI_USAGE.md), [.gitignore](.gitignore), a `data/` skeleton, `.claude/`. No BR code yet |
-| W38 tasks | Done: `docs/SETUP_SPARK.md` + `processing/kata.py`, so all four install Spark unattended — **everyone runs it and posts `KATA OK`**. Next: `ingestion/load_bronze.py` + `processing/batch_silver.py`, so the batch BRs have input |
+| What exists | The Spark setup: [docs/SETUP_SPARK.md](docs/SETUP_SPARK.md), [requirements.txt](requirements.txt), [conf/spark-defaults.conf](conf/spark-defaults.conf), [processing/schema.py](processing/schema.py), [processing/kata.py](processing/kata.py); bronze: [ingestion/load_bronze.py](ingestion/load_bronze.py). Plus [CLAUDE.md](CLAUDE.md), [SYSTEM_DESIGN.md](SYSTEM_DESIGN.md), [PLAN.md](PLAN.md), [docs/AI_USAGE.md](docs/AI_USAGE.md), [.gitignore](.gitignore), a `data/` skeleton, `.claude/`. No BR code yet |
+| W38 tasks | Done: `docs/SETUP_SPARK.md` + `processing/kata.py`, so all four install Spark unattended — **everyone runs it and posts `KATA OK`**; `ingestion/load_bronze.py` — **in W39 everyone runs it and posts the `BRONZE OK` numbers**. Next: `processing/batch_silver.py`, so the batch BRs have input |
 | Next hard gate | Gate 1, W40 (28 Sep - 4 Oct): BR1 running on Structured Streaming, evidenced by a screenshot of the micro-batch log and rows in `gmv_by_minute` |
 
-Every path in SYSTEM_DESIGN section 10 is a plan, not a fact: apart from `processing/schema.py` and `processing/kata.py`,
+Every path in SYSTEM_DESIGN section 10 is a plan, not a fact: apart from `processing/schema.py`, `processing/kata.py` and `ingestion/load_bronze.py`,
 nothing under `ingestion/`, `processing/`, `serving/`, `warehouse/`, `benchmark/`, `web/` or `seed/` exists today. **Live status comes from the repo, not from this table** —
 the SessionStart hook prints it each session ([.claude/README.md](.claude/README.md)).
 
@@ -57,6 +57,8 @@ Star row counts come from SYSTEM_DESIGN 5.2, 5.4 and 5.5, which labels them meas
 reproduce them** — `batch_warehouse.py` is not written and `data/warehouse/` is empty. Confirm in W39: `fact_event` 4,681,493 ·
 `fact_session_funnel` 954,686 · `fact_inventory_daily` 1,898,850 (arithmetic: 12,659 purchased SKUs x 5 warehouses x 30
 days) · `dim_product` 127,693 -> 244,025 SCD2 versions · `dim_date` 92 · `dim_event_type`, `dim_warehouse` 5 each.
+These were measured on an **earlier sample drawn with a different hash** (4,694,166 rows); Spark's own sample has
+4,767,012 rows and 129,899 products (SYSTEM_DESIGN 3.1), so expect every count above to move slightly in W39.
 
 ## The nine business requirements
 
@@ -131,7 +133,7 @@ psql -f warehouse/ddl.sql            # (not written yet — W39, Tin) Postgres s
 #   psql -h localhost -p 5432 -U <user> -d <db> -f warehouse/ddl.sql — host, port, user and database are undecided
 #   until docker-compose.yml lands (W38); SYSTEM_DESIGN 11 gives the bare command against a Dockerised Postgres.
 # (c) build the data — once, 15-25 minutes
-python ingestion/load_bronze.py      # (not written yet — W38, Dat) 7% user sample, rule hard-coded
+python ingestion/load_bronze.py      # 7% user sample, rule hard-coded; prints BRONZE OK
 python processing/batch_silver.py    # (not written yet — W38, Dat) bronze -> silver. Batch needs this
 python ingestion/gen_catalog.py      # (not written yet — W39, Nguyen) product attributes JSON
 python ingestion/gen_inventory.py    # (not written yet) daily inventory series
@@ -147,8 +149,8 @@ cd web && npm run dev                     # (not written yet — W38 scaffold, T
 
 **The order in (d) matters.** Start the streaming job after the replayer and the files already sitting in
 `data/stream_landing/` collapse into one huge micro-batch, which looks nothing like real time during a demo.
-`load_bronze.py` takes no `--rows` flag: the sample size is whatever the deterministic hash rule yields — 4,694,166 rows,
-258,088 users, 127,693 products (SYSTEM_DESIGN 3.1) — and a row count would break byte-identical output across the four
+`load_bronze.py` takes no `--rows` flag: the sample size is whatever the deterministic hash rule yields — 4,767,012 rows,
+258,390 users, 129,899 products (SYSTEM_DESIGN 3.1) — and a row count would break byte-identical output across the four
 machines. Never take the first 5M rows: two days of November leaves BR4's recency meaningless and BR6's `velocity_7d`
 with fewer than seven days to average over.
 
@@ -158,15 +160,25 @@ with fewer than seven days to average over.
 `2019-Nov.csv` and runs `load_bronze.py` + `batch_silver.py` locally. That works only because the sampling rule is
 **deterministic** — `pmod(hash(user_id), 100) < 7`, hard-coded in `load_bronze.py`, never a random seed; a seed means
 four machines with four datasets and a correctness gate nobody can pass. Cross-check bronze in W39 and post the three
-numbers in the group chat, rather than discovering a mismatch in W44:
+numbers in the group chat, rather than discovering a mismatch in W44. `load_bronze.py` prints them itself, read back
+from disk, and must end in `BRONZE OK`:
 
-```bash
-duckdb -c "select count(*) rows, count(distinct user_id) users, count(distinct product_id) products
-           from 'data/bronze/**/*.parquet'"     # expect 4,694,166 / 258,088 / 127,693
+```
+rows               4,767,012
+users                258,390
+products             129,899
+date directories          30   (expect 30: event_date=2019-11-01 .. event_date=2019-11-30)
+null event_time            0   (expect 0)
+BRONZE OK
 ```
 
-Users differ -> your sample rule is not the hard-coded one. Users match but rows differ -> a different raw file or a
-truncated download (`wc -c data/raw/2019-Nov.csv` must print 9006762395). **One authored file must go through git:
+The same check without Spark, once DuckDB is installed:
+`duckdb -c "select count(*), count(distinct user_id), count(distinct product_id) from 'data/bronze/**/*.parquet'"`.
+
+The script refuses to start unless `data/raw/2019-Nov.csv` is the complete 9,006,762,395 bytes, so a truncated download
+is caught first. With the right file, any other number means the sampling rule, `processing/schema.py` (`user_id` read
+as INT picks other users) or `conf/` (no UTC pin gives 31 directories) was changed: check `git status`. **One authored
+file must go through git:
 `seed/holidays_2019.csv`** (not written yet — W39, Tin). It feeds `dim_date.is_holiday`, no rule regenerates it, and it
 lives in `seed/`, **not** under `data/` — `data/raw/holidays_2019.csv` is silently ignored and reaches nobody else.
 
@@ -183,8 +195,8 @@ lives in `seed/`, **not** under `data/` — `data/raw/holidays_2019.csv` is sile
 [~] docs/            [x] AI_USAGE.md SETUP_SPARK.md  [ ] STREAMING_PATTERN.md DATA_MODEL.md evidence/
 [x] requirements.txt    [x] conf/spark-defaults.conf  driver memory + UTC, read by every script
 [ ] docker-compose.yml  Cassandra + Postgres    [ ] web/  React + TypeScript
-[ ] seed/holidays_2019.csv  Committed, feeds dim_date.is_holiday   [ ] ingestion/  load_bronze.py replayer.py
-                     gen_catalog.py gen_inventory.py
+[ ] seed/holidays_2019.csv  Committed, feeds dim_date.is_holiday
+[~] ingestion/       [x] load_bronze.py  [ ] replayer.py gen_catalog.py gen_inventory.py
 [~] processing/      [x] schema.py kata.py  [ ] source.py batch_silver.py batch_warehouse.py streaming_gold.py batch_gold.py
 [ ] warehouse/ddl.sql  Postgres star schema DDL   [ ] benchmark/  queries.sql run_benchmark.py results/
 [ ] serving/         cassandra_schema.cql apply_schema.py load_star_postgres.py api/ (one router per BR)
@@ -197,7 +209,7 @@ lives in `seed/`, **not** under `data/` — `data/raw/holidays_2019.csv` is sile
 | `readStream` without an explicit `.schema(EVENT_SCHEMA)`, or `writeStream` without `checkpointLocation` | Structured Streaming cannot infer schema, so the query never starts; and without a checkpoint all state is lost on restart and the job reprocesses from zero |
 | `event_time` shifted to UTC+7 but `event_date` not recomputed from the shifted time | Every event between 17:00 and 24:00 UTC is misfiled and BR1, BR2 and BR6 skew. The streaming path applies the same six rules, or the executive and funnel screens disagree about which day an event belongs to |
 | `category_l1` left null | Half the partition key of `gmv_by_minute`, and Cassandra rejects a null partition-key component. 32.4% of source rows have an empty `category_code`, so one BR1 insert in three fails and GMV understates by about a third |
-| `replayer.py` pointed at `data/raw/2019-Nov.csv` instead of `data/bronze/` | Raw holds 3,696,117 users, bronze only the 258,088 in the 7% bucket — a 14x mismatch that puts the >= 99% correctness gate out of reach for BR1/BR3/BR5/BR8 by construction |
+| `replayer.py` pointed at `data/raw/2019-Nov.csv` instead of `data/bronze/` | Raw holds 3,696,117 users, bronze only the 258,390 in the 7% bucket — a 14x mismatch that puts the >= 99% correctness gate out of reach for BR1/BR3/BR5/BR8 by construction |
 
 The rest live once each, not four times: the three Cassandra staleness rules in CLAUDE.md "Details that are easy to
 get wrong" and SYSTEM_DESIGN 6.1; the `days_to_stockout` sentinel in SYSTEM_DESIGN 6.1; naive SCD2 in SYSTEM_DESIGN

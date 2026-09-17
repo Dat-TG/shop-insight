@@ -24,7 +24,7 @@ exists yet in W38; the first job sets the pattern the other three inherit.
       `python processing/streaming_gold.py`, let it wait. Terminal 2:
       `python ingestion/replayer.py --speed 60`.
 - [ ] The replayer reads `data/bronze/` (Parquet), never the raw CSV: raw holds all
-      3,696,117 users, bronze only the 258,088 in the 7% bucket, so pointing at raw feeds
+      3,696,117 users, bronze only the 258,390 in the 7% bucket, so pointing at raw feeds
       a 14x larger population and the >=99% correctness gate becomes unreachable.
 
 ## 2. Inside the micro-batch

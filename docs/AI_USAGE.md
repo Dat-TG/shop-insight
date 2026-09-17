@@ -227,3 +227,121 @@ Because commits no longer carry a co-author trailer, **this file is now the only
 AI involvement** in the history. The three earlier commits keep theirs; history was not
 rewritten. Still open from Session 2: whether BR9 was ever promised to the lecturer —
 `CLAUDE.md` now records it as cut.
+
+## Session 4 — 17 September 2026 (W38)
+
+**Tool:** Claude Code (Opus 5).
+**Scope:** Dat's two remaining W38 tasks: the unattended Spark setup (PR #3), and
+`ingestion/load_bronze.py` with a correction of the sample numbers across the documents
+(PR #4). This is the first application code in the repo. All of it was run on Dat's
+machine (WSL2, Ubuntu 26.04, 20 cores, 15 GB) before it was committed.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| `docs/SETUP_SPARK.md` — install from zero, the pin and memory traps, troubleshooting for Linux and WSL | AI-drafted. Steps 2–4 and 8 were run on this machine; step 1 (a fresh WSL distro) and step 7 (the Kaggle download) were written, not executed. Human review pending: Dat's from-zero recording is the real test |
+| `requirements.txt` (`pyspark==4.1.3`, `py4j==0.10.9.9`), `conf/spark-defaults.conf` | Run and verified |
+| `processing/schema.py`, `processing/kata.py` | Run and verified; reviewed by the `spark-reviewer` agent, findings applied |
+| `ingestion/load_bronze.py` | Run and verified, before and after applying the `spark-reviewer` findings |
+| Corrections in `README.md`, `SYSTEM_DESIGN.md` (3.1, 8, 10, 11, 11.1), `CLAUDE.md`, `PLAN.md`, the `spark-job` and `streaming-job` skills, the `spark-reviewer` agent, the `check_python.py` hook | AI-drafted. The sample-number fix follows an option Dat chose in advance |
+
+### How it was checked
+
+Dat ran `sudo apt install -y openjdk-21-jdk-headless python3.14-venv unzip`; the AI did
+the rest.
+
+- `pip install -r requirements.txt` into a fresh `.venv`.
+- `python processing/kata.py` printed 6.0 GiB, UTC, events from 00:00:00 to 03:52:45,
+  view 97,489 · cart 1,089 · remove_from_cart 0 · purchase 1,422, and `KATA OK`.
+- Two negative tests:
+  - A copy of the kata with no `conf/` printed 1.0 GiB, Asia/Bangkok and 07:00:00, then
+    `KATA MISMATCH`, exit 1.
+  - A copy with a wrong `RAW_TIMESTAMP_FORMAT` failed with
+    `Malformed records ... FAILFAST`.
+- `python ingestion/load_bronze.py` was run twice. Both runs printed the same numbers and
+  `BRONZE OK`. `.gitkeep` was deleted by the overwrite and restored by the script, and
+  `git status --short data/` stayed empty. A third run, after the review fixes, printed
+  the same numbers.
+- Two more negative tests, on a scratch copy with a 1,000,000-byte CSV:
+  - The script refused to start ("a partial download") and left `.gitkeep` alone.
+  - With the size guard patched out, FAILFAST aborted the write on the cut-off last line,
+    and `.gitkeep` was still restored.
+
+| Claim | How it was measured |
+|---|---|
+| Spark's 7% sample is 4,767,012 rows / 258,390 users / 129,899 products / 30 dates | `python ingestion/load_bronze.py` (Spark 4.1.3). Independently, a Python copy of Spark's Murmur3 `hashLong` (seed 42) over the full CSV gave the same numbers; that copy was self-tested against Spark's `hash(1)` = -559580957 and `hash(1L)` = -1712319331 |
+| Read as INT, the same rule gives 4,713,498 rows / 259,109 users, and only 18,150 users are shared with the BIGINT sample | Same Python pass, with `hashInt` |
+| 2019-Nov.csv has no `remove_from_cart` events: view 63,556,110 · cart 3,028,930 · purchase 916,939 | Same Python pass, counting column 2 |
+| First 100,000 rows: view 97,489 · cart 1,089 · purchase 1,422, from 00:00:00 to 03:52:45 UTC | `head -100001 data/raw/2019-Nov.csv \| tail -n +2 \| cut -d, -f2 \| sort \| uniq -c`, and the same with `-f1` plus `sort \| sed -n '1p;$p'` |
+| This machine's Spark session time zone is Asia/Bangkok unless `conf/` pins UTC | The kata copy without `conf/` |
+| `builder.config("spark.driver.memory", "6g")`: first session 6.0 GiB; `getOrCreate()` with a session running 1.0 GiB plus a WARN; new session after `stop()` 1.0 GiB while `getConf()` says `6g` | A three-case script reading `Runtime.maxMemory()` through py4j, run with `SPARK_CONF_DIR` pointing at an empty directory |
+| Ubuntu 26.04 lacks `python3.14-venv` by default | `python3 -c "import ensurepip"` raised `ModuleNotFoundError` before the apt install |
+| pyspark 4.1.3 is published only as a 434 MiB source package; the install took 4 min 18 s; py4j resolves to 0.10.9.9 | PyPI JSON API; `time pip install pyspark==4.1.3`; `pip freeze` |
+| `load_bronze.py` takes 25 s on 20 cores and writes 97 files (112 MB) | Script output; `find data/bronze -name '*.parquet' \| wc -l`; `du -sh data/bronze` |
+| JDK, venv and pip cache together take about 1.7 GB | `du -sh` on the three directories |
+
+### What the AI got wrong, and was corrected on
+
+- **The sample numbers from Session 1 (4,694,166 / 258,088 / 127,693) are not what Spark's
+  `hash()` produces.**
+  - No machine had a JDK before today, so Spark never produced those numbers.
+  - The headline numbers are now replaced everywhere.
+  - The counts derived from the old sample are flagged in SYSTEM_DESIGN 3.1, README and
+    PLAN as "re-measure in W39". They are not recomputed. That covers the star row
+    counts, SCD2 versions, 12,659 purchased SKUs and the range-join size.
+  - The older rows of this file are left as written, as the append-only rule requires.
+- **The documents said `builder.config("spark.driver.memory")` is always "silently
+  ignored", and so did the W38 task text.**
+  - Measured: it works when that builder starts the JVM. It is ignored once a JVM is
+    running, and silently only after a `stop()`.
+  - The rule (memory only in `conf/`) is unchanged; the reason is corrected in seven
+    places.
+- **The documents listed four event types.** The November file has three.
+- **The first `kata.py` printed heap and time zone but never failed on them.** Also,
+  Spark's CSV reader parses only the columns a query uses, so its FAILFAST never touched
+  the timestamp format.
+  - `spark-reviewer` caught both.
+  - The reviewer's proposed fix, `spark.sql.csv.parser.columnPruning.enabled=false`, was
+    tested and did not make FAILFAST check unused columns on Spark 4.1.3.
+  - The kata now reads `event_time` itself and checks the time range.
+- **The first conf comment expected "about 5.3 GiB".** JDK 21 (G1) reports the full
+  6.0 GiB. Also found by the reviewer.
+- **A schema comment called missing categories "empty".** Spark reads them as NULL, and
+  the silver rules must test for NULL. Also found by the reviewer.
+- **The first `load_bronze.py` had three gaps, all found by `spark-reviewer`.**
+  - It passed any row count from 4.4 to 5.0 million, so the known-wrong samples (4,713,498
+    and 4,694,166) would also have printed `BRONZE OK`. It now requires the exact numbers.
+  - It restored `.gitkeep` only after a successful write; the restore is now in `finally`.
+  - It deleted bronze before noticing a truncated CSV; it now checks the file size first.
+- **The W38 task text said Spark 4.x requires JDK 21.** It requires 17 or newer; the
+  team pins 21. The README had also said `spark-defaults.conf` is not a repo file; it now
+  is.
+
+### Judgement that stayed with the team
+
+Dat decided three things:
+- how to handle the wrong sample numbers: replace the headline numbers and add a note,
+  without recomputing derived counts;
+- that `SETUP_SPARK.md` is written in English;
+- the approved plan: two PRs, `conf/` committed, `SPARK_CONF_DIR` set inside every
+  script.
+
+The recording, the group posts and the merges are Dat's.
+
+Made by AI, flagged for review:
+- The three-line start (`sys.path` plus `SPARK_CONF_DIR`) as the convention for every
+  script.
+- The two extra kata checks: the heap/time-zone lines and the time-range line.
+- FAILFAST on the raw CSV.
+- The bronze check requires the exact numbers. This is stricter than the task's
+  "4.4–5.0 million rows".
+- No repartition before the bronze write (rule 3).
+- Restoring `.gitkeep` after an overwrite.
+- Relying on `limit()` returning the file's first 100,000 rows. It does here, but Spark
+  does not promise it; a troubleshooting row covers a mismatch.
+
+Carried forward:
+- Required approvals on `main` are still 0.
+- Whether BR9 was ever promised to the lecturer is still open.
+- `SETUP_SPARK.md` steps 1 and 7 still need a first real run by a teammate.
