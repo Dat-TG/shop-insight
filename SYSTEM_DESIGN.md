@@ -864,6 +864,8 @@ shop-insight/
 ├── docker-compose.yml          Cassandra + Postgres
 ├── requirements.txt
 ├── README.md                   One-command run instructions
+├── conf/
+│   └── spark-defaults.conf     Driver memory + UTC session time zone, read by every script
 ├── seed/
 │   └── holidays_2019.csv       Committed. Feeds dim_date.is_holiday
 ├── data/                       gitignored except the .gitkeep skeleton
@@ -884,7 +886,7 @@ shop-insight/
 ├── processing/
 │   ├── schema.py               Shared EVENT_SCHEMA
 │   ├── source.py               Source reader (Kafka swap touches only this)
-│   ├── kata.py                 Spark install check, prints one expected number
+│   ├── kata.py                 Spark install check, prints four expected counts
 │   ├── batch_silver.py         bronze -> silver. Runs before any batch job
 │   ├── batch_warehouse.py      silver -> star schema (Parquet + Postgres)
 │   ├── streaming_gold.py       BR1, BR3, BR5, BR8
@@ -958,14 +960,25 @@ during a demo.
 |---|---|---|
 | Python | 3.14.x | The only interpreter Ubuntu 26.04 ships; 3.11–3.13 are not in the repos |
 | PySpark | `pyspark==4.1.3` | 3.5.x **segfaults** on Python 3.14 — its vendored cloudpickle 2.x calls a `pickle._getattribute` that changed in 3.14, and cloudpickle serialises every `foreachBatch` closure, so the crash lands exactly on the project's required Cassandra write path |
-| JDK | OpenJDK 21 | Required by Spark 4.x |
+| JDK | OpenJDK 21 | Spark 4.x needs Java 17 or newer; 21 is pinned so four machines match |
 
-Driver memory must be set in `conf/spark-defaults.conf` (`spark.driver.memory 6g`)
-or in `PYSPARK_SUBMIT_ARGS` **before** the SparkSession is built. Setting it on
-`SparkSession.builder.config(...)` is silently ignored, because py4j has already
-launched the JVM with its heap fixed. And `spark.executor.memory` does nothing at
+Driver memory is set in the committed `conf/spark-defaults.conf`
+(`spark.driver.memory 6g`), and Spark reads that file only when `SPARK_CONF_DIR`
+points at `conf/` **before** the SparkSession is built. Every script therefore sets
+`os.environ["SPARK_CONF_DIR"]` in its first lines. Setting driver memory on
+`SparkSession.builder.config(...)` works only when that builder is what launches the
+JVM. With a JVM already running in the process (the pyspark shell, a notebook, a
+session stopped earlier) it is ignored, and after a `stop()` silently so: measured on
+4.1.3, `getConf()` reports `6g` while the heap stays at 1 GB. And
+`spark.executor.memory` does nothing at
 all in `local[*]` — the driver *is* the executor. Four people who have never used
 Spark will all hit this; `docs/SETUP_SPARK.md` says so explicitly.
+
+The same file pins `spark.sql.session.timeZone UTC`. The raw `event_time` is UTC,
+but the team's laptops run on UTC+7. Without the pin, `to_date(event_time)` in
+`load_bronze.py` files the events of 30 Nov 17:00–24:00 UTC under 1 Dec, which
+gives 31 bronze partitions instead of 30 and a different layout per machine.
+`batch_silver.py`'s `from_utc_timestamp` shift also assumes a UTC session.
 
 ## 12. Comparison tier
 

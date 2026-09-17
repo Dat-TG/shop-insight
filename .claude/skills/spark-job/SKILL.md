@@ -19,6 +19,14 @@ No batch script exists yet (W38); these are the rules the first one establishes.
       notebooks for production code.
 - [ ] Print the output row count at the end — that is what the owner posts to the group
       chat and what the correctness gate compares.
+- [ ] Open with the same three lines as `processing/kata.py`, **before** any SparkSession:
+      ```python
+      REPO = Path(__file__).resolve().parents[1]
+      sys.path.insert(0, str(REPO))                      # import processing.schema from any folder
+      os.environ["SPARK_CONF_DIR"] = str(REPO / "conf")  # driver memory + UTC time zone
+      ```
+      Without the third line Spark silently runs with a 1 GB heap and the laptop's own
+      time zone. Import the schema as `from processing.schema import EVENT_SCHEMA`.
 
 ## 2. The two files nothing may duplicate
 
@@ -33,9 +41,12 @@ No batch script exists yet (W38); these are the rules the first one establishes.
       3.14: its cloudpickle 2.x calls a `pickle._getattribute` that changed in 3.14, and
       cloudpickle serialises every `foreachBatch` closure, so the crash lands on the
       required Cassandra write path. Never pin `pyspark==3.*`.
-- [ ] `spark.driver.memory 6g` goes in `conf/spark-defaults.conf` or `PYSPARK_SUBMIT_ARGS`
-      **before** the SparkSession is built. On `SparkSession.builder.config(...)` it is
-      **silently ignored** — py4j already fixed the JVM heap. No error, just an OOM later.
+- [ ] `spark.driver.memory 6g` lives in the committed `conf/spark-defaults.conf`, read
+      because `SPARK_CONF_DIR` is set **before** the SparkSession is built. On
+      `SparkSession.builder.config(...)` it works only if that builder starts the JVM; with
+      a JVM already running (pyspark shell, notebook, a session stopped earlier) it is
+      ignored — after a `stop()` **silently**, with `getConf()` reporting `6g` over a 1 GB
+      heap. No error, just an OOM later. Check the real heap, as `kata.py` does.
 - [ ] `spark.executor.memory` does nothing at all in `local[*]`: the driver *is* the
       executor. Do not set it, do not tune it.
 - [ ] Master is `local[*]`; no Docker for Spark, no cluster. No optimisation before the

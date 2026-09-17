@@ -8,18 +8,18 @@ and proven**, not asserted. HCMUT, Semester 1 2026-2027. Group 15: Dat, Khang, N
 
 ## Status
 
-> **2026-09-16 — ISO W38 of W38-W46.** Three things in this file go stale: this block, the `[x]`/`[ ]` marks under
+> **2026-09-17 — ISO W38 of W38-W46.** Three things in this file go stale: this block, the `[x]`/`[ ]` marks under
 > Repository layout, and the `(not written yet)` markers under Getting started. Fix whichever one your change makes
 > false, and the date on this line.
 
 | | |
 |---|---|
-| What exists | **No application code yet.** [CLAUDE.md](CLAUDE.md), [SYSTEM_DESIGN.md](SYSTEM_DESIGN.md), [PLAN.md](PLAN.md), [docs/AI_USAGE.md](docs/AI_USAGE.md), [.gitignore](.gitignore), a `data/` skeleton, `.claude/` |
-| First tasks (W38) | `docs/SETUP_SPARK.md` + `processing/kata.py`, so all four install Spark unattended; then `ingestion/load_bronze.py` + `processing/batch_silver.py`, so the batch BRs have input |
+| What exists | The Spark setup: [docs/SETUP_SPARK.md](docs/SETUP_SPARK.md), [requirements.txt](requirements.txt), [conf/spark-defaults.conf](conf/spark-defaults.conf), [processing/schema.py](processing/schema.py), [processing/kata.py](processing/kata.py). Plus [CLAUDE.md](CLAUDE.md), [SYSTEM_DESIGN.md](SYSTEM_DESIGN.md), [PLAN.md](PLAN.md), [docs/AI_USAGE.md](docs/AI_USAGE.md), [.gitignore](.gitignore), a `data/` skeleton, `.claude/`. No BR code yet |
+| W38 tasks | Done: `docs/SETUP_SPARK.md` + `processing/kata.py`, so all four install Spark unattended — **everyone runs it and posts `KATA OK`**. Next: `ingestion/load_bronze.py` + `processing/batch_silver.py`, so the batch BRs have input |
 | Next hard gate | Gate 1, W40 (28 Sep - 4 Oct): BR1 running on Structured Streaming, evidenced by a screenshot of the micro-batch log and rows in `gmv_by_minute` |
 
-Every path in SYSTEM_DESIGN section 10 is a plan, not a fact: nothing under `ingestion/`, `processing/`, `serving/`,
-`warehouse/`, `benchmark/`, `web/` or `seed/` exists today. **Live status comes from the repo, not from this table** —
+Every path in SYSTEM_DESIGN section 10 is a plan, not a fact: apart from `processing/schema.py` and `processing/kata.py`,
+nothing under `ingestion/`, `processing/`, `serving/`, `warehouse/`, `benchmark/`, `web/` or `seed/` exists today. **Live status comes from the repo, not from this table** —
 the SessionStart hook prints it each session ([.claude/README.md](.claude/README.md)).
 
 ## Architecture
@@ -91,25 +91,29 @@ and no Spark-Cassandra connector — Cassandra is written through `foreachBatch`
 
 ## Getting started
 
-Blocks (b) to (e) are verbatim from SYSTEM_DESIGN section 11. Block (a) is not: the venv and pip steps appear nowhere in
-section 11 and are this README's addition; `docs/SETUP_SPARK.md` (planned, W38) will carry the
-unattended install in full. **(not written yet)** marks a file that does not exist yet. **(a) Once per machine:** pin
-all three exactly, reasons in SYSTEM_DESIGN 11.1 — Python **3.14.x** (the only interpreter Ubuntu 26.04 ships),
-**`pyspark==4.1.3`** (3.5.x segfaults on Python 3.14: its vendored cloudpickle 2.x calls a `pickle._getattribute` that
-changed in 3.14, and cloudpickle serialises every `foreachBatch` closure, so the crash lands exactly on this project's
-required Cassandra write path), **OpenJDK 21** (required by Spark 4.x).
+Blocks (b) to (e) are verbatim from SYSTEM_DESIGN section 11. Block (a) is not: the install steps appear nowhere in
+section 11 and are this README's addition; [docs/SETUP_SPARK.md](docs/SETUP_SPARK.md) carries the unattended install
+in full, with a troubleshooting table for Linux and WSL. **(not written yet)** marks a file that does not exist yet.
+**(a) Once per machine:** pin all three exactly, reasons in SYSTEM_DESIGN 11.1 — Python **3.14.x** (the only
+interpreter Ubuntu 26.04 ships), **`pyspark==4.1.3`** (3.5.x segfaults on Python 3.14: its vendored cloudpickle 2.x
+calls a `pickle._getattribute` that changed in 3.14, and cloudpickle serialises every `foreachBatch` closure, so the
+crash lands exactly on this project's required Cassandra write path), **OpenJDK 21** (Spark 4.x needs 17 or newer; the
+team pins 21).
 
 ```bash
+sudo apt install -y openjdk-21-jdk-headless python3.14-venv   # then set JAVA_HOME: SETUP_SPARK.md step 3
 python3.14 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt   # (not written yet — W38, Dat)
-python processing/kata.py         # (not written yet — W38, Dat) prints one expected number
+pip install -r requirements.txt
+python processing/kata.py         # prints four event counts, then KATA OK
 ```
 
-Set `spark.driver.memory 6g` in `spark-defaults.conf` or `PYSPARK_SUBMIT_ARGS` **before** the SparkSession is built; on
-`SparkSession.builder.config(...)` it is silently ignored, because py4j has already fixed the JVM heap.
-`spark.executor.memory` does nothing in `local[*]`: the driver *is* the executor. That file is **not a repo file** — it
-is Spark's own `$SPARK_HOME/conf/spark-defaults.conf`, which for pip-installed PySpark sits inside the venv
-(`.venv/lib/python3.14/site-packages/pyspark/conf/`); point `SPARK_CONF_DIR` at a directory you own to keep it outside.
+Spark settings live in the committed [conf/spark-defaults.conf](conf/spark-defaults.conf): `spark.driver.memory 6g`
+and `spark.sql.session.timeZone UTC`. Every script sets `SPARK_CONF_DIR` to `conf/` in its first lines, **before** the
+SparkSession is built. On `SparkSession.builder.config(...)` the driver memory takes effect only if that builder starts
+the JVM; with a JVM already running (pyspark shell, notebook, a session stopped earlier in the process) it is ignored,
+silently after a `stop()`. `spark.executor.memory` does nothing in `local[*]`, where the driver *is* the executor. The
+UTC time zone keeps a laptop set to UTC+7 from filing late-30-Nov events under 1 Dec. `kata.py` prints the real heap and
+time zone, so a conf that was not read shows up at once.
 Then download the event log yourself — REES46 "eCommerce behavior data from multi category store",
 <https://www.kaggle.com/datasets/mkechinov/ecommerce-behavior-data-from-multi-category-store> — into `data/raw/`:
 
@@ -176,11 +180,12 @@ lives in `seed/`, **not** under `data/` — `data/raw/holidays_2019.csv` is sile
 [~] data/            gitignored except the .gitkeep skeleton; nothing here travels between machines
     [x] raw/ bronze/ silver/ gold/ stream_landing/ checkpoints/ warehouse/ catalog/ inventory/
         each tracked only through its .gitkeep; a new data/ directory needs its own .gitignore negation
-[~] docs/            [x] AI_USAGE.md  [ ] SETUP_SPARK.md STREAMING_PATTERN.md DATA_MODEL.md evidence/
-[ ] docker-compose.yml  Cassandra + Postgres    [ ] requirements.txt    [ ] web/  React + TypeScript
+[~] docs/            [x] AI_USAGE.md SETUP_SPARK.md  [ ] STREAMING_PATTERN.md DATA_MODEL.md evidence/
+[x] requirements.txt    [x] conf/spark-defaults.conf  driver memory + UTC, read by every script
+[ ] docker-compose.yml  Cassandra + Postgres    [ ] web/  React + TypeScript
 [ ] seed/holidays_2019.csv  Committed, feeds dim_date.is_holiday   [ ] ingestion/  load_bronze.py replayer.py
                      gen_catalog.py gen_inventory.py
-[ ] processing/      schema.py source.py kata.py batch_silver.py batch_warehouse.py streaming_gold.py batch_gold.py
+[~] processing/      [x] schema.py kata.py  [ ] source.py batch_silver.py batch_warehouse.py streaming_gold.py batch_gold.py
 [ ] warehouse/ddl.sql  Postgres star schema DDL   [ ] benchmark/  queries.sql run_benchmark.py results/
 [ ] serving/         cassandra_schema.cql apply_schema.py load_star_postgres.py api/ (one router per BR)
 ```

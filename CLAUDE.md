@@ -143,8 +143,10 @@ the streaming foundation in W40 — so nobody waits on anybody inside a week.
 
 ## Current status
 
-No code yet. The project runs W38-W46 (14 Sep - 15 Nov). W38 is a combined week:
-kickoff and infrastructure together.
+The Spark setup exists: `docs/SETUP_SPARK.md`, `requirements.txt`,
+`conf/spark-defaults.conf`, `processing/schema.py` and `processing/kata.py`. No BR code
+yet. The project runs W38-W46 (14 Sep - 15 Nov). W38 is a combined week: kickoff and
+infrastructure together.
 
 The team works asynchronously — everyone has a job and other classes. Only two
 moments in the whole project need all four people at once: the 45-minute rehearsal
@@ -153,5 +155,5 @@ repo. So: write the setup down instead of explaining it, comment the reference
 implementation instead of walking someone through it, and make every gate produce
 an artefact someone can look at on their own time.
 
-First task: `docs/SETUP_SPARK.md` + `processing/kata.py` so all four can install
-Spark unattended, then bronze and silver so the batch BRs have input.
+Next task: bronze (`ingestion/load_bronze.py`) and silver, so the batch BRs have input.
+Every teammate runs `docs/SETUP_SPARK.md` and posts the `KATA OK` output.

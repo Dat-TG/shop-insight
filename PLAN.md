@@ -379,8 +379,10 @@ bằng tài liệu, không phải phỏng đoán.
   `pickle._getattribute` đã đổi ở 3.14, mà cloudpickle chính là thứ serialize mọi
   closure `foreachBatch`. Pin `pyspark==4.1.3` + OpenJDK 21.
 - **`spark.executor.memory` vô tác dụng trong `local[*]`** (driver chính là executor), và
-  `.config("spark.driver.memory", ...)` trên `SparkSession.builder` bị bỏ qua im lặng vì
-  JVM đã khởi động trước đó. Đặt trong `conf/spark-defaults.conf` hoặc `PYSPARK_SUBMIT_ARGS`.
+  `.config("spark.driver.memory", ...)` trên `SparkSession.builder` chỉ có tác dụng khi
+  chính builder đó khởi động JVM; JVM đã chạy sẵn (pyspark shell, notebook, session đã
+  `stop()` trước đó) thì bị bỏ qua — sau `stop()` còn bỏ qua IM LẶNG, `getConf()` vẫn báo
+  `6g` trong khi heap chỉ 1 GB (đã đo trên 4.1.3). Đặt trong `conf/spark-defaults.conf`.
 - **SCD2: dùng `IS DISTINCT FROM`, không dùng `<>`.** `dim_product` an toàn vì `price`
   NOT NULL, nhưng `dim_user.rfm_cell` NULL với người chưa mua bao giờ (88% ở snapshot
   đầu), mà `NULL <> NULL` ra NULL chứ không ra true → sinh version mới mỗi snapshot cho

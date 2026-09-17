@@ -121,7 +121,7 @@ def find_warnings(path, source):
         found.append("event_time shifted to UTC+7 but event_date never recomputed: every event between 17:00 and 24:00 UTC is misfiled and BR1, BR2, BR6 skew.")
 
     if has(r"""\.config\(\s*["']spark\.driver\.memory"""):
-        found.append("spark.driver.memory on SparkSession.builder is silently ignored (py4j already fixed the JVM heap): set it in conf/spark-defaults.conf or PYSPARK_SUBMIT_ARGS.")
+        found.append("spark.driver.memory on SparkSession.builder only works if that builder starts the JVM; once one runs (shell, notebook, earlier session) it is ignored, silently after stop(): keep it in conf/spark-defaults.conf.")
 
     if "spark.executor.memory" in code:
         found.append("spark.executor.memory does nothing in local[*]: the driver IS the executor, so the setting is a no-op and the time spent on it is wasted.")
