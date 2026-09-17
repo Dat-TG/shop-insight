@@ -4,6 +4,10 @@ For Khang, Nguyen and Tin, and for anyone who reinstalls later. You do not need 
 have used Spark or Java before. Follow the steps in order. Every step ends with a
 **Check** line: do not move on until your output matches it.
 
+**Vietnamese version, with every step and every file explained for Spark beginners:**
+[SPARK_GUIDE_VI.md](SPARK_GUIDE_VI.md). Both describe the same procedure; change a command
+in one, change it in the other.
+
 **At the end**, `python processing/kata.py` prints `KATA OK`. Post its full output
 in the group chat. That post is how the rest of us know your machine is ready.
 

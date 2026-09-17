@@ -14,7 +14,7 @@ and proven**, not asserted. HCMUT, Semester 1 2026-2027. Group 15: Dat, Khang, N
 
 | | |
 |---|---|
-| What exists | The Spark setup: [docs/SETUP_SPARK.md](docs/SETUP_SPARK.md), [requirements.txt](requirements.txt), [conf/spark-defaults.conf](conf/spark-defaults.conf), [processing/schema.py](processing/schema.py), [processing/kata.py](processing/kata.py); bronze: [ingestion/load_bronze.py](ingestion/load_bronze.py). Plus [CLAUDE.md](CLAUDE.md), [SYSTEM_DESIGN.md](SYSTEM_DESIGN.md), [PLAN.md](PLAN.md), [docs/AI_USAGE.md](docs/AI_USAGE.md), [.gitignore](.gitignore), a `data/` skeleton, `.claude/`. No BR code yet |
+| What exists | The Spark setup: [docs/SETUP_SPARK.md](docs/SETUP_SPARK.md) (Vietnamese, with explanations: [docs/SPARK_GUIDE_VI.md](docs/SPARK_GUIDE_VI.md)), [requirements.txt](requirements.txt), [conf/spark-defaults.conf](conf/spark-defaults.conf), [processing/schema.py](processing/schema.py), [processing/kata.py](processing/kata.py); bronze: [ingestion/load_bronze.py](ingestion/load_bronze.py). Plus [CLAUDE.md](CLAUDE.md), [SYSTEM_DESIGN.md](SYSTEM_DESIGN.md), [PLAN.md](PLAN.md), [docs/AI_USAGE.md](docs/AI_USAGE.md), [.gitignore](.gitignore), a `data/` skeleton, `.claude/`. No BR code yet |
 | W38 tasks | Done: `docs/SETUP_SPARK.md` + `processing/kata.py`, so all four install Spark unattended — **everyone runs it and posts `KATA OK`**; `ingestion/load_bronze.py` — **in W39 everyone runs it and posts the `BRONZE OK` numbers**. Next: `processing/batch_silver.py`, so the batch BRs have input |
 | Next hard gate | Gate 1, W40 (28 Sep - 4 Oct): BR1 running on Structured Streaming, evidenced by a screenshot of the micro-batch log and rows in `gmv_by_minute` |
 
@@ -95,6 +95,7 @@ and no Spark-Cassandra connector — Cassandra is written through `foreachBatch`
 
 Blocks (b) to (e) are verbatim from SYSTEM_DESIGN section 11. Block (a) is not: the install steps appear nowhere in
 section 11 and are this README's addition; [docs/SETUP_SPARK.md](docs/SETUP_SPARK.md) carries the unattended install
+(Vietnamese walkthrough that also explains each file: [docs/SPARK_GUIDE_VI.md](docs/SPARK_GUIDE_VI.md))
 in full, with a troubleshooting table for Linux and WSL. **(not written yet)** marks a file that does not exist yet.
 **(a) Once per machine:** pin all three exactly, reasons in SYSTEM_DESIGN 11.1 — Python **3.14.x** (the only
 interpreter Ubuntu 26.04 ships), **`pyspark==4.1.3`** (3.5.x segfaults on Python 3.14: its vendored cloudpickle 2.x
@@ -192,7 +193,7 @@ lives in `seed/`, **not** under `data/` — `data/raw/holidays_2019.csv` is sile
 [~] data/            gitignored except the .gitkeep skeleton; nothing here travels between machines
     [x] raw/ bronze/ silver/ gold/ stream_landing/ checkpoints/ warehouse/ catalog/ inventory/
         each tracked only through its .gitkeep; a new data/ directory needs its own .gitignore negation
-[~] docs/            [x] AI_USAGE.md SETUP_SPARK.md  [ ] STREAMING_PATTERN.md DATA_MODEL.md evidence/
+[~] docs/            [x] AI_USAGE.md SETUP_SPARK.md SPARK_GUIDE_VI.md  [ ] STREAMING_PATTERN.md DATA_MODEL.md evidence/
 [x] requirements.txt    [x] conf/spark-defaults.conf  driver memory + UTC, read by every script
 [ ] docker-compose.yml  Cassandra + Postgres    [ ] web/  React + TypeScript
 [ ] seed/holidays_2019.csv  Committed, feeds dim_date.is_holiday
