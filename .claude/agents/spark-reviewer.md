@@ -83,8 +83,9 @@ source, and anything source cannot settle goes in the `Not checkable` list below
 
 ## Audit C — style (costs time, not correctness)
 
-- C1 `.config("spark.driver.memory"` on the builder: silently ignored, py4j has
-  fixed the heap. Set it in `conf/spark-defaults.conf` or `PYSPARK_SUBMIT_ARGS`.
+- C1 `.config("spark.driver.memory"` on the builder: works only if that builder
+  starts the JVM; ignored once one runs (shell, notebook, earlier session), silently
+  after a `stop()`. It lives in `conf/spark-defaults.conf`, read via `SPARK_CONF_DIR`.
 - C2 `spark.executor.memory` in `local[*]`: the driver is the executor.
 - C3 `abstractmethod`, `ABCMeta`, `metaclass=`, or a `*Factory`/`*Registry`/`*Base`
   class: hard rule 4, plain functions and runnable scripts only.
