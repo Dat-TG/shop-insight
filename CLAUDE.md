@@ -144,7 +144,8 @@ the streaming foundation in W40 — so nobody waits on anybody inside a week.
 
 ## Current status
 
-The Spark setup exists: `docs/SETUP_SPARK.md`, `requirements.txt`,
+The Spark setup exists: `docs/SETUP_SPARK.md` (English) and `docs/SPARK_GUIDE_VI.md`
+(Vietnamese, explains every step and file; keep the two in step), `requirements.txt`,
 `conf/spark-defaults.conf`, `processing/schema.py` and `processing/kata.py`. So does
 bronze: `ingestion/load_bronze.py` (4,767,012 rows, 30 date directories). No BR code
 yet. The project runs W38-W46 (14 Sep - 15 Nov). W38 is a combined week: kickoff and
@@ -158,5 +159,5 @@ implementation instead of walking someone through it, and make every gate produc
 an artefact someone can look at on their own time.
 
 Next task: silver (`processing/batch_silver.py`), so the batch BRs have input. Every
-teammate runs `docs/SETUP_SPARK.md` and posts the `KATA OK` output, then in W39 runs
+teammate follows `docs/SPARK_GUIDE_VI.md` (or `docs/SETUP_SPARK.md`) and posts the `KATA OK` output, then in W39 runs
 `load_bronze.py` and posts its `BRONZE OK` numbers.

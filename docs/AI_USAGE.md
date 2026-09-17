@@ -345,3 +345,43 @@ Carried forward:
 - Required approvals on `main` are still 0.
 - Whether BR9 was ever promised to the lecturer is still open.
 - `SETUP_SPARK.md` steps 1 and 7 still need a first real run by a teammate.
+
+## Session 5 — 17 September 2026 (W38)
+
+**Tool:** Claude Code (Opus 5).
+**Scope:** a Vietnamese walkthrough of the Spark setup, after PRs #3 and #4 were merged.
+No application code changed.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| `docs/SPARK_GUIDE_VI.md` — Vietnamese guide for Spark beginners, in seven parts: Spark concepts, install steps, reading the `kata.py` output, reading the `load_bronze.py` output, a walkthrough of every new file, what changed in W38, and troubleshooting | AI-drafted, human review pending |
+| Links to it from `docs/SETUP_SPARK.md`, `README.md`, `CLAUDE.md`; `PLAN.md` now names the guide instead of the clip | AI-drafted, following Dat's decision |
+
+### How it was checked
+
+The guide adds no new claims beyond Session 4, with one exception: the worked `hash()`
+example in part 5. That example was produced by Spark on this machine.
+
+| Claim | How it was measured |
+|---|---|
+| `user_id` 512927188: `hash` as BIGINT = -713643297, `pmod` = 3 (kept); as INT, `pmod` = 57 (dropped). 520088904: 24 (INT 22). 530496790: 92 (INT 59) | `SELECT hash(CAST(<id> AS BIGINT)), pmod(...), hash(CAST(<id> AS INT)), pmod(...)` in PySpark 4.1.3; 512927188 was taken from `data/bronze` |
+| An `event_date=` directory holds 2 Parquet files, and the files do not contain `event_date`: it comes from the directory name | `ls data/bronze/event_date=2019-11-01`; `spark.read.parquet(<one file>).columns` lists 9 columns, `spark.read.parquet("data/bronze").columns` lists 10 |
+
+Every command and output shown in the guide was copied from Session 4's runs, not retyped.
+
+### What the AI got wrong, and was corrected on
+
+- Session 4 said the from-zero screen recording would be the real test of
+  `SETUP_SPARK.md`. Dat dropped the clip. The Vietnamese guide replaces it, so steps 1
+  (WSL install) and 7 (Kaggle download) still await their first real run, which will now
+  be by a teammate following the guide.
+
+### Judgement that stayed with the team
+
+Dat decided: no clip, and a Vietnamese guide that explains each file and each step.
+
+Made by AI, flagged for review: the guide is a **second file** next to the English
+`SETUP_SPARK.md`, not a replacement. Both headers ask that a changed command be changed in
+both. If the team would rather keep one file, the English one can go.

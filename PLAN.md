@@ -125,8 +125,8 @@ Bốn cơ chế thay cho họp:
   người post ba dòng vào nhóm: xong gì / kẹt gì / tuần sau làm gì, kèm review một
   PR của bạn. 15 phút, làm lúc nào trong ngày cũng được.
 - **Học Spark bằng tài liệu.** Đắt viết `docs/SETUP_SPARK.md` + `processing/kata.py`
-  (in ra một số kỳ vọng) + clip 5 phút ở W38. Ba người còn lại tự chạy rồi post kết
-  quả.
+  + `docs/SPARK_GUIDE_VI.md` (hướng dẫn tiếng Việt, giải thích từng bước và từng file —
+  thay cho clip, đã bỏ) ở W38. Ba người còn lại tự chạy rồi post kết quả `KATA OK`.
 - **Truyền nghề streaming bằng code mẫu.** BR1 của Đắt là bản tham chiếu, comment
   kỹ, kèm `docs/STREAMING_PATTERN.md`. BR3, BR5, BR8 copy đúng khung đó.
 - **Gỡ kẹt bằng cờ đỏ.** Kẹt quá 48 giờ thì gắn cờ đỏ trong nhóm ngay, không đợi
