@@ -6,9 +6,10 @@ Group 15 — Dat, Khang, Nguyen, Tin. Domain: eCommerce. Final deadline: ISO wee
 
 ## What this system is
 
-Input: `2019-Nov.csv`, 67,501,979 user behaviour events (view / cart /
-remove_from_cart / purchase, 9.0 GB), sampled by a deterministic 7% user hash to
-~4.69M rows. Hard rule 5 caps that working set, not the file.
+Input: `2019-Nov.csv`, 67,501,979 user behaviour events (view / cart / purchase,
+9.0 GB; the dataset also documents `remove_from_cart`, but this file has none), sampled
+by a deterministic 7% user hash to 4,767,012 rows. Hard rule 5 caps that working set,
+not the file.
 Output: a web dashboard with 8 screens, each answering one business question in
 under 2 seconds.
 
@@ -144,7 +145,8 @@ the streaming foundation in W40 — so nobody waits on anybody inside a week.
 ## Current status
 
 The Spark setup exists: `docs/SETUP_SPARK.md`, `requirements.txt`,
-`conf/spark-defaults.conf`, `processing/schema.py` and `processing/kata.py`. No BR code
+`conf/spark-defaults.conf`, `processing/schema.py` and `processing/kata.py`. So does
+bronze: `ingestion/load_bronze.py` (4,767,012 rows, 30 date directories). No BR code
 yet. The project runs W38-W46 (14 Sep - 15 Nov). W38 is a combined week: kickoff and
 infrastructure together.
 
@@ -155,5 +157,6 @@ repo. So: write the setup down instead of explaining it, comment the reference
 implementation instead of walking someone through it, and make every gate produce
 an artefact someone can look at on their own time.
 
-Next task: bronze (`ingestion/load_bronze.py`) and silver, so the batch BRs have input.
-Every teammate runs `docs/SETUP_SPARK.md` and posts the `KATA OK` output.
+Next task: silver (`processing/batch_silver.py`), so the batch BRs have input. Every
+teammate runs `docs/SETUP_SPARK.md` and posts the `KATA OK` output, then in W39 runs
+`load_bronze.py` and posts its `BRONZE OK` numbers.

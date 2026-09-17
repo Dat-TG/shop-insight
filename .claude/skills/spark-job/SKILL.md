@@ -11,7 +11,7 @@ No batch script exists yet (W38); these are the rules the first one establishes.
 ## 1. Shape of a script
 
 - [ ] Runs standalone: `python processing/batch_gold.py`. No CLI framework; no `--rows`
-      flag on `load_bronze.py` — the sample is whatever the hash rule yields (~4.69M).
+      flag on `load_bronze.py` — the sample is whatever the hash rule yields (4,767,012 rows).
 - [ ] Plain top-level functions plus a `main()`. **No factories, base classes, registries
       or `abstractmethod`** (hard rule 4) — four students, 2-4 h/week, nobody has used
       Spark before, so any file must be readable in ten minutes.
@@ -64,6 +64,12 @@ No batch script exists yet (W38); these are the rules the first one establishes.
 Silver is partitioned by `event_type` on purpose: most queries want one event type, so
 Spark skips whole directories without opening a file. That is partition pruning, one of
 the presentation's worked illustrations — filter on the partition column so it shows.
+
+`.write.mode("overwrite")` deletes the whole output directory first, including the
+tracked `.gitkeep`. Every tier writer wraps the write in `try:` and restores it in
+`finally:` (`mkdir(parents=True, exist_ok=True)` then `(TIER_DIR / ".gitkeep").touch()`),
+as `load_bronze.py` does, or `git status` shows the skeleton deleted, even after a
+failed write.
 
 Determinism is mandatory: `data/` is gitignored and each person regenerates locally.
 Sampling and synthetic generation use `pmod(hash(user_id), 100) < 7` or a fixed hash of
@@ -124,6 +130,7 @@ reads `dim_user` and recomputes nothing.
 - [ ] `batch_gold.py` reads the **star**, not silver: `funnel_daily` aggregates
       `fact_session_funnel`, `rfm_segments` projects `dim_user WHERE is_current`,
       `product_affinity` self-joins `fact_event` purchases by `user_session`.
-- [ ] Only `load_bronze.py` reads the raw CSV. Nothing else opens it.
+- [ ] Only `load_bronze.py` turns the raw CSV into data. `kata.py` reads its first 100,000
+      rows to check an install and writes nothing. Nothing else opens it.
 - [ ] No banned imports (airflow, dbt, pyflink, redis, pyiceberg, delta). BR6's Cassandra
       write uses the plain `cassandra-driver`, never the banned Spark-Cassandra connector.

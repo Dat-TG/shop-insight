@@ -52,8 +52,9 @@ source, and anything source cannot settle goes in the `Not checkable` list below
   silver has exactly one writer, `batch_silver.py`. A file sink creates
   `_spark_metadata/` and blinds Spark to batch-written files while DuckDB still
   globs the directory; a `foreachBatch` write duplicates rows.
-- A9 `data/raw` or `2019-Nov.csv` outside `load_bronze.py`: raw holds 3,696,117
-  users, bronze the 258,088 in the 7% bucket — a 14x mismatch that makes the
+- A9 `data/raw` or `2019-Nov.csv` outside `load_bronze.py` (and `kata.py`, the install
+  check, which writes nothing): raw holds 3,696,117
+  users, bronze the 258,390 in the 7% bucket — a 14x mismatch that makes the
   >=99% correctness gate unreachable for BR1/3/5/8. The replayer reads bronze.
 - A10 `import airflow|dbt|pyflink|redis|pyiceberg|delta`, or `io.delta`: hard rule 1.
 

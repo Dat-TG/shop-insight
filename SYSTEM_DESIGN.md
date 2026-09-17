@@ -74,19 +74,28 @@ Four sources. One is downloaded, one is committed, two are generated.
 
 REES46 "eCommerce behavior data from multi category store" (Kaggle). Use
 `2019-Nov.csv`, 67,501,979 rows covering 1–30 November, and sample it down to
-~4.7M by taking **7% of `user_id` values across the whole month** — never the
+~4.77M by taking **7% of `user_id` values across the whole month** — never the
 first 5M rows. The first 5M rows are about two days of November, which leaves
 BR4's recency meaningless and BR6's `velocity_7d` with fewer than seven days to
 average over.
 
 The sampling rule is `pmod(hash(user_id), 100) < 7`, hard-coded in
 `load_bronze.py`. It must be deterministic — never a random seed — so all four
-machines produce byte-identical datasets. Measured: 4,694,166 rows, 258,088
-distinct users, 127,693 distinct products.
+machines produce byte-identical datasets. Measured with Spark 4.1.3
+(`load_bronze.py`): **4,767,012 rows, 258,390 distinct users, 129,899 distinct
+products, 30 dates**. An independent Python copy of Spark's Murmur3 `hash()`
+gives the same three numbers. `user_id` must be read as BIGINT: `hash()` of an
+INT selects a different sample (4,713,498 rows, only 18,150 users shared).
+
+**Counts derived from the sample elsewhere in this document were measured on an
+earlier sample**, drawn with a different hash function (4,694,166 rows / 258,088
+users / 127,693 products). That covers the star row counts in section 5, the SCD2
+version counts, the 12,659 purchased SKUs and the range-join size. Expect each to
+move slightly; they are re-measured in W39 when `batch_warehouse.py` runs.
 
 ```
 event_time      timestamp   2019-11-01 00:00:12 UTC
-event_type      string      view | cart | remove_from_cart | purchase
+event_type      string      view | cart | purchase   (remove_from_cart: documented, 0 rows in this file)
 product_id      bigint      44600062
 category_id     bigint      2103807459595387724
 category_code   string      electronics.smartphone      (NULL in 32.4% of rows)
@@ -756,7 +765,7 @@ through both is the clearest way to explain the system.
    not have to wait: one hour of real data can replay in one minute.
 
    It must read bronze and not `data/raw/2019-Nov.csv`. The raw file holds all
-   3,696,117 users; bronze holds only the 258,088 in the 7% bucket. A replayer
+   3,696,117 users; bronze holds only the 258,390 in the 7% bucket. A replayer
    pointed at raw would feed the Cassandra tables a 14× larger, differently
    shaped population than the batch side, and the ≥99% correctness gate would be
    unreachable for BR1/BR3/BR5/BR8 by construction.
@@ -946,7 +955,7 @@ cd web && npm run dev
 ```
 
 `load_bronze.py` takes no `--rows` flag. The sample size is whatever the
-deterministic user-hash rule yields (~4.69M); a row count would break
+deterministic user-hash rule yields (4,767,012 rows); a row count would break
 byte-identical output across the four machines.
 
 The order in step 3 matters: the streaming job must be running before the

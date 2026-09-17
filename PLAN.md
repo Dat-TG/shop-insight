@@ -355,7 +355,8 @@ bằng tài liệu, không phải phỏng đoán.
   Không điền thì một phần ba lệnh insert BR1 fail và GMV thiếu khoảng một phần ba.
 - **`days_to_stockout` cũng không được null** — nó là clustering column của
   `stockout_risk`. `stock_on_hand / velocity_7d` trả NULL khi velocity bằng 0, mà đã đo:
-  chỉ 12,659 / 127,693 sản phẩm có phát sinh mua trong cả tháng, tức ~90% SKU velocity
+  chỉ 12,659 / 127,693 sản phẩm (mẫu cũ — đo lại ở W39 trên mẫu Spark 129,899 sản phẩm)
+  có phát sinh mua trong cả tháng, tức ~90% SKU velocity
   bằng 0 vĩnh viễn. Dùng `when(velocity_7d > 0, ...).otherwise(9999.0)`.
 - **BR3 không xếp hạng được trên streaming DataFrame** — top-N phải tính trong `foreachBatch`.
 - **BA bảng Cassandra để lại dòng rác, xử lý KHÁC NHAU:**
@@ -368,7 +369,7 @@ bằng tài liệu, không phải phỏng đoán.
     `((event_date), user_session)` làm upsert tự idempotent, không cần xoá gì. Đổi lại
     mất tính "đã sắp sẵn theo cart_value trên đĩa", API tự sort vài nghìn dòng
 - **`replayer.py` đọc `data/bronze/`, KHÔNG đọc `data/raw/2019-Nov.csv`.** File thô có
-  3,696,117 user, bronze chỉ có 258,088 user trong rổ 7%. Đọc nhầm file thô thì phía
+  3,696,117 user, bronze chỉ có 258,390 user trong rổ 7%. Đọc nhầm file thô thì phía
   streaming ăn tập dữ liệu lớn gấp 14 lần phía batch, và ngưỡng correctness >= 99%
   thành bất khả thi ngay từ đầu.
 - **Job streaming KHÔNG ghi vào silver.** Silver chỉ có một writer là `batch_silver.py`.

@@ -130,7 +130,7 @@ def find_warnings(path, source):
         found.append("silver has exactly one writer, batch_silver.py: a streaming write creates data/silver/_spark_metadata/ or duplicates replayed rows, which voids the >=99% correctness gate.")
 
     if name == "replayer.py" and ("data/raw" in code or "2019-Nov.csv" in code):
-        found.append("replayer.py must read data/bronze/ (258,088 users), never raw (3,696,117): a 14x population mismatch makes the correctness gate unreachable for BR1, BR3, BR5, BR8.")
+        found.append("replayer.py must read data/bronze/ (258,390 users), never raw (3,696,117): a 14x population mismatch makes the correctness gate unreachable for BR1, BR3, BR5, BR8.")
 
     if has(r"insert\s+into\s+(\w+\.)?trending_products") and not has(r"delete[^;\n]*trending_products"):
         found.append("trending_products re-emits each window: DELETE WHERE window_start = ? before inserting the new top-N, or a product at rank 3 then rank 5 is returned twice by LIMIT 20.")
