@@ -1,4 +1,4 @@
-import { Terminal, ArrowUpRight } from 'lucide-react';
+import { Terminal } from 'lucide-react';
 
 interface Props {
   name: string;

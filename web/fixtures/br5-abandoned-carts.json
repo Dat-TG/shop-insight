@@ -1,0 +1,59 @@
+{
+  "_contract": "BR5 — Abandoned Carts",
+  "_endpoint": "GET /api/br5/carts",
+  "_warehouse": "Cassandra",
+  "_table": "abandoned_carts",
+  "_primary_key": "((event_date), user_session)",
+  "_note": "cart_value NOT in primary key — upsert is idempotent (session is the dedup key). API sorts by cart_value DESC. No DELETE needed.",
+  "default": {
+    "data": [
+      {
+        "event_date": "2019-11-29",
+        "user_session": "9333dfbd-b87a-4708-9857-6336556a0fcc",
+        "cart_value": 2489.07,
+        "user_id": 541312140,
+        "item_count": 3,
+        "last_event_at": "2019-11-29T14:23:45+07:00"
+      },
+      {
+        "event_date": "2019-11-29",
+        "user_session": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+        "cart_value": 1250.50,
+        "user_id": 530253200,
+        "item_count": 2,
+        "last_event_at": "2019-11-29T13:47:12+07:00"
+      },
+      {
+        "event_date": "2019-11-29",
+        "user_session": "f7e8d9c0-b1a2-3456-7890-abcdef012345",
+        "cart_value": 489.99,
+        "user_id": 515915625,
+        "item_count": 1,
+        "last_event_at": "2019-11-29T12:05:38+07:00"
+      },
+      {
+        "event_date": "2019-11-29",
+        "user_session": "01234567-89ab-cdef-0123-456789abcdef",
+        "cart_value": 320.00,
+        "user_id": 572756958,
+        "item_count": 4,
+        "last_event_at": "2019-11-29T11:30:00+07:00"
+      }
+    ],
+    "meta": {
+      "ms": 11.2,
+      "warehouse": "Cassandra",
+      "partitions": 1,
+      "rows": 4
+    }
+  },
+  "empty": {
+    "data": [],
+    "meta": {
+      "ms": 3.5,
+      "warehouse": "Cassandra",
+      "partitions": 1,
+      "rows": 0
+    }
+  }
+}

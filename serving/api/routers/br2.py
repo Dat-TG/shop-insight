@@ -1,6 +1,8 @@
 """BR2 — Conversion Funnel router.
 
-Owner: Tin (W38 skeleton; W39 connects to Parquet gold).
+Owner: Tin (W38 skeleton; W40 connects to Parquet gold via DuckDB).
+
+CONTRACT FROZEN — see docs/API_CONTRACT.md.
 
 Endpoint
 --------
@@ -23,14 +25,24 @@ Response shape
     ...
   ],
   "meta": {
-    "ms":         0.3,
-    "warehouse":  "fixture",
-    "partitions": 0,
+    "ms":         18.3,
+    "warehouse":  "Parquet",
+    "partitions": 30,
     "rows":       3
   }
 }
 
-W38 status: returns fixture data from web/fixtures/br2-funnel.json.
+Storage mapping: Parquet -> gold/funnel_daily/
+Gold columns:    event_date, category_l1, views, carts, purchases,
+                 cr_view_to_cart, cr_cart_to_purchase
+
+funnel_stage source values (fact_session_funnel):
+    0 = session has no recorded events (not surfaced in API)
+    1 = furthest milestone is view
+    2 = furthest milestone is cart
+    3 = furthest milestone is purchase (= conversion)
+
+W38 status: returns fixture data from web/fixtures/br2-funnel-daily.json -> "default".
 W40 plan:   replace _load_fixture() with DuckDB reading gold/funnel_daily/.
 """
 
@@ -47,18 +59,21 @@ from serving.api.models import ApiResponse, QueryMeta
 
 router = APIRouter(prefix="/api/br2", tags=["BR2 — Conversion Funnel"])
 
-# Path to the fixture file, relative to the repository root.
+# Path to the canonical fixture bundle (relative to the repository root).
 _REPO = Path(__file__).resolve().parents[3]
-_FIXTURE_NORMAL = _REPO / "web" / "fixtures" / "br2-funnel.json"
-_FIXTURE_EMPTY = _REPO / "web" / "fixtures" / "br2-funnel-empty.json"
+_FIXTURE_PATH = _REPO / "web" / "fixtures" / "br2-funnel-daily.json"
 
 
 def _load_fixture(empty: bool = False) -> list[dict[str, Any]]:
-    """Return fixture data rows.  Swap this for a DuckDB/Parquet query in W40."""
-    path = _FIXTURE_EMPTY if empty else _FIXTURE_NORMAL
-    with open(path) as fh:
-        payload = json.load(fh)
-    return payload["data"]
+    """Return fixture data rows from the canonical bundle.
+
+    Reads the "empty" scenario when empty=True, otherwise "default".
+    Swap this function body for a DuckDB/Parquet query in W40.
+    """
+    with open(_FIXTURE_PATH) as fh:
+        bundle = json.load(fh)
+    scenario = "empty" if empty else "default"
+    return bundle[scenario]["data"]
 
 
 @router.get(
@@ -69,7 +84,7 @@ def _load_fixture(empty: bool = False) -> list[dict[str, Any]]:
         "Returns the three-step funnel aggregated over the requested date range "
         "and optional category filter.  Each row carries the raw event count, the "
         "session count, and the conversion rate relative to the view step.\n\n"
-        "**W38**: returns fixture data.  "
+        "**W38**: returns fixture data (warehouse=Parquet, as per frozen contract).  "
         "**W40**: will read `gold/funnel_daily/` via DuckDB."
     ),
 )
@@ -89,8 +104,8 @@ def get_funnel(
         data=data,
         meta=QueryMeta(
             ms=round(elapsed_ms, 2),
-            warehouse="fixture",
-            partitions=0,
+            warehouse="Parquet",
+            partitions=30,
             rows=len(data),
         ),
     )

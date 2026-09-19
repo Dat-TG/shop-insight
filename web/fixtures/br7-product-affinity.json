@@ -1,0 +1,70 @@
+{
+  "_contract": "BR7 — Product Affinity",
+  "_endpoint": "GET /api/br7/affinity",
+  "_warehouse": "Parquet",
+  "_table": "product_affinity",
+  "_gold_columns": "product_a, product_b, co_count, support, lift",
+  "_source": "fact_event (self-join over purchase sessions)",
+  "_note": "Returns up to 10 related products for a given anchor (product_a). lift > 1 = positively associated.",
+  "default": {
+    "data": [
+      {
+        "product_a": 1005115,
+        "product_b": 4804056,
+        "co_count": 1243,
+        "support": 0.0082,
+        "lift": 4.72
+      },
+      {
+        "product_a": 1005115,
+        "product_b": 5770048,
+        "co_count": 987,
+        "support": 0.0065,
+        "lift": 3.91
+      },
+      {
+        "product_a": 1005115,
+        "product_b": 12714075,
+        "co_count": 762,
+        "support": 0.0050,
+        "lift": 2.84
+      },
+      {
+        "product_a": 1005115,
+        "product_b": 1307067,
+        "co_count": 534,
+        "support": 0.0035,
+        "lift": 2.01
+      },
+      {
+        "product_a": 1005115,
+        "product_b": 3900821,
+        "co_count": 318,
+        "support": 0.0021,
+        "lift": 1.55
+      },
+      {
+        "product_a": 1005115,
+        "product_b": 5100706,
+        "co_count": 189,
+        "support": 0.0012,
+        "lift": 1.23
+      }
+    ],
+    "meta": {
+      "ms": 31.7,
+      "warehouse": "Parquet",
+      "partitions": 1,
+      "rows": 6
+    }
+  },
+  "empty": {
+    "data": [],
+    "meta": {
+      "ms": 7.1,
+      "warehouse": "Parquet",
+      "partitions": 0,
+      "rows": 0
+    }
+  }
+}

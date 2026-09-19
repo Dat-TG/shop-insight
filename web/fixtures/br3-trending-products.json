@@ -1,0 +1,90 @@
+{
+  "_contract": "BR3 — Trending Products",
+  "_endpoint": "GET /api/br3/trending",
+  "_warehouse": "Cassandra",
+  "_table": "trending_products",
+  "_primary_key": "(window_start, rank)",
+  "_note": "category_l1='unknown' required; brand='unknown' for null brands. DELETE partition before insert to avoid stale rows.",
+  "default": {
+    "data": [
+      {
+        "window_start": "2019-11-29T14:00:00+07:00",
+        "rank": 1,
+        "product_id": 1005115,
+        "brand": "samsung",
+        "category_l1": "electronics",
+        "view_count": 4821,
+        "cart_count": 612
+      },
+      {
+        "window_start": "2019-11-29T14:00:00+07:00",
+        "rank": 2,
+        "product_id": 4804056,
+        "brand": "apple",
+        "category_l1": "electronics",
+        "view_count": 3940,
+        "cart_count": 508
+      },
+      {
+        "window_start": "2019-11-29T14:00:00+07:00",
+        "rank": 3,
+        "product_id": 5770048,
+        "brand": "xiaomi",
+        "category_l1": "electronics",
+        "view_count": 2918,
+        "cart_count": 344
+      },
+      {
+        "window_start": "2019-11-29T14:00:00+07:00",
+        "rank": 4,
+        "product_id": 1307067,
+        "brand": "lg",
+        "category_l1": "appliances",
+        "view_count": 2105,
+        "cart_count": 287
+      },
+      {
+        "window_start": "2019-11-29T14:00:00+07:00",
+        "rank": 5,
+        "product_id": 12714075,
+        "brand": "unknown",
+        "category_l1": "unknown",
+        "view_count": 1876,
+        "cart_count": 241
+      },
+      {
+        "window_start": "2019-11-29T14:00:00+07:00",
+        "rank": 6,
+        "product_id": 3900821,
+        "brand": "huawei",
+        "category_l1": "electronics",
+        "view_count": 1654,
+        "cart_count": 198
+      },
+      {
+        "window_start": "2019-11-29T14:00:00+07:00",
+        "rank": 7,
+        "product_id": 5100706,
+        "brand": "sony",
+        "category_l1": "electronics",
+        "view_count": 1423,
+        "cart_count": 167
+      }
+    ],
+    "meta": {
+      "ms": 8.7,
+      "warehouse": "Cassandra",
+      "partitions": 1,
+      "rows": 7
+    }
+  },
+  "empty": {
+    "data": [],
+    "meta": {
+      "ms": 2.1,
+      "warehouse": "Cassandra",
+      "partitions": 1,
+      "rows": 0
+    }
+  }
+}
