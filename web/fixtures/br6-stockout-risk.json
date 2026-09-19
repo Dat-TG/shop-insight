@@ -1,0 +1,71 @@
+{
+  "_contract": "BR6 — Stockout Risk",
+  "_endpoint": "GET /api/br6/stockout",
+  "_warehouse": "Cassandra",
+  "_table": "stockout_risk",
+  "_primary_key": "((warehouse_id), days_to_stockout, product_id)",
+  "_sentinel": "days_to_stockout=9999.0 when velocity_7d=0 (Cassandra clustering col cannot be null)",
+  "_warning": "stock_on_hand is SEMI-ADDITIVE: never sum across multiple dates. Sum across warehouses on ONE date is valid.",
+  "_source": "fact_inventory_daily",
+  "default": {
+    "data": [
+      {
+        "warehouse_id": 1,
+        "days_to_stockout": 1.5,
+        "product_id": 1005115,
+        "stock_on_hand": 3,
+        "velocity_7d": 2.0
+      },
+      {
+        "warehouse_id": 1,
+        "days_to_stockout": 2.3,
+        "product_id": 4804056,
+        "stock_on_hand": 7,
+        "velocity_7d": 3.04
+      },
+      {
+        "warehouse_id": 2,
+        "days_to_stockout": 1.0,
+        "product_id": 5770048,
+        "stock_on_hand": 4,
+        "velocity_7d": 4.0
+      },
+      {
+        "warehouse_id": 1,
+        "days_to_stockout": 7.2,
+        "product_id": 1307067,
+        "stock_on_hand": 58,
+        "velocity_7d": 8.06
+      },
+      {
+        "warehouse_id": 2,
+        "days_to_stockout": 14.0,
+        "product_id": 3900821,
+        "stock_on_hand": 112,
+        "velocity_7d": 8.0
+      },
+      {
+        "warehouse_id": 1,
+        "days_to_stockout": 9999.0,
+        "product_id": 12714075,
+        "stock_on_hand": 250,
+        "velocity_7d": 0.0
+      }
+    ],
+    "meta": {
+      "ms": 9.4,
+      "warehouse": "Cassandra",
+      "partitions": 2,
+      "rows": 6
+    }
+  },
+  "empty": {
+    "data": [],
+    "meta": {
+      "ms": 2.8,
+      "warehouse": "Cassandra",
+      "partitions": 1,
+      "rows": 0
+    }
+  }
+}

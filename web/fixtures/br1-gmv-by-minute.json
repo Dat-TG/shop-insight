@@ -1,0 +1,83 @@
+{
+  "_contract": "BR1 — Real-time GMV",
+  "_endpoint": "GET /api/br1/realtime",
+  "_warehouse": "Cassandra",
+  "_table": "gmv_by_minute",
+  "_primary_key": "((event_date, category_l1), window_start)",
+  "_note": "category_l1='unknown' is required — ~32.4% of source rows have no category_code",
+  "default": {
+    "data": [
+      {
+        "event_date": "2019-11-29",
+        "category_l1": "electronics",
+        "window_start": "2019-11-29T14:00:00+07:00",
+        "gmv": 48320.50,
+        "order_count": 312
+      },
+      {
+        "event_date": "2019-11-29",
+        "category_l1": "electronics",
+        "window_start": "2019-11-29T14:01:00+07:00",
+        "gmv": 51780.00,
+        "order_count": 338
+      },
+      {
+        "event_date": "2019-11-29",
+        "category_l1": "appliances",
+        "window_start": "2019-11-29T14:00:00+07:00",
+        "gmv": 12450.75,
+        "order_count": 87
+      },
+      {
+        "event_date": "2019-11-29",
+        "category_l1": "appliances",
+        "window_start": "2019-11-29T14:01:00+07:00",
+        "gmv": 13905.25,
+        "order_count": 94
+      },
+      {
+        "event_date": "2019-11-29",
+        "category_l1": "computers",
+        "window_start": "2019-11-29T14:00:00+07:00",
+        "gmv": 28990.00,
+        "order_count": 145
+      },
+      {
+        "event_date": "2019-11-29",
+        "category_l1": "computers",
+        "window_start": "2019-11-29T14:01:00+07:00",
+        "gmv": 31120.00,
+        "order_count": 158
+      },
+      {
+        "event_date": "2019-11-29",
+        "category_l1": "unknown",
+        "window_start": "2019-11-29T14:00:00+07:00",
+        "gmv": 15640.00,
+        "order_count": 203
+      },
+      {
+        "event_date": "2019-11-29",
+        "category_l1": "unknown",
+        "window_start": "2019-11-29T14:01:00+07:00",
+        "gmv": 16890.50,
+        "order_count": 219
+      }
+    ],
+    "meta": {
+      "ms": 12.5,
+      "warehouse": "Cassandra",
+      "partitions": 4,
+      "rows": 8
+    }
+  },
+  "empty": {
+    "data": [],
+    "meta": {
+      "ms": 3.1,
+      "warehouse": "Cassandra",
+      "partitions": 1,
+      "rows": 0
+    }
+  }
+}

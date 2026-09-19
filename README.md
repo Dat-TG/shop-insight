@@ -83,6 +83,49 @@ star for BR2, BR4, BR6 and BR7 (SYSTEM_DESIGN 8 step 4), `funnel_daily` aggregat
 `stockout_risk` is star-derived. **BR9 is cut** — PLAN.md dropped it to pay for the warehouse layer, and the rubric counts
 8.
 
+## API contract & fixtures
+
+**The eight BR contracts are frozen.** See [`docs/API_CONTRACT.md`](docs/API_CONTRACT.md)
+for the complete specification of every endpoint, field, type, and nullability rule.
+
+**There is no BR9.** BR9 was removed from project scope. The table above reflects this.
+No fixture, tab, endpoint, or type for BR9 exists.
+
+### Where things live
+
+| Artefact | Path |
+|---|---|
+| Contract specification | `docs/API_CONTRACT.md` |
+| Fixture bundles (8) | `web/fixtures/br1-gmv-by-minute.json` … `br8-order-velocity-alerts.json` |
+| Python row models | `serving/api/models.py` |
+| TypeScript row types | `web/src/types/api.ts` |
+| Fixture validation | `tests/test_fixtures.py` |
+
+### Run fixture validation
+
+```bash
+# From the repo root, no extra dependencies needed
+python tests/test_fixtures.py
+```
+
+Expected output: `✅  All 8 fixture bundles passed validation.`
+
+### Adding a new BR screen (copy pattern from BR2)
+
+1. Read the BR's section in `docs/API_CONTRACT.md` for the endpoint path,
+   query parameters, and exact row field names.
+2. Import the TypeScript type from `web/src/types/api.ts`
+   (e.g. `import type { ApiResponse, GmvRow } from '../types/api'`).
+3. Load `web/fixtures/<br>-*.json -> "default"` for local development.
+4. In the FastAPI router, return `ApiResponse(data=..., meta=QueryMeta(...))`.
+5. Run `python tests/test_fixtures.py` then `cd web && npx tsc --noEmit`.
+
+### Contract change rule
+
+Any field rename, type change, or addition requires **simultaneous** updates to
+all five artefacts above plus the relevant Spark schema or Cassandra DDL.
+Changes must be agreed by all team members before merging.
+
 ## Stack
 
 Locked, and CLAUDE.md holds the table of record: PySpark local mode (`local[*]`) with Structured Streaming and Spark

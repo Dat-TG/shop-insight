@@ -9,9 +9,6 @@ import {
   CreditCard,
   Search,
   Calendar,
-  Layers,
-  TrendingDown,
-  ArrowRight,
   Filter as FilterIcon,
   RefreshCw,
 } from 'lucide-react';
