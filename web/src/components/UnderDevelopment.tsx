@@ -1,9 +1,4 @@
-/**
- * UnderDevelopment — placeholder for screens not yet implemented.
- *
- * Usage:
- *   <UnderDevelopment name="BR3 — Trending Products" owner="Khang" eta="W41" />
- */
+import { Terminal, ArrowUpRight } from 'lucide-react';
 
 interface Props {
   name: string;
@@ -14,16 +9,27 @@ interface Props {
 export default function UnderDevelopment({ name, owner, eta }: Props) {
   return (
     <div className="under-dev">
-      <div className="under-dev__icon">🚧</div>
+      <div className="under-dev__badge">
+        <Terminal size={14} strokeWidth={1.75} />
+        <span>Module in progress</span>
+      </div>
       <h2 className="under-dev__title">{name}</h2>
-      <p className="under-dev__msg">This screen is under development.</p>
+      <p className="under-dev__msg">This analytical view is currently being provisioned for the pipeline.</p>
       {(owner || eta) && (
-        <p className="under-dev__meta">
-          {owner && <span>Owner: <strong>{owner}</strong></span>}
-          {owner && eta && '  ·  '}
-          {eta && <span>ETA: <strong>{eta}</strong></span>}
-        </p>
+        <div className="under-dev__meta">
+          {owner && (
+            <span className="under-dev__tag">
+              Owner: <strong>{owner}</strong>
+            </span>
+          )}
+          {eta && (
+            <span className="under-dev__tag">
+              Target: <strong>{eta}</strong>
+            </span>
+          )}
+        </div>
       )}
     </div>
   );
 }
+

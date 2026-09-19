@@ -1,36 +1,45 @@
-/**
- * BR2Page — Conversion Funnel screen (fully implemented sample).
- *
- * Owner: Tin
- * API:   GET /api/br2/funnel?start_date&end_date&category_l1
- * Data:  web/fixtures/br2-funnel.json (W38); gold/funnel_daily/ via DuckDB (W40)
- *
- * This is the reference screen. Use it as a template for BR1–BR8:
- *   1. Fetch data with useEffect → useState pattern below
- *   2. Render your chart using Recharts
- *   3. Place <QueryMeta meta={data.meta} /> at the bottom of the card
- */
-
 import { useState, useEffect } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell,
   ResponsiveContainer,
 } from 'recharts';
+import {
+  Eye,
+  ShoppingCart,
+  CreditCard,
+  Search,
+  Calendar,
+  Layers,
+  TrendingDown,
+  ArrowRight,
+  Filter as FilterIcon,
+  RefreshCw,
+} from 'lucide-react';
 import type { ApiResponse, FunnelRow } from '../types/api';
 import QueryMeta from '../components/QueryMeta';
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8000';
 
-const STEP_COLORS: Record<string, string> = {
-  view:     '#6366f1',
-  cart:     '#8b5cf6',
-  purchase: '#a855f7',
-};
-
-const STEP_LABELS: Record<string, string> = {
-  view:     '👁 View',
-  cart:     '🛒 Cart',
-  purchase: '💳 Purchase',
+// Apple-inspired restrained color scheme for data steps (Monochrome / Apple Blue / Slate)
+const STEP_CONFIG: Record<string, { label: string; icon: typeof Eye; color: string; tint: string }> = {
+  view: {
+    label: 'View',
+    icon: Eye,
+    color: '#0071e3', // Apple Blue
+    tint: 'rgba(0, 113, 227, 0.1)',
+  },
+  cart: {
+    label: 'Cart',
+    icon: ShoppingCart,
+    color: '#2997ff', // Apple Light Blue
+    tint: 'rgba(41, 151, 255, 0.1)',
+  },
+  purchase: {
+    label: 'Purchase',
+    icon: CreditCard,
+    color: '#30d158', // Apple Mint/Green (subdued)
+    tint: 'rgba(48, 209, 88, 0.1)',
+  },
 };
 
 export default function BR2Page() {
@@ -56,119 +65,272 @@ export default function BR2Page() {
       .finally(() => setLoading(false));
   };
 
-  // Fetch on mount and whenever filters change
   useEffect(() => { fetchFunnel(); }, [startDate, endDate, category]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const chartData = (response?.data ?? []).map(row => ({
-    ...row,
-    label: STEP_LABELS[row.step] ?? row.step,
-    pct: `${(row.conversion_rate * 100).toFixed(1)}%`,
-  }));
+  const dataRows = response?.data ?? [];
+
+  const viewCount = dataRows.find(r => r.step === 'view')?.count ?? 0;
+  const cartCount = dataRows.find(r => r.step === 'cart')?.count ?? 0;
+  const purchaseCount = dataRows.find(r => r.step === 'purchase')?.count ?? 0;
+
+  const viewToCartPct = viewCount > 0 ? ((cartCount / viewCount) * 100).toFixed(2) : '0.00';
+  const cartToPurchasePct = cartCount > 0 ? ((purchaseCount / cartCount) * 100).toFixed(2) : '0.00';
+  const overallConvPct = viewCount > 0 ? ((purchaseCount / viewCount) * 100).toFixed(2) : '0.00';
+
+  const chartData = dataRows.map(row => {
+    const config = STEP_CONFIG[row.step] ?? { label: row.step, color: '#86868b' };
+    return {
+      ...row,
+      displayName: config.label,
+      pctOfViews: `${(row.conversion_rate * 100).toFixed(2)}%`,
+    };
+  });
 
   return (
     <div className="page">
-      {/* ── Filters ──────────────────────────────────────────── */}
-      <div className="filters">
-        <label className="filter-group">
-          <span>Start date</span>
-          <input
-            type="date" value={startDate} min="2019-11-01" max="2019-11-30"
-            onChange={e => setStartDate(e.target.value)}
-          />
-        </label>
-        <label className="filter-group">
-          <span>End date</span>
-          <input
-            type="date" value={endDate} min="2019-11-01" max="2019-11-30"
-            onChange={e => setEndDate(e.target.value)}
-          />
-        </label>
-        <label className="filter-group">
-          <span>Category</span>
-          <select value={category} onChange={e => setCategory(e.target.value)}>
-            <option value="all">All</option>
-            <option value="electronics">Electronics</option>
-            <option value="appliances">Appliances</option>
-            <option value="computers">Computers</option>
-            <option value="furniture">Furniture</option>
-          </select>
-        </label>
+      {/* ── Page Header ─────────────────────────────────────── */}
+      <div className="page-header">
+        <div className="page-header__left">
+          <div className="page-header__breadcrumb">
+            <span>Modules</span>
+            <span className="page-header__sep">/</span>
+            <span className="page-header__current">BR2</span>
+          </div>
+          <h1 className="page-header__title">Conversion Funnel</h1>
+          <p className="page-header__description">
+            Analysis of customer progression and drop-off from item impression to checkout
+          </p>
+        </div>
+
+        {/* ── Toolbar / Filter Bar (Apple-style inline controls) ── */}
+        <div className="toolbar">
+          <div className="toolbar__item">
+            <Calendar size={13} strokeWidth={1.75} className="toolbar__icon" />
+            <span className="toolbar__label">From</span>
+            <input
+              type="date"
+              className="toolbar__input"
+              value={startDate}
+              min="2019-11-01"
+              max="2019-11-30"
+              onChange={e => setStartDate(e.target.value)}
+            />
+          </div>
+
+          <div className="toolbar__sep" />
+
+          <div className="toolbar__item">
+            <span className="toolbar__label">To</span>
+            <input
+              type="date"
+              className="toolbar__input"
+              value={endDate}
+              min="2019-11-01"
+              max="2019-11-30"
+              onChange={e => setEndDate(e.target.value)}
+            />
+          </div>
+
+          <div className="toolbar__sep" />
+
+          <div className="toolbar__item">
+            <FilterIcon size={13} strokeWidth={1.75} className="toolbar__icon" />
+            <span className="toolbar__label">Category</span>
+            <select
+              className="toolbar__select"
+              value={category}
+              onChange={e => setCategory(e.target.value)}
+            >
+              <option value="all">All Categories</option>
+              <option value="electronics">Electronics</option>
+              <option value="appliances">Appliances</option>
+              <option value="computers">Computers</option>
+              <option value="furniture">Furniture</option>
+            </select>
+          </div>
+        </div>
       </div>
 
-      {/* ── Status ───────────────────────────────────────────── */}
-      {loading && <p className="status-msg">Loading…</p>}
-      {error   && <p className="status-msg status-msg--error">Error: {error}</p>}
-
-      {/* ── Empty state ──────────────────────────────────────── */}
-      {!loading && !error && response && response.data.length === 0 && (
-        <div className="empty-state">
-          <span>🔍</span>
-          <p>No data for the selected filters.</p>
+      {/* ── Status Messages ─────────────────────────────────── */}
+      {loading && (
+        <div className="status-banner">
+          <RefreshCw size={14} className="spin" />
+          <span>Synchronizing pipeline query...</span>
         </div>
       )}
 
-      {/* ── Chart card ───────────────────────────────────────── */}
-      {!loading && !error && response && response.data.length > 0 && (
-        <div className="card">
-          <h2 className="card__title">Conversion Funnel</h2>
-          <p className="card__subtitle">
-            {startDate} → {endDate}
-            {category !== 'all' && ` · ${category}`}
+      {error && (
+        <div className="status-banner status-banner--error">
+          <span>Failed to query funnel data: {error}</span>
+        </div>
+      )}
+
+      {/* ── Empty State ─────────────────────────────────────── */}
+      {!loading && !error && response && dataRows.length === 0 && (
+        <div className="empty-panel">
+          <Search size={28} strokeWidth={1.5} className="empty-panel__icon" />
+          <h3 className="empty-panel__title">No Events Recorded</h3>
+          <p className="empty-panel__desc">
+            No funnel records matched your selected date range and category filter.
           </p>
+        </div>
+      )}
 
-          <ResponsiveContainer width="100%" height={280}>
-            <BarChart
-              data={chartData}
-              layout="vertical"
-              margin={{ top: 8, right: 48, left: 80, bottom: 8 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-              <XAxis type="number" tick={{ fill: '#94a3b8', fontSize: 12 }}
-                tickFormatter={v => v.toLocaleString()} />
-              <YAxis type="category" dataKey="label" tick={{ fill: '#e2e8f0', fontSize: 13 }} />
-              <Tooltip
-                contentStyle={{ background: '#1e293b', border: 'none', borderRadius: 8 }}
-                labelStyle={{ color: '#e2e8f0' }}
-                formatter={(value: number, _name: string, entry) => [
-                  `${value.toLocaleString()} (${entry.payload.pct} of views)`,
-                  'Count',
-                ]}
-              />
-              <Bar dataKey="count" radius={[0, 6, 6, 0]}>
-                {chartData.map(row => (
-                  <Cell key={row.step} fill={STEP_COLORS[row.step] ?? '#6366f1'} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+      {/* ── Main Data View ──────────────────────────────────── */}
+      {!loading && !error && response && dataRows.length > 0 && (
+        <div className="content-stack">
+          {/* ── Minimalist KPI Ribbon (Single unified strip, no repetitive boxes) ── */}
+          <div className="kpi-ribbon">
+            <div className="kpi-ribbon__cell">
+              <span className="kpi-ribbon__label">Total Views</span>
+              <div className="kpi-ribbon__value">{viewCount.toLocaleString()}</div>
+              <span className="kpi-ribbon__hint">100% Top of Funnel</span>
+            </div>
 
-          {/* ── Conversion table ─────────────────────────────── */}
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Step</th>
-                <th>Events</th>
-                <th>Sessions</th>
-                <th>Conv. rate</th>
-              </tr>
-            </thead>
-            <tbody>
-              {response.data.map(row => (
-                <tr key={row.step}>
-                  <td style={{ color: STEP_COLORS[row.step] }}>
-                    {STEP_LABELS[row.step] ?? row.step}
-                  </td>
-                  <td>{row.count.toLocaleString()}</td>
-                  <td>{row.session_count.toLocaleString()}</td>
-                  <td>{(row.conversion_rate * 100).toFixed(2)}%</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+            <div className="kpi-ribbon__divider" />
 
-          <QueryMeta meta={response.meta} />
+            <div className="kpi-ribbon__cell">
+              <span className="kpi-ribbon__label">Cart Additions</span>
+              <div className="kpi-ribbon__value">{cartCount.toLocaleString()}</div>
+              <span className="kpi-ribbon__hint">{viewToCartPct}% view-to-cart</span>
+            </div>
+
+            <div className="kpi-ribbon__divider" />
+
+            <div className="kpi-ribbon__cell">
+              <span className="kpi-ribbon__label">Purchases</span>
+              <div className="kpi-ribbon__value">{purchaseCount.toLocaleString()}</div>
+              <span className="kpi-ribbon__hint">{cartToPurchasePct}% cart-to-buy</span>
+            </div>
+
+            <div className="kpi-ribbon__divider" />
+
+            <div className="kpi-ribbon__cell kpi-ribbon__cell--highlight">
+              <span className="kpi-ribbon__label">Overall Conversion</span>
+              <div className="kpi-ribbon__value">{overallConvPct}%</div>
+              <span className="kpi-ribbon__hint">End-to-end efficiency</span>
+            </div>
+          </div>
+
+          {/* ── Main Panel: Chart & Detailed Table ─────────────── */}
+          <div className="panel">
+            <div className="panel__header">
+              <div className="panel__title-group">
+                <h2 className="panel__title">Funnel Progression Flow</h2>
+                <span className="panel__subtitle">
+                  {startDate} — {endDate} · {category === 'all' ? 'All Catalog Segments' : category}
+                </span>
+              </div>
+            </div>
+
+            {/* Recharts Bar Visualization */}
+            <div className="panel__chart">
+              <ResponsiveContainer width="100%" height={230}>
+                <BarChart
+                  data={chartData}
+                  layout="vertical"
+                  margin={{ top: 12, right: 36, left: 60, bottom: 8 }}
+                >
+                  <CartesianGrid strokeDasharray="2 2" stroke="rgba(255,255,255,0.06)" horizontal={false} />
+                  <XAxis
+                    type="number"
+                    axisLine={{ stroke: 'rgba(255,255,255,0.1)' }}
+                    tickLine={false}
+                    tick={{ fill: '#86868b', fontSize: 11, fontFamily: 'monospace' }}
+                    tickFormatter={v => v.toLocaleString()}
+                  />
+                  <YAxis
+                    type="category"
+                    dataKey="displayName"
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fill: '#f5f5f7', fontSize: 13, fontWeight: 500 }}
+                  />
+                  <Tooltip
+                    cursor={{ fill: 'rgba(255,255,255,0.03)' }}
+                    contentStyle={{
+                      background: '#1c1c1e',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      borderRadius: 8,
+                      boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+                      padding: '8px 12px',
+                    }}
+                    labelStyle={{ color: '#f5f5f7', fontWeight: 600, fontSize: 13, marginBottom: 4 }}
+                    formatter={(value: number, _name: string, entry) => [
+                      `${value.toLocaleString()} events (${entry.payload.pctOfViews} retention)`,
+                      'Volume',
+                    ]}
+                  />
+                  <Bar dataKey="count" radius={[0, 4, 4, 0]} barSize={26}>
+                    {chartData.map(row => (
+                      <Cell
+                        key={row.step}
+                        fill={STEP_CONFIG[row.step]?.color ?? '#0071e3'}
+                      />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* ── Table: Precise Step Breakdown ──────────────── */}
+            <div className="panel__table-wrapper">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Funnel Stage</th>
+                    <th>Events Count</th>
+                    <th>Unique Sessions</th>
+                    <th>Stage Retention</th>
+                    <th>Drop-off</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {dataRows.map((row, idx) => {
+                    const stepCfg = STEP_CONFIG[row.step];
+                    const StepIcon = stepCfg?.icon ?? Eye;
+                    const prevCount = idx > 0 ? dataRows[idx - 1].count : row.count;
+                    const dropOffPct = idx === 0
+                      ? '0.00%'
+                      : `${(((prevCount - row.count) / prevCount) * 100).toFixed(2)}%`;
+
+                    return (
+                      <tr key={row.step}>
+                        <td className="data-table__stage-cell">
+                          <span
+                            className="data-table__step-indicator"
+                            style={{ backgroundColor: stepCfg?.color ?? '#86868b' }}
+                          />
+                          <StepIcon size={14} strokeWidth={1.75} className="data-table__step-icon" />
+                          <span className="data-table__step-name">{stepCfg?.label ?? row.step}</span>
+                        </td>
+                        <td className="data-table__numeric font-mono">
+                          {row.count.toLocaleString()}
+                        </td>
+                        <td className="data-table__numeric font-mono text-secondary">
+                          {row.session_count.toLocaleString()}
+                        </td>
+                        <td className="data-table__numeric font-mono text-emphasis">
+                          {(row.conversion_rate * 100).toFixed(2)}%
+                        </td>
+                        <td className="data-table__numeric font-mono text-muted">
+                          {idx === 0 ? '—' : `-${dropOffPct}`}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* ── Telemetry Footer ───────────────────────────── */}
+            <div className="panel__footer">
+              <QueryMeta meta={response.meta} />
+            </div>
+          </div>
         </div>
       )}
     </div>
   );
 }
+
