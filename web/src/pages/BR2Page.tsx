@@ -179,7 +179,7 @@ export default function BR2Page() {
       {/* ── Main Data View ──────────────────────────────────── */}
       {!loading && !error && response && dataRows.length > 0 && (
         <div className="content-stack">
-          {/* ── Minimalist KPI Ribbon (Single unified strip, no repetitive boxes) ── */}
+          {/* ── Minimalist KPI Ribbon (Single unified strip of 4 cells) ── */}
           <div className="kpi-ribbon">
             <div className="kpi-ribbon__cell">
               <span className="kpi-ribbon__label">Total Views</span>
@@ -187,15 +187,11 @@ export default function BR2Page() {
               <span className="kpi-ribbon__hint">100% Top of Funnel</span>
             </div>
 
-            <div className="kpi-ribbon__divider" />
-
             <div className="kpi-ribbon__cell">
               <span className="kpi-ribbon__label">Cart Additions</span>
               <div className="kpi-ribbon__value">{cartCount.toLocaleString()}</div>
               <span className="kpi-ribbon__hint">{viewToCartPct}% view-to-cart</span>
             </div>
-
-            <div className="kpi-ribbon__divider" />
 
             <div className="kpi-ribbon__cell">
               <span className="kpi-ribbon__label">Purchases</span>
@@ -203,9 +199,7 @@ export default function BR2Page() {
               <span className="kpi-ribbon__hint">{cartToPurchasePct}% cart-to-buy</span>
             </div>
 
-            <div className="kpi-ribbon__divider" />
-
-            <div className="kpi-ribbon__cell kpi-ribbon__cell--highlight">
+            <div className="kpi-ribbon__cell">
               <span className="kpi-ribbon__label">Overall Conversion</span>
               <div className="kpi-ribbon__value">{overallConvPct}%</div>
               <span className="kpi-ribbon__hint">End-to-end efficiency</span>
@@ -248,18 +242,29 @@ export default function BR2Page() {
                   />
                   <Tooltip
                     cursor={{ fill: 'rgba(255,255,255,0.03)' }}
-                    contentStyle={{
-                      background: '#1c1c1e',
-                      border: '1px solid rgba(255,255,255,0.1)',
-                      borderRadius: 8,
-                      boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
-                      padding: '8px 12px',
+                    content={({ active, payload }) => {
+                      if (active && payload && payload.length) {
+                        const data = payload[0].payload;
+                        return (
+                          <div className="chart-tooltip">
+                            <div className="chart-tooltip__title">{data.displayName} Stage</div>
+                            <div className="chart-tooltip__item">
+                              <span className="chart-tooltip__label">Volume:</span>
+                              <span className="chart-tooltip__value font-mono">
+                                {data.count.toLocaleString()}
+                              </span>
+                            </div>
+                            <div className="chart-tooltip__item">
+                              <span className="chart-tooltip__label">Retention:</span>
+                              <span className="chart-tooltip__value font-mono">
+                                {data.pctOfViews}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      }
+                      return null;
                     }}
-                    labelStyle={{ color: '#f5f5f7', fontWeight: 600, fontSize: 13, marginBottom: 4 }}
-                    formatter={(value: number, _name: string, entry) => [
-                      `${value.toLocaleString()} events (${entry.payload.pctOfViews} retention)`,
-                      'Volume',
-                    ]}
                   />
                   <Bar dataKey="count" radius={[0, 4, 4, 0]} barSize={26}>
                     {chartData.map(row => (
