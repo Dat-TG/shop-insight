@@ -20,7 +20,7 @@ quy trình**: ai sửa một lệnh ở file này thì sửa luôn ở file kia.
 | [1](#phần-1--spark-là-gì) | Spark là gì, các khái niệm sẽ gặp | Trước khi cài |
 | [2](#phần-2--cài-đặt-từng-bước) | Cài đặt từng bước, mỗi lệnh làm gì | W38 |
 | [3](#phần-3--chạy-katapy-và-đọc-kết-quả) | Chạy `kata.py`, đọc từng dòng kết quả | W38 |
-| [4](#phần-4--w39-chạy-load_bronzepy-và-đọc-kết-quả) | Chạy `load_bronze.py` | Đầu W39 |
+| [4](#phần-4--w39-chạy-load_bronzepy-và-đọc-kết-quả) | Chạy `load_bronze.py` rồi `batch_silver.py` | Đầu W39 |
 | [5](#phần-5--từng-file-nghĩa-là-gì) | Từng file trong repo làm gì, đọc từng đoạn code | Trước khi viết script đầu tiên |
 | [6](#phần-6--những-gì-đã-thay-đổi-trong-w38-và-vì-sao) | Những gì đã thay đổi trong W38, và vì sao | Khi thắc mắc một con số |
 | [7](#phần-7--khi-có-lỗi) | Bảng tra lỗi | Khi có lỗi |
@@ -363,6 +363,68 @@ trong file; khi đọc lại, nó lấy giá trị từ tên thư mục.
 **Post năm con số vào nhóm ở W39.** Bốn máy phải ra giống nhau; đây là bước đối chiếu
 sớm, thay vì tới W44 mới phát hiện lệch.
 
+### Ngay sau đó: chạy `batch_silver.py`
+
+```bash
+python processing/batch_silver.py
+```
+
+Script này đọc bronze, làm sạch theo **bảy quy tắc** (giải thích ở phần 5) rồi ghi tầng
+**silver**. Máy 20 lõi chạy khoảng 15 giây.
+
+**Kết quả đúng** (mọi máy phải ra **y hệt**):
+
+```
+rows                      4,754,015   (bronze 4,767,012, 12,997 dropped)
+users                       258,330
+products                    128,972
+category_l1 'unknown'     1,534,249
+category_l2 'unknown'     1,534,249
+category_l3 'unknown'     3,428,388
+brand 'unknown'             634,202
+null values                       0   (expect 0; only category_code may be null)
+price <= 0                        0   (expect 0)
+event_date wrong                  0   (expect 0: the Vietnam date of event_time)
+event_date range      2019-11-01 .. 2019-12-01   (expect 2019-11-01 .. 2019-12-01)
+rows on 2019-12-01           25,859   (expect 25,859: 30 Nov 17:00-24:00 UTC)
+event_time range      2019-11-01 07:00:02 .. 2019-12-01 06:59:49   (expect 2019-11-01 07:00:02 .. 2019-12-01 06:59:49)
+directories           31 dates, 93 date/type   (expect 31 and 93)
+took                             15 s
+SILVER OK
+```
+
+| Dòng | Ý nghĩa |
+|---|---|
+| `rows` | Bronze trừ 12.996 dòng có giá ≤ 0 và 1 dòng thiếu `user_session` |
+| `users`, `products` | Ít hơn bronze một chút: 60 người và 927 sản phẩm chỉ có dòng giá ≤ 0 |
+| `category_l1 'unknown'` | Số dòng không có `category_code`, khoảng một phần ba. Đây là quy tắc 4: thiếu nó thì một phần ba lệnh insert của BR1 hỏng |
+| `category_l3 'unknown'` | Nhiều hơn l1 vì phần lớn mã danh mục chỉ có hai cấp, ví dụ `electronics.smartphone` |
+| `null values 0` | Không cột nào còn null, trừ cột `category_code` gốc (được giữ nguyên) |
+| `event_date wrong 0` | Mọi dòng có `event_date` đúng bằng ngày của `event_time` **sau khi** đổi sang giờ Việt Nam |
+| `2019-12-01` và `31 dates` | **Đúng, không phải lỗi.** File kết thúc lúc 23:59 ngày 30/11 theo UTC, tức 06:59 sáng 01/12 giờ Việt Nam. 25.859 sự kiện từ 17:00 đến 24:00 UTC ngày 30/11 thuộc về ngày 01/12. Ở bronze, 31 thư mục là lỗi múi giờ; ở silver, **30** thư mục mới là lỗi (quên đổi giờ) |
+| `event_time range` | Bắt đầu lúc 07:00:02 ngày 01/11, tức 00:00:02 UTC: sự kiện đầu tiên của file |
+| `93 date/type` | 31 ngày × 3 loại sự kiện, mỗi thư mục đúng một file |
+
+Kết quả nằm trên đĩa như sau:
+
+```
+data/silver/
+├── .gitkeep
+├── _SUCCESS
+├── event_date=2019-11-01/
+│   ├── event_type=cart/part-....snappy.parquet
+│   ├── event_type=purchase/part-....snappy.parquet
+│   └── event_type=view/part-....snappy.parquet
+├── ...
+└── event_date=2019-12-01/       tổng cộng 31 thư mục ngày, 93 file Parquet, 136 MB
+```
+
+Thư mục chia hai tầng, ngày rồi loại sự kiện, để truy vấn chỉ mở đúng phần nó cần. Hỏi
+"đơn mua ngày 29/11" thì Spark chỉ đọc `event_date=2019-11-29/event_type=purchase/` và bỏ
+qua mọi thư mục khác mà không mở file nào. Kỹ thuật này gọi là *partition pruning*.
+
+**Post các con số này vào nhóm ở W39, cùng lúc với số bronze.**
+
 ---
 
 ## Phần 5 — Từng file nghĩa là gì
@@ -503,6 +565,64 @@ Thứ tự trong `main()`:
    đếm dòng, số người và số sản phẩm khác nhau, số dòng thiếu `event_time`, đếm thư mục
    ngày, rồi so từng số với `EXPECTED`.
 
+### `processing/batch_silver.py`: tạo tầng silver
+
+**Silver chỉ có đúng một writer là file này.** Job streaming ở W40 tuyệt đối không ghi vào
+`data/silver/`, kể cả "chỉ ghi thêm sự kiện mới". Ghi từ hai nơi thì hỏng theo một trong
+hai cách:
+
+- Ghi bằng Parquet file sink: Spark tạo `data/silver/_spark_metadata/`, rồi từ đó chỉ đọc
+  những file có tên trong đó. Mọi file `batch_silver.py` đã ghi trở nên vô hình với Spark,
+  trong khi DuckDB vẫn thấy hết. Hai engine ra hai kết quả khác nhau trên cùng thư mục.
+- Ghi bằng `foreachBatch`: nhân đôi dòng. Replayer phát lại bronze, mà bronze đã nằm sẵn
+  trong silver. Từ lần demo thứ hai, BR2, BR4 và BR7 đếm mọi thứ gấp đôi.
+
+Thứ tự trong `main()`:
+
+1. **Kiểm tra bronze đã có chưa.** Chưa có thì dừng và nhắc chạy `load_bronze.py`, không
+   xoá silver cũ.
+2. **`read_bronze(spark)`:** đọc Parquet. Không cần truyền schema, vì file Parquet tự mang
+   schema. Cột `event_date` của bronze (ngày theo **UTC**) quay lại từ tên thư mục;
+   `clean()` sẽ thay nó.
+3. **`clean(events)`:** bảy quy tắc.
+
+   | # | Quy tắc | Vì sao |
+   |---|---|---|
+   | 1 | Bỏ dòng `price <= 0` | 12.996 dòng. Giá 0 hoặc âm không phải giao dịch thật |
+   | 2 | Bỏ dòng `user_id` null | Bronze không có dòng nào, nhưng dữ liệu streaming có cùng dạng |
+   | 3 | Tách `category_code` thành `category_l1/l2/l3` | `electronics.smartphone` → `electronics`, `smartphone` |
+   | 4 | Chỗ nào null thì **điền `'unknown'`** cho `category_l1/l2/l3` | 32,4% dòng của file gốc (21.898.171 / 67.501.979) không có `category_code`. `category_l1` là nửa khoá phân mảnh của `gmv_by_minute`, và Cassandra từ chối khoá null: không điền thì cứ 3 lệnh insert của BR1 hỏng 1 và GMV thiếu một phần ba |
+   | 5 | `brand` null thì điền `'unknown'` | |
+   | 6 | Đổi `event_time` sang UTC+7 **và tính lại `event_date` từ giờ mới** | Giữ `event_date` cũ là gán sai ngày cho mọi sự kiện 17:00-24:00 UTC, làm lệch BR1, BR2, BR6 |
+   | 7 | Bỏ dòng `user_session` null | 1 dòng. `fact_event` cần cột này NOT NULL, và nó là clustering key của `abandoned_carts` (BR5) |
+
+   Ba chi tiết dễ sai:
+   - **`F.get(parts, 2)`, không dùng `getItem(2)`.** Spark 4 bật chế độ ANSI: lấy phần tử
+     thứ 3 của một mảng chỉ có 2 phần tử (mã hai cấp như `electronics.smartphone`) làm
+     **cả job dừng** với lỗi `INVALID_ARRAY_INDEX`. `get()` trả về null, rồi `coalesce`
+     điền `'unknown'`.
+   - **Đổi giờ trước, lấy ngày sau.** Phiên Spark chạy theo UTC (nhờ `conf/`), nên
+     `to_date` của giờ đã đổi chính là ngày Việt Nam. Ví dụ 20:00 UTC ngày 30/11 thành
+     03:00 ngày 01/12, nên được xếp vào `event_date=2019-12-01`.
+   - **`clean()` không đọc, không ghi gì**: nhận DataFrame, trả DataFrame. Job streaming ở
+     W40 import nó (`from processing.batch_silver import clean`) thay vì chép lại bảy quy
+     tắc, nên không thể quên đổi giờ. Import một hàm không biến job streaming thành writer
+     của silver. `clean()` còn tự kiểm tra phiên Spark có chạy theo UTC không: script nào
+     quên dòng `SPARK_CONF_DIR` sẽ chạy theo giờ máy (UTC+7): `to_date` cộng thêm 7 giờ nữa
+     và xếp mọi sự kiện 10:00-17:00 UTC sang ngày hôm sau mà không báo lỗi gì. Vì vậy
+     `clean()` dừng hẳn với một thông báo rõ ràng.
+
+   Cột `category_code` gốc được giữ nguyên, kể cả khi null: `dim_product` cần nó, và đó là
+   chỗ duy nhất còn giữ cấp thứ tư của mã `electronics.audio.music_tools.piano`.
+4. **`write_silver(events)`:** ghi Parquet.
+   - `repartition("event_date", "event_type")` gom mỗi cặp (ngày, loại) về một chỗ, nên mỗi
+     thư mục có đúng một file: 93 file trên mọi máy. Không có dòng này, mỗi file bronze tự
+     ghi một file nhỏ vào mọi thư mục nó chạm tới, ra khoảng 580 file, và số "partition đã
+     đọc" mà mỗi màn hình hiển thị sẽ phụ thuộc vào cách bronze tình cờ bị chia.
+   - `partitionBy("event_date", "event_type")`: thư mục ngày, trong đó là thư mục loại sự kiện.
+   - `mode("overwrite")` và khối `try/finally` giữ `.gitkeep`, giống hệt bronze.
+5. **`report(spark)`:** đọc lại silver **từ đĩa** rồi so từng số với `EXPECTED`, như bronze.
+
 ### Mẫu cho script mới
 
 Mọi script tầng sau (`batch_silver.py`, `batch_warehouse.py`, ...) nên giống
@@ -533,6 +653,7 @@ Hai PR đã merge: #3 (cài đặt Spark) và #4 (bronze).
 | `processing/schema.py` | `EVENT_SCHEMA` và định dạng thời gian của file gốc |
 | `processing/kata.py` | Bài kiểm tra cài đặt |
 | `ingestion/load_bronze.py` | Tạo `data/bronze/` |
+| `processing/batch_silver.py` | Tạo `data/silver/` (thêm sau, cùng W38) |
 
 ### File đã sửa
 
@@ -564,6 +685,18 @@ Hai PR đã merge: #3 (cài đặt Spark) và #4 (bronze).
    chỉ đặt trong `conf/`.
 6. **Ubuntu 26.04 thiếu `python3.14-venv`**, nên bước 2 cài thêm gói này.
 7. **Spark 4.x cần Java 17 trở lên**, không bắt buộc đúng 21. Nhóm vẫn ghim 21.
+8. **Silver có 31 thư mục ngày, không phải 30.** Đổi sang giờ Việt Nam thì bảy giờ cuối
+   của 30/11 (UTC) thành ngày 01/12. Nhóm giữ 25.859 dòng này (ngày 01/12 chỉ có từ 00:00
+   đến 06:59).
+9. **Có quy tắc thứ bảy: bỏ dòng thiếu `user_session`.** Bronze có đúng 1 dòng như vậy.
+10. **Số dòng thiếu `category_code` trong file gốc là 21.898.171**, đếm lại bằng `awk` trên
+    toàn file (một con số khác, 21.898.175, từng được nhắc tới; lệch 4 dòng).
+11. **File gốc có một khoảng 38 giờ không có đơn mua nào**: từ 18:09 UTC ngày 14/11 đến
+    08:32 UTC ngày 16/11 (01:09 ngày 15/11 đến 15:32 ngày 16/11 giờ Việt Nam). Lượt xem và
+    giỏ hàng vẫn bình thường. Đây là lỗi của nguồn dữ liệu, không phải của code. Theo giờ
+    Việt Nam, ngày 15/11 chỉ có 170 đơn mua so với 35.812 lượt thêm giỏ, nên phễu BR2 ngày
+    đó gần bằng 0, GMV của BR1 phẳng trong khoảng đó, và BR8 sẽ báo bất thường. Chi tiết ở
+    `SYSTEM_DESIGN.md` mục 3.1.
 
 ---
 

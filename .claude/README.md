@@ -10,7 +10,7 @@ skill is a markdown file one of us wrote; its slash name is the **directory** na
 | Path | What it does |
 |---|---|
 | `settings.json` | Permission allow/deny lists, and the wiring for all three hooks |
-| `skills/spark-job/SKILL.md` | Batch PySpark house rules: shape, pins, partitioning, the six silver rules, SCD2 |
+| `skills/spark-job/SKILL.md` | Batch PySpark house rules: shape, pins, partitioning, the seven silver rules, SCD2 |
 | `skills/streaming-job/SKILL.md` | Structured Streaming traps: schema, checkpoints, watermarks, `foreachBatch` |
 | `skills/cassandra-table/SKILL.md` | Partition and clustering keys designed backwards from the screen; null-key sentinels |
 | `skills/br-slice/SKILL.md` | One BR = Spark query + API endpoint + React screen. Section 0 is the BR / owner / sink / screen table; weeks live only in `PLAN.md` |

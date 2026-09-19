@@ -64,7 +64,7 @@ source, and anything source cannot settle goes in the `Not checkable` list below
   `event_date` must be RECOMPUTED from the shifted time or every 17:00-24:00 UTC
   event is misfiled and BR1/BR2/BR6 skew. Check `batch_silver.py` **and** the
   streaming job.
-- B2 The streaming job missing any of the six silver cleaning rules (SYSTEM_DESIGN
+- B2 The streaming job missing any of the seven silver cleaning rules (SYSTEM_DESIGN
   section 4). Without rule 6 `gmv_by_minute.event_date` is UTC while
   `funnel_daily.event_date` is UTC+7 and two screens disagree about the same day.
   Rule 3 only splits `category_code` into `category_l1/l2/l3`; the filling with

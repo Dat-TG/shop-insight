@@ -8,17 +8,17 @@ and proven**, not asserted. HCMUT, Semester 1 2026-2027. Group 15: Dat, Khang, N
 
 ## Status
 
-> **2026-09-17 — ISO W38 of W38-W46.** Three things in this file go stale: this block, the `[x]`/`[ ]` marks under
+> **2026-09-19 — ISO W38 of W38-W46.** Three things in this file go stale: this block, the `[x]`/`[ ]` marks under
 > Repository layout, and the `(not written yet)` markers under Getting started. Fix whichever one your change makes
 > false, and the date on this line.
 
 | | |
 |---|---|
-| What exists | The Spark setup: [docs/SETUP_SPARK.md](docs/SETUP_SPARK.md) (Vietnamese, with explanations: [docs/SPARK_GUIDE_VI.md](docs/SPARK_GUIDE_VI.md)), [requirements.txt](requirements.txt), [conf/spark-defaults.conf](conf/spark-defaults.conf), [processing/schema.py](processing/schema.py), [processing/kata.py](processing/kata.py); bronze: [ingestion/load_bronze.py](ingestion/load_bronze.py). Plus [CLAUDE.md](CLAUDE.md), [SYSTEM_DESIGN.md](SYSTEM_DESIGN.md), [PLAN.md](PLAN.md), [docs/AI_USAGE.md](docs/AI_USAGE.md), [.gitignore](.gitignore), a `data/` skeleton, `.claude/`. No BR code yet |
-| W38 tasks | Done: `docs/SETUP_SPARK.md` + `processing/kata.py`, so all four install Spark unattended — **everyone runs it and posts `KATA OK`**; `ingestion/load_bronze.py` — **in W39 everyone runs it and posts the `BRONZE OK` numbers**. Next: `processing/batch_silver.py`, so the batch BRs have input |
+| What exists | The Spark setup: [docs/SETUP_SPARK.md](docs/SETUP_SPARK.md) (Vietnamese, with explanations: [docs/SPARK_GUIDE_VI.md](docs/SPARK_GUIDE_VI.md)), [requirements.txt](requirements.txt), [conf/spark-defaults.conf](conf/spark-defaults.conf), [processing/schema.py](processing/schema.py), [processing/kata.py](processing/kata.py); bronze: [ingestion/load_bronze.py](ingestion/load_bronze.py); silver: [processing/batch_silver.py](processing/batch_silver.py). Plus [CLAUDE.md](CLAUDE.md), [SYSTEM_DESIGN.md](SYSTEM_DESIGN.md), [PLAN.md](PLAN.md), [docs/AI_USAGE.md](docs/AI_USAGE.md), [.gitignore](.gitignore), a `data/` skeleton, `.claude/`. No BR code yet |
+| W38 tasks | Done: `docs/SETUP_SPARK.md` + `processing/kata.py`, so all four install Spark unattended — **everyone runs it and posts `KATA OK`**; `ingestion/load_bronze.py` — **in W39 everyone runs it and posts the `BRONZE OK` numbers**; `processing/batch_silver.py` — **run right after it, post the `SILVER OK` numbers**. Next: the W39 warehouse layer (`processing/batch_warehouse.py`) |
 | Next hard gate | Gate 1, W40 (28 Sep - 4 Oct): BR1 running on Structured Streaming, evidenced by a screenshot of the micro-batch log and rows in `gmv_by_minute` |
 
-Every path in SYSTEM_DESIGN section 10 is a plan, not a fact: apart from `processing/schema.py`, `processing/kata.py` and `ingestion/load_bronze.py`,
+Every path in SYSTEM_DESIGN section 10 is a plan, not a fact: apart from `processing/schema.py`, `processing/kata.py`, `processing/batch_silver.py` and `ingestion/load_bronze.py`,
 nothing under `ingestion/`, `processing/`, `serving/`, `warehouse/`, `benchmark/`, `web/` or `seed/` exists today. **Live status comes from the repo, not from this table** —
 the SessionStart hook prints it each session ([.claude/README.md](.claude/README.md)).
 
@@ -28,11 +28,11 @@ the SessionStart hook prints it each session ([.claude/README.md](.claude/README
   2019-Nov.csv 67,501,979 rows / 9.0 GB    catalogue JSON   holidays CSV   inventory series
   [1] load_bronze.py  7% user sample: pmod(hash(user_id),100) < 7  ->  data/bronze/
        v                                        v  bronze rows, never the star
-  [2] batch_silver.py  six cleaning rules,  [a] replayer.py --speed 60
+  [2] batch_silver.py  7 cleaning rules,    [a] replayer.py --speed 60
        event_time -> UTC+7 -> data/silver/       writes JSON -> data/stream_landing/
        v                                        v
   [3] batch_warehouse.py  STAR SCHEMA: 5    [b] streaming_gold.py  BR1 BR3 BR5 BR8
-       conformed dims + 3 facts, one per         re-applies the same six rules inside the
+       conformed dims + 3 facts, one per         re-applies the same 7 rules inside the
        Kimball type; Parquet + Postgres          micro-batch: silver-shaped events, never
        v                                    v    the star
   [4] batch_gold.py  BR2 BR4 BR6 BR7, [c] Cassandra gmv_by_minute, trending_products,
@@ -135,7 +135,7 @@ psql -f warehouse/ddl.sql            # (not written yet — W39, Tin) Postgres s
 #   until docker-compose.yml lands (W38); SYSTEM_DESIGN 11 gives the bare command against a Dockerised Postgres.
 # (c) build the data — once, 15-25 minutes
 python ingestion/load_bronze.py      # 7% user sample, rule hard-coded; prints BRONZE OK
-python processing/batch_silver.py    # (not written yet — W38, Dat) bronze -> silver. Batch needs this
+python processing/batch_silver.py    # bronze -> silver, 7 cleaning rules; prints SILVER OK. Batch needs this
 python ingestion/gen_catalog.py      # (not written yet — W39, Nguyen) product attributes JSON
 python ingestion/gen_inventory.py    # (not written yet) daily inventory series
 python processing/batch_warehouse.py # (not written yet — W39, skeleton Dat) silver -> star
@@ -173,6 +173,10 @@ null event_time            0   (expect 0)
 BRONZE OK
 ```
 
+Then `python processing/batch_silver.py`, which must end in `SILVER OK` with 4,754,015 rows and **31** date
+directories, 2019-11-01 .. 2019-12-01: silver is in Vietnam time, so the last seven UTC hours of 30 Nov belong to
+1 Dec. Its docstring lists every number it prints.
+
 The same check without Spark, once DuckDB is installed:
 `duckdb -c "select count(*), count(distinct user_id), count(distinct product_id) from 'data/bronze/**/*.parquet'"`.
 
@@ -198,7 +202,7 @@ lives in `seed/`, **not** under `data/` — `data/raw/holidays_2019.csv` is sile
 [ ] docker-compose.yml  Cassandra + Postgres    [ ] web/  React + TypeScript
 [ ] seed/holidays_2019.csv  Committed, feeds dim_date.is_holiday
 [~] ingestion/       [x] load_bronze.py  [ ] replayer.py gen_catalog.py gen_inventory.py
-[~] processing/      [x] schema.py kata.py  [ ] source.py batch_silver.py batch_warehouse.py streaming_gold.py batch_gold.py
+[~] processing/      [x] schema.py kata.py batch_silver.py  [ ] source.py batch_warehouse.py streaming_gold.py batch_gold.py
 [ ] warehouse/ddl.sql  Postgres star schema DDL   [ ] benchmark/  queries.sql run_benchmark.py results/
 [ ] serving/         cassandra_schema.cql apply_schema.py load_star_postgres.py api/ (one router per BR)
 ```
@@ -208,7 +212,7 @@ lives in `seed/`, **not** under `data/` — `data/raw/holidays_2019.csv` is sile
 | Trap | Consequence |
 |---|---|
 | `readStream` without an explicit `.schema(EVENT_SCHEMA)`, or `writeStream` without `checkpointLocation` | Structured Streaming cannot infer schema, so the query never starts; and without a checkpoint all state is lost on restart and the job reprocesses from zero |
-| `event_time` shifted to UTC+7 but `event_date` not recomputed from the shifted time | Every event between 17:00 and 24:00 UTC is misfiled and BR1, BR2 and BR6 skew. The streaming path applies the same six rules, or the executive and funnel screens disagree about which day an event belongs to |
+| `event_time` shifted to UTC+7 but `event_date` not recomputed from the shifted time | Every event between 17:00 and 24:00 UTC is misfiled and BR1, BR2 and BR6 skew. The streaming path applies the same seven rules (it imports `clean()` from `batch_silver.py`), or the executive and funnel screens disagree about which day an event belongs to |
 | `category_l1` left null | Half the partition key of `gmv_by_minute`, and Cassandra rejects a null partition-key component. 32.4% of source rows have an empty `category_code`, so one BR1 insert in three fails and GMV understates by about a third |
 | `replayer.py` pointed at `data/raw/2019-Nov.csv` instead of `data/bronze/` | Raw holds 3,696,117 users, bronze only the 258,390 in the 7% bucket — a 14x mismatch that puts the >= 99% correctness gate out of reach for BR1/BR3/BR5/BR8 by construction |
 

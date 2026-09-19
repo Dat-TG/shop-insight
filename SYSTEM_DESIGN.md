@@ -108,6 +108,18 @@ user_session    string      9333dfbd-b87a-4708-9857-6336556a0fcc
 Both null rates are measured on the real file, not estimated. `category_code`
 being null one row in three is load-bearing — see the silver rules in section 4.
 
+**A 38-hour hole with no purchases.** The file has no `purchase` event from
+14 Nov 18:09:37 UTC to 16 Nov 08:32:34 UTC (15 Nov 01:09 to 16 Nov 15:32 Vietnam
+time), and none at all on 15 Nov UTC, while views and carts carry on at normal
+volume. It is in the source, not a pipeline bug. In silver (Vietnam dates) 15 Nov
+has 170 purchases against 35,812 carts. Three screens will show it: BR2's funnel
+for 15 Nov converts at almost zero, BR1's GMV is flat for those hours, and BR8's
+velocity detection reacts to it. Say so in the report instead of filtering it out.
+Measured on the full file with
+`awk -F, '$2=="purchase" && $1>="2019-11-14" && $1<"2019-11-17"'` (last before, first
+after), and per Vietnam date with a `groupBy("event_date").pivot("event_type")` on
+silver.
+
 ### 3.2 Holiday calendar (committed to git)
 
 `seed/holidays_2019.csv`. This is the one new artefact that must travel through
@@ -189,6 +201,22 @@ Silver cleaning rules:
 6. Shift `event_time` to UTC+7 **and recompute `event_date` from the shifted
    time**. Keeping the old date misfiles every event between 17:00 and 24:00 UTC
    and skews BR1, BR2 and BR6.
+7. Drop null `user_session`. One row in the sample (a cart event, 29 Nov 17:25 UTC) has
+   none; `fact_event.user_session` is `NOT NULL` and `user_session` is the
+   clustering key of BR5's `abandoned_carts`, which Cassandra rejects null.
+
+The seven rules live in one function, `clean()` in `batch_silver.py`, which the
+streaming job imports rather than copies (section 8, step 7). Measured on the
+sample: 4,767,012 bronze rows become **4,754,015 silver rows** (12,996 with
+`price <= 0`, none with a null `user_id`, 1 with a null `user_session`).
+
+Rule 6 gives silver **31 date directories, 2019-11-01 .. 2019-12-01**, where bronze
+has 30. The file ends at 30 Nov 23:59 UTC, which is 1 Dec 06:59 in Vietnam, so the
+25,859 events of 30 Nov 17:00–24:00 UTC belong to a partial 1 Dec, just as 1 Nov
+starts at 07:00. They are kept: dropping them would make silver differ from
+bronze by more than the rules, and the stream, which replays bronze, would need
+the same cut. In bronze, 31 directories means a wrong time zone; in silver, 30
+means rule 6 is missing.
 
 Rule 4 is not cosmetic. `category_l1` is half the partition key of
 `gmv_by_minute`, and Cassandra rejects a null partition-key component outright
@@ -462,7 +490,8 @@ CREATE TABLE fact_event (
   CONSTRAINT ck_fact_price CHECK (price > 0),
   CONSTRAINT ck_fact_date  CHECK (event_date = event_time::date)
 ) PARTITION BY RANGE (event_date);
--- 30 daily partitions + a DEFAULT catch-all, created by the loader.
+-- 31 daily partitions (Vietnam dates 2019-11-01 .. 2019-12-01, see section 4)
+-- + a DEFAULT catch-all, created by the loader.
 
 -- B-tree for BR1: the executive screen always filters date then category.
 CREATE INDEX ix_fact_event_purchase
@@ -746,7 +775,7 @@ through both is the clearest way to explain the system.
 
 1. `load_bronze.py` reads `data/raw/2019-Nov.csv`, keeps the 7% user sample, and
    writes `data/bronze/` as Parquet partitioned by `event_date`.
-2. `batch_silver.py` builds `data/silver/` from bronze using the six cleaning
+2. `batch_silver.py` builds `data/silver/` from bronze using the seven cleaning
    rules in section 4 — including the UTC+7 shift and the recomputed
    `event_date`. This runs before any other batch job, including in W39, before
    the streaming job exists.
@@ -773,9 +802,11 @@ through both is the clearest way to explain the system.
 6. `streaming_gold.py` is already running with
    `readStream.format("json").schema(EVENT_SCHEMA).load("data/stream_landing/")`.
    Spark picks up the new file in its next micro-batch.
-7. Inside the micro-batch: apply **the same six cleaning rules as silver,
-   including the UTC+7 shift and the recomputed `event_date`**, then
+7. Inside the micro-batch: apply **the same seven cleaning rules as silver,
+   including the UTC+7 shift and the recomputed `event_date`**, by importing
+   `clean()` from `batch_silver.py` rather than copying the rules. Then
    `withWatermark("event_time", "10 minutes")` so old state can be dropped.
+   Importing the function does not make the stream a silver writer.
 
    The timezone shift is easy to omit here because the rules were written for
    `batch_silver.py`. Omit it and `gmv_by_minute.event_date` is UTC while
