@@ -10,3 +10,9 @@
 # Adding a package: pin the exact version, in the same PR that first imports it.
 pyspark==4.1.3
 py4j==0.10.9.9
+#
+# Web API. Same pin rule: exact versions, never minimums.
+# fastapi[standard] bundles pydantic, starlette, and the email-validator extras.
+# uvicorn with standard extras brings websockets support for future streaming BRs.
+fastapi==0.115.12
+uvicorn[standard]==0.34.3

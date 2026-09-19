@@ -1,0 +1,11 @@
+{
+  "_comment": "BR2 empty fixture. Used to test the empty-state UI in BR2Page.",
+  "_scenario": "date range with no matching events (e.g., unknown category_l1)",
+  "data": [],
+  "meta": {
+    "ms": 0.1,
+    "warehouse": "fixture",
+    "partitions": 0,
+    "rows": 0
+  }
+}
