@@ -385,3 +385,104 @@ Dat decided: no clip, and a Vietnamese guide that explains each file and each st
 Made by AI, flagged for review: the guide is a **second file** next to the English
 `SETUP_SPARK.md`, not a replacement. Both headers ask that a changed command be changed in
 both. If the team would rather keep one file, the English one can go.
+
+## Session 6 — 19 September 2026 (W38)
+
+**Tool:** Claude Code (Opus 5).
+**Scope:** Dat's last W38 task: `processing/batch_silver.py` (bronze -> silver), planned
+first in plan mode, then written, run and reviewed. Also the documents that had to move
+with it: a seventh cleaning rule and 31 silver date directories. Everything was run on
+Dat's machine (WSL2, 20 cores) before it was committed.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| `processing/batch_silver.py` — `clean()` (the seven rules, also importable by the W40 stream), `write_silver()`, a `report()` that checks exact numbers, `SILVER OK` | Run and verified four times; reviewed by the `spark-reviewer` agent (0 findings), and its one consistency note applied |
+| `SYSTEM_DESIGN.md` §3.1 (the 38-hour purchase gap), §4 (rule 7, 31 dates, measured row counts), §5.5 (31 `fact_event` partitions), §8 steps 2 and 7 (seven rules, import `clean()`) | AI-drafted, following Dat's two decisions below; human review pending |
+| `README.md` (status, layout marks, silver check), `CLAUDE.md` (status, next task), the `spark-job`, `streaming-job` and `br-slice` skills, the `spark-reviewer` agent, `.claude/README.md` | AI-drafted, human review pending |
+| `docs/SPARK_GUIDE_VI.md` — how to run and read `batch_silver.py` (part 4), a walkthrough of the file (part 5), three measured facts (part 6) | AI-drafted, human review pending |
+
+### How it was checked
+
+- `python processing/batch_silver.py` ran four times, each ending in `SILVER OK` with the
+  same numbers. `.gitkeep` was restored every time, and `git status --short data/` stayed
+  empty.
+- `find data/silver -name '*.parquet' | wc -l` gave 93. `ls data/silver` showed 31
+  `event_date=` directories. `du -sh data/silver` gave 136 MB.
+- Before any code existed, the expected numbers were measured with read-only Spark
+  aggregates over `data/bronze`.
+
+| Claim | How it was measured |
+|---|---|
+| Silver is 4,754,015 rows: bronze 4,767,012, minus 12,996 with `price <= 0`, 0 with a null `user_id` and 1 with a null `user_session` | `count_if` over `data/bronze` for each rule; `batch_silver.py` output |
+| 21,898,171 of 67,501,979 raw rows have an empty `category_code` (32.4%) | `tail -n +2 data/raw/2019-Nov.csv \| awk -F, '$5==""{n++} END{print n}'`. `grep -c '"'` on the file gives 0, so no field is quoted and a plain comma split is exact |
+| After the UTC+7 shift, silver has 31 dates (2019-11-01 .. 2019-12-01), 25,859 rows on 2019-12-01, and events from 2019-11-01 07:00:02 to 2019-12-01 06:59:49 | `from_utc_timestamp` + `to_date` aggregate over bronze; `batch_silver.py` output |
+| `from_utc_timestamp(t, "Asia/Ho_Chi_Minh")` equals `"+07:00"` on every row | Count of mismatches over bronze: 0 |
+| On Spark 4.1.3, `split(...).getItem(2)` on a two-level code raises `INVALID_ARRAY_INDEX` (ANSI mode), while `get(arr, 2)` returns NULL | A three-row DataFrame probe |
+| The only four-level code is `electronics.audio.music_tools.piano` (4,628 rows) | `groupBy("category_code")` over bronze, filtered to four levels |
+| 258,330 users, 128,972 products, `unknown` counts l1 1,534,249 · l2 1,534,249 · l3 3,428,388 · brand 634,202 | `batch_silver.py` output. The null-session row is `electronics.smartphone`, checked with a `select` on bronze; that is why l3 is one lower than measured before rule 7 |
+| Partition pruning works on both columns | `.explain()` of `event_type = 'purchase' AND event_date = '2019-11-29'` shows both in `PartitionFilters` and no `DataFilters`; 2,252 rows |
+| `clean()` runs on a streaming DataFrame | `readStream.format("json").schema(EVENT_SCHEMA)` over five hand-written rows, a `memory` sink, `availableNow`. The `price = 0` and null-session rows were dropped, 20:00 UTC became 1 Dec 03:00, and nulls became `unknown` |
+| The UTC guard fires, and without it a UTC+7 session files the events of 10:00-17:00 UTC under the next day | `clean()` with the session set to `Asia/Ho_Chi_Minh` raised `RuntimeError`. Four timestamps (09:59, 10:01, 16:59, 17:01 UTC) were dated in both sessions: only 10:01 and 16:59 moved |
+| `batch_silver.py` takes 15-16 s on 20 cores | Script output |
+| The raw file has no purchase from 2019-11-14 18:09:37 to 2019-11-16 08:32:34 UTC, and 0 on 15 Nov UTC; views and carts continue | `awk -F, '$2=="purchase" ...'` over the full CSV for the last purchase before and the first after; `grep -c "^2019-11-15[^,]*,purchase," data/raw/2019-Nov.csv` gave 0. Found because a deliberately broken silver run (UTC dates) had 89 date/type directories, not 90 |
+| In silver, 15 Nov (Vietnam date) has 170 purchases and 35,812 carts | `groupBy("event_date").pivot("event_type").count()` on silver, 13-17 Nov |
+
+### What the AI got wrong, and was corrected on
+
+- **The first `EXPECTED` had `category_l3 'unknown'` = 3,428,389.** It was measured before
+  rule 7 existed. The plan flagged it as ±1; the first run printed 3,428,388. It was
+  pinned only after the dropped row was shown to be a two-level code.
+- **The first null check in `report()` mixed `&` and `|` into an expression that did not
+  test what its comment said.** It was rewritten as "any column except
+  `category_code`" before the first run.
+- **The docstring said every printed number must match, but the `event_time` range was
+  printed and never checked.** Found by `spark-reviewer`; it is now in the gate.
+- **The first comment on the UTC guard said a wrong session "misfiles half" the
+  events.** Measured, it is the events of 10:00-17:00 UTC, 7 hours of 24; the comment
+  and the guide were corrected.
+- **The null-session row's time was reported as "2019-11-30 00:25:56 UTC"** in the
+  question put to Dat and in the plan. It is 2019-11-29 17:25:56 UTC (30 Nov 00:25 in
+  Vietnam). The value had been read through `.collect()`, which gives a Python
+  `datetime` in the laptop's time zone, not UTC. It surfaced when a UTC-vs-Vietnam date
+  count came out 917,163 instead of the 917,164 measured before rule 7. The decision is
+  unaffected; `SYSTEM_DESIGN.md` §4 was corrected. Show timestamps with `.show()` or
+  `date_format`, as `kata.py` does, never through a Python `datetime`.
+- **Two numbers in the task text were corrected, not AI errors.** The task text cited
+  21,898,175 empty categories; the raw file has 21,898,171, as PLAN.md already said. Its
+  done condition, "max event_date matches the last day of the month in Vietnam time",
+  reads as 30 Nov, but correct code gives 2019-12-01. Both were put to Dat before any
+  code was written.
+
+### Judgement that stayed with the team
+
+Dat decided three things:
+- keep the 25,859 events of 1 Dec, so silver has 31 date directories and the done check
+  is `max(event_date) = 2019-12-01`;
+- add rule 7, drop a null `user_session`, rather than leaving it to `batch_warehouse.py`
+  and BR5;
+- the approved plan: `clean()` shared with the stream, and the document updates.
+
+Commit, PR and merge are Dat's.
+
+Made by AI, flagged for review:
+- `repartition("event_date", "event_type")` before the write, one file per directory.
+  It is argued as determinism (93 files on every machine), not speed, but it is the
+  closest thing to tuning before W41 (rule 3).
+- Keeping the raw `category_code` column in silver, null included.
+- The UTC check inside `clean()`, which raises instead of warning.
+- The W40 stream importing `clean()` from `batch_silver.py`, rather than from a separate
+  module.
+
+Open:
+- Rules 4 and 5 treat only NULL as missing. If `replayer.py` (W40, Tin) writes
+  `"category_code": ""` or `"brand": ""` instead of null or leaving the key out, the stream
+  gets `""`, not `unknown` (raised by `spark-reviewer`).
+- `SYSTEM_DESIGN.md` 5.5 now says 31 `fact_event` partitions; the Postgres loader must
+  create 2019-12-01 too.
+
+Carried forward:
+- Required approvals on `main` are still 0.
+- Whether BR9 was ever promised to the lecturer is still open.
+- `SETUP_SPARK.md` steps 1 and 7 still need a first real run by a teammate.

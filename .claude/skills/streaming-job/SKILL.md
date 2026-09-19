@@ -29,7 +29,8 @@ exists yet in W38; the first job sets the pattern the other three inherit.
 
 ## 2. Inside the micro-batch
 
-- [ ] Apply **the same six silver cleaning rules**, UTC+7 shift included, and recompute
+- [ ] Apply **the same seven silver cleaning rules** by importing `clean()` from
+      `processing/batch_silver.py` (never copy them), UTC+7 shift included, and recompute
       `event_date` from the shifted time. The shift is easy to omit because the rules were
       written for `batch_silver.py`; omit it and `gmv_by_minute.event_date` is UTC while
       `funnel_daily.event_date` is UTC+7, so two screens disagree about which day a

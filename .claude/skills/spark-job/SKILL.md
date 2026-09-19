@@ -1,6 +1,6 @@
 ---
 name: spark-job
-description: House rules for writing or changing a batch PySpark script in ShopInsight — load_bronze, batch_silver, batch_warehouse, batch_gold, gen_catalog, gen_inventory, kata. Covers the standalone-script shape, the pinned toolchain and driver-memory trap, partitioning, the six silver cleaning rules, the star build order and the two SCD2 traps.
+description: House rules for writing or changing a batch PySpark script in ShopInsight — load_bronze, batch_silver, batch_warehouse, batch_gold, gen_catalog, gen_inventory, kata. Covers the standalone-script shape, the pinned toolchain and driver-memory trap, partitioning, the seven silver cleaning rules, the star build order and the two SCD2 traps.
 when_to_use: Triggers on "write batch_silver.py", "change the warehouse build", "add a gold aggregate", "why is my Spark job slow/OOM", "how do I read silver", "SCD2 in Spark". Do NOT use for Structured Streaming — readStream, foreachBatch, watermarks and the replayer belong to streaming-job.
 ---
 
@@ -75,7 +75,10 @@ Determinism is mandatory: `data/` is gitignored and each person regenerates loca
 Sampling and synthetic generation use `pmod(hash(user_id), 100) < 7` or a fixed hash of
 `product_id` — **never** `random`, `np.random`, a seed or `.sample()`.
 
-## 5. The six silver cleaning rules
+## 5. The seven silver cleaning rules
+
+All seven live in `clean()` in `processing/batch_silver.py`, a pure DataFrame -> DataFrame
+function the streaming job imports instead of copying.
 
 1. Drop `price <= 0`
 2. Drop null `user_id`
@@ -83,6 +86,15 @@ Sampling and synthetic generation use `pmod(hash(user_id), 100) < 7` or a fixed 
 4. **Fill missing `category_l1/l2/l3` with `'unknown'`**
 5. Fill missing `brand` with `'unknown'`
 6. **Shift `event_time` to UTC+7 AND recompute `event_date` from the shifted time**
+7. Drop null `user_session` (1 row; `fact_event` needs it NOT NULL, BR5 clusters on it)
+
+Split with `F.get(parts, i)`, **never** `getItem(i)` or `parts[i]`: Spark 4 runs in ANSI
+mode, where `getItem(2)` on a two-level code like `electronics.smartphone` stops the whole
+job with `INVALID_ARRAY_INDEX`. `get()` returns NULL, which rule 4 fills.
+
+Silver has **31** date directories (2019-11-01 .. 2019-12-01), not 30: the last seven UTC
+hours of 30 Nov are 1 Dec in Vietnam. 31 in bronze means a time-zone bug; 30 in silver
+means rule 6 is missing.
 
 Rules 4 and 6 are the two that corrupt results silently:
 

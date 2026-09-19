@@ -147,8 +147,10 @@ the streaming foundation in W40 — so nobody waits on anybody inside a week.
 The Spark setup exists: `docs/SETUP_SPARK.md` (English) and `docs/SPARK_GUIDE_VI.md`
 (Vietnamese, explains every step and file; keep the two in step), `requirements.txt`,
 `conf/spark-defaults.conf`, `processing/schema.py` and `processing/kata.py`. So does
-bronze: `ingestion/load_bronze.py` (4,767,012 rows, 30 date directories). No BR code
-yet. The project runs W38-W46 (14 Sep - 15 Nov). W38 is a combined week: kickoff and
+bronze: `ingestion/load_bronze.py` (4,767,012 rows, 30 date directories), and silver:
+`processing/batch_silver.py` (4,754,015 rows, 31 Vietnam-time date directories, seven
+cleaning rules in `clean()`, which the streaming job imports). No BR code yet. The
+project runs W38-W46 (14 Sep - 15 Nov). W38 is a combined week: kickoff and
 infrastructure together.
 
 The team works asynchronously — everyone has a job and other classes. Only two
@@ -158,6 +160,7 @@ repo. So: write the setup down instead of explaining it, comment the reference
 implementation instead of walking someone through it, and make every gate produce
 an artefact someone can look at on their own time.
 
-Next task: silver (`processing/batch_silver.py`), so the batch BRs have input. Every
-teammate follows `docs/SPARK_GUIDE_VI.md` (or `docs/SETUP_SPARK.md`) and posts the `KATA OK` output, then in W39 runs
-`load_bronze.py` and posts its `BRONZE OK` numbers.
+Next task: the W39 warehouse layer (`processing/batch_warehouse.py`). Every teammate
+follows `docs/SPARK_GUIDE_VI.md` (or `docs/SETUP_SPARK.md`) and posts the `KATA OK` output,
+then at the start of W39 runs `load_bronze.py` and `batch_silver.py` and posts the
+`BRONZE OK` and `SILVER OK` numbers.

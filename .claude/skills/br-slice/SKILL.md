@@ -62,7 +62,8 @@ Streaming BR, in order:
 1. Read silver-shaped events from `data/stream_landing/` with `EVENT_SCHEMA` passed
    explicitly. Streaming BRs do **not** read the star — a micro-batch cannot range-join
    an SCD2 dimension rebuilt nightly.
-2. Apply the same six silver cleaning rules inside the micro-batch, UTC+7 shift included.
+2. Apply the same seven silver cleaning rules inside the micro-batch, UTC+7 shift included:
+   import `clean()` from `processing/batch_silver.py`.
 3. `withWatermark("event_time", "10 minutes")`, then the window: 1-minute (BR1),
    15-minute sliding every minute (BR3), 30-minute cart threshold (BR5), 5-minute (BR8).
 4. Write from `foreachBatch` with the plain `cassandra-driver`, checkpoint under
