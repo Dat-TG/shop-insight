@@ -901,7 +901,8 @@ shop-insight/
 ├── CLAUDE.md                   Context for Claude Code
 ├── SYSTEM_DESIGN.md            This file
 ├── PLAN.md                     Schedule and gates (Vietnamese, internal)
-├── docker-compose.yml          Cassandra + Postgres
+├── docker-compose.yml          Cassandra + Postgres, tags pinned to the patch
+├── .env.example                Ports, database, user, password. Copy to .env to change one
 ├── requirements.txt
 ├── README.md                   One-command run instructions
 ├── conf/
@@ -934,6 +935,7 @@ shop-insight/
 ├── warehouse/
 │   └── ddl.sql                 Postgres star schema DDL (sections 5.4, 5.5)
 ├── serving/
+│   ├── check_infra.py          Both drivers reach both containers; prints INFRA OK
 │   ├── cassandra_schema.cql    All CREATE TABLE statements
 │   ├── apply_schema.py
 │   ├── load_star_postgres.py   Star Parquet -> Postgres
@@ -962,9 +964,10 @@ directory to find a `.gitkeep`.
 
 ```bash
 # 1. Infrastructure
-docker compose up -d                 # Cassandra + Postgres
+docker compose up -d --wait          # Cassandra + Postgres; --wait returns only when both are healthy
+python serving/check_infra.py        # both drivers connect; prints INFRA OK
 python serving/apply_schema.py       # Cassandra keyspace and tables
-psql -f warehouse/ddl.sql            # Postgres star schema
+docker compose exec -T postgres psql -U shopinsight -d shopinsight < warehouse/ddl.sql   # Postgres star schema
 
 # 2. Load base data (once, 15-25 minutes)
 python ingestion/load_bronze.py      # 7% user sample, rule is hard-coded
@@ -989,6 +992,10 @@ cd web && npm run dev
 deterministic user-hash rule yields (4,767,012 rows); a row count would break
 byte-identical output across the four machines.
 
+Cassandra takes 30-60 seconds to accept CQL. `--wait` is what makes the shell
+wait for it rather than the next command failing on a refused connection; it
+returns only once both healthchecks pass.
+
 The order in step 3 matters: the streaming job must be running before the
 replayer starts. Start it after and the files already sitting in the landing
 directory collapse into one huge micro-batch, which looks nothing like real time
@@ -1001,6 +1008,18 @@ during a demo.
 | Python | 3.14.x | The only interpreter Ubuntu 26.04 ships; 3.11–3.13 are not in the repos |
 | PySpark | `pyspark==4.1.3` | 3.5.x **segfaults** on Python 3.14 — its vendored cloudpickle 2.x calls a `pickle._getattribute` that changed in 3.14, and cloudpickle serialises every `foreachBatch` closure, so the crash lands exactly on the project's required Cassandra write path |
 | JDK | OpenJDK 21 | Spark 4.x needs Java 17 or newer; 21 is pinned so four machines match |
+| Cassandra | `cassandra:4.1.12` | Single node in Docker. Pinned to the patch: `4.1` is a moving tag, and a node that starts on one patch and restarts on another after a `docker pull` is a debugging session nobody has time for. Its heap is capped at 2 GB (`MAX_HEAP_SIZE` **and** `HEAP_NEWSIZE` in `docker-compose.yml` — this image runs CMS, which exits 1 unless both are set) because the default is a quarter of host RAM, about 3.7 GB inside a 16 GB WSL, and Spark's driver already claims 6 GB |
+| PostgreSQL | `postgres:16.15` | The **second physical realisation of the star schema** (section 5.3), not only a benchmark baseline. 16 ships `jsonb` and the `gin (... jsonb_path_ops)` operator class in core, so `warehouse/ddl.sql` needs no `CREATE EXTENSION` — only room: `maintenance_work_mem=256MB` for the W39 GIN build on `dim_product.attributes`, `shared_buffers=512MB` |
+
+The two container settings above live in `docker-compose.yml` and nowhere else,
+the way the Spark settings live in `conf/spark-defaults.conf`. They are a
+**config of record, not tuning**: modest values chosen so that Cassandra,
+Postgres and a 6 GB Spark driver fit on one laptop at the same time, recorded so
+that all four machines match. Hard rule 3 still applies — any change to them
+waits for the W41 benchmarks. `python serving/check_infra.py` reads
+`shared_buffers` and `maintenance_work_mem` back out of the running server, so a
+setting that did not take effect is visible in one command rather than at the end
+of a W39 index build.
 
 Driver memory is set in the committed `conf/spark-defaults.conf`
 (`spark.driver.memory 6g`), and Spark reads that file only when `SPARK_CONF_DIR`

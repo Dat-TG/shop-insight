@@ -149,7 +149,10 @@ The Spark setup exists: `docs/SETUP_SPARK.md` (English) and `docs/SPARK_GUIDE_VI
 `conf/spark-defaults.conf`, `processing/schema.py` and `processing/kata.py`. So does
 bronze: `ingestion/load_bronze.py` (4,767,012 rows, 30 date directories), and silver:
 `processing/batch_silver.py` (4,754,015 rows, 31 Vietnam-time date directories, seven
-cleaning rules in `clean()`, which the streaming job imports). No BR code yet. The
+cleaning rules in `clean()`, which the streaming job imports). So does the
+infrastructure: `docker-compose.yml` (cassandra:4.1.12 + postgres:16.15, pinned to the
+patch), `.env.example` and `serving/check_infra.py` (prints `INFRA OK`); the Docker
+install is `docs/SETUP_SPARK.md` step 9. No BR code yet. The
 project runs W38-W46 (14 Sep - 15 Nov). W38 is a combined week: kickoff and
 infrastructure together.
 

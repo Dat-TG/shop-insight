@@ -1,0 +1,103 @@
+# ShopInsight - the two serving stores. One file, identical on all four machines.
+#
+#   docker compose up -d --wait        start; returns only when both are healthy
+#   python serving/check_infra.py      both drivers connect; prints INFRA OK
+#   docker compose stop                stop, keep the data (docker compose start)
+#   docker compose down -v             delete both volumes and start over
+#
+# Spark does NOT run in Docker (CLAUDE.md hard rule 1), and bronze and silver need no
+# container at all - stop these two before a big Spark job on a small laptop.
+# docs/SETUP_SPARK.md step 9 has the install, the RAM budget and the error table.
+#
+# The tags are pinned to the patch (SYSTEM_DESIGN.md section 11.1). `cassandra:4.1` and
+# `postgres:16` move under you, and a node that starts on one patch and restarts on
+# another after a `docker pull` is a debugging session nobody has time for.
+#
+# There is no restart policy on purpose: these must not come back by themselves after a
+# reboot and quietly hold 3 GB while a Spark job runs. `up -d --wait` is step 1 of the
+# run order anyway (SYSTEM_DESIGN.md section 11).
+#
+# What is literal below must be the same on four machines. What comes from .env is what a
+# machine may differ on (a port already taken) or what is shaped like a secret (the
+# password). With no .env at all the defaults below are exactly the values in
+# .env.example, so a fresh clone works with no setup.
+name: shopinsight
+
+services:
+  cassandra:
+    image: cassandra:4.1.12
+    container_name: shopinsight-cassandra
+    environment:
+      # Cap the heap. Left unset, cassandra-env.sh takes a quarter of host RAM - about
+      # 3.7 GB inside a 16 GB WSL - while Spark's driver already claims 6 GB
+      # (conf/spark-defaults.conf).
+      #
+      # BOTH must be set. Measured on 4.1.12: this image selects CMS, not G1
+      # (-XX:+UseG1GC is commented out in /etc/cassandra/jvm11-server.options), and
+      # under CMS cassandra-env.sh exits 1 with "please set or unset MAX_HEAP_SIZE and
+      # HEAP_NEWSIZE in pairs when using CMS GC" if only one of them is set. Under CMS
+      # HEAP_NEWSIZE is honoured rather than ignored: the JVM starts with
+      # -Xms2G -Xmx2G -Xmn256M and nodetool reports a 2022 MB heap, no warning.
+      #   docker compose exec cassandra nodetool info | grep -i "Heap Memory"
+      MAX_HEAP_SIZE: 2G
+      HEAP_NEWSIZE: 256M
+    ports:
+      # Host-only: an auth-less Cassandra must not be reachable from campus wifi.
+      # Docker Desktop still forwards 127.0.0.1 to Windows' own localhost.
+      - "127.0.0.1:${CASSANDRA_PORT:-9042}:9042"
+    volumes:
+      - cassandra_data:/var/lib/cassandra
+    # A SIGKILL in the middle of shutdown leaves a commitlog to replay, which makes the
+    # next start slow and noisy. The default grace period is 10 s.
+    stop_grace_period: 60s
+    healthcheck:
+      # nodetool reports UN before the CQL port is open, so a nodetool probe would let
+      # `--wait` return while the Python driver still gets Connection refused. This goes
+      # through the native protocol on 9042 - the one cassandra-driver uses.
+      test: ["CMD-SHELL", "cqlsh -e 'SELECT release_version FROM system.local' > /dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 60s     # a cold start is 30-60 s; failures in here do not count
+
+  postgres:
+    image: postgres:16.15
+    # The config of record, not tuning (CLAUDE.md hard rule 3 - benchmarks are W41).
+    # maintenance_work_mem is the room the W39 GIN build on dim_product.attributes works
+    # in. postgres:16 has jsonb and gin (... jsonb_path_ops) built in, so
+    # warehouse/ddl.sql needs no CREATE EXTENSION, only memory.
+    command: postgres -c shared_buffers=512MB -c maintenance_work_mem=256MB
+    container_name: shopinsight-postgres
+    environment:
+      # Read ONLY on the first start, when the volume is initialised. Change one later
+      # and nothing happens until `docker compose down -v`.
+      POSTGRES_DB: ${POSTGRES_DB:-shopinsight}
+      POSTGRES_USER: ${POSTGRES_USER:-shopinsight}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local_dev_only}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      # postgres:16's PGDATA. postgres:18 moved it to /var/lib/postgresql - do not copy
+      # this line out of a newer tutorial.
+      - postgres_data:/var/lib/postgresql/data
+    # Docker gives a container 64 MB of /dev/shm. Parallel workers allocate there, and a
+    # large index build or parallel scan then fails with
+    # "could not resize shared memory segment".
+    shm_size: 256mb
+    healthcheck:
+      # -h 127.0.0.1 on purpose: during initdb the server listens on the unix socket
+      # only, so a socket probe reports ready while the database is still being created.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U ${POSTGRES_USER:-shopinsight} -d ${POSTGRES_DB:-shopinsight}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+# Named volumes, never a bind mount into data/. data/ is gitignored except the tracked
+# .gitkeep skeleton, so container files written there as uid 999 would show up in
+# git status, fight .gitignore's negations and hit WSL's permission translation. These
+# live in Docker's own filesystem, are faster, and go away with one command:
+# docker compose down -v.
+volumes:
+  cassandra_data:
+  postgres_data:

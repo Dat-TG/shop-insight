@@ -8,17 +8,17 @@ and proven**, not asserted. HCMUT, Semester 1 2026-2027. Group 15: Dat, Khang, N
 
 ## Status
 
-> **2026-09-19 — ISO W38 of W38-W46.** Three things in this file go stale: this block, the `[x]`/`[ ]` marks under
+> **2026-09-20 — ISO W38 of W38-W46.** Three things in this file go stale: this block, the `[x]`/`[ ]` marks under
 > Repository layout, and the `(not written yet)` markers under Getting started. Fix whichever one your change makes
 > false, and the date on this line.
 
 | | |
 |---|---|
-| What exists | The Spark setup: [docs/SETUP_SPARK.md](docs/SETUP_SPARK.md) (Vietnamese, with explanations: [docs/SPARK_GUIDE_VI.md](docs/SPARK_GUIDE_VI.md)), [requirements.txt](requirements.txt), [conf/spark-defaults.conf](conf/spark-defaults.conf), [processing/schema.py](processing/schema.py), [processing/kata.py](processing/kata.py); bronze: [ingestion/load_bronze.py](ingestion/load_bronze.py); silver: [processing/batch_silver.py](processing/batch_silver.py). Plus [CLAUDE.md](CLAUDE.md), [SYSTEM_DESIGN.md](SYSTEM_DESIGN.md), [PLAN.md](PLAN.md), [docs/AI_USAGE.md](docs/AI_USAGE.md), [.gitignore](.gitignore), a `data/` skeleton, `.claude/`. No BR code yet |
-| W38 tasks | Done: `docs/SETUP_SPARK.md` + `processing/kata.py`, so all four install Spark unattended — **everyone runs it and posts `KATA OK`**; `ingestion/load_bronze.py` — **in W39 everyone runs it and posts the `BRONZE OK` numbers**; `processing/batch_silver.py` — **run right after it, post the `SILVER OK` numbers**. Next: the W39 warehouse layer (`processing/batch_warehouse.py`) |
+| What exists | The Spark setup: [docs/SETUP_SPARK.md](docs/SETUP_SPARK.md) (Vietnamese, with explanations: [docs/SPARK_GUIDE_VI.md](docs/SPARK_GUIDE_VI.md)), [requirements.txt](requirements.txt), [conf/spark-defaults.conf](conf/spark-defaults.conf), [processing/schema.py](processing/schema.py), [processing/kata.py](processing/kata.py); bronze: [ingestion/load_bronze.py](ingestion/load_bronze.py); silver: [processing/batch_silver.py](processing/batch_silver.py); infrastructure: [docker-compose.yml](docker-compose.yml), [.env.example](.env.example), [serving/check_infra.py](serving/check_infra.py). Plus [CLAUDE.md](CLAUDE.md), [SYSTEM_DESIGN.md](SYSTEM_DESIGN.md), [PLAN.md](PLAN.md), [docs/AI_USAGE.md](docs/AI_USAGE.md), [.gitignore](.gitignore), a `data/` skeleton, `.claude/`. No BR code yet |
+| W38 tasks | Done: `docs/SETUP_SPARK.md` + `processing/kata.py`, so all four install Spark unattended — **everyone runs it and posts `KATA OK`**; `ingestion/load_bronze.py` — **in W39 everyone runs it and posts the `BRONZE OK` numbers**; `processing/batch_silver.py` — **run right after it, post the `SILVER OK` numbers**; `docker-compose.yml` + `serving/check_infra.py`, so all four install Docker unattended — **everyone runs it and posts `INFRA OK`**. Next: the W39 warehouse layer (`processing/batch_warehouse.py`) |
 | Next hard gate | Gate 1, W40 (28 Sep - 4 Oct): BR1 running on Structured Streaming, evidenced by a screenshot of the micro-batch log and rows in `gmv_by_minute` |
 
-Every path in SYSTEM_DESIGN section 10 is a plan, not a fact: apart from `processing/schema.py`, `processing/kata.py`, `processing/batch_silver.py` and `ingestion/load_bronze.py`,
+Every path in SYSTEM_DESIGN section 10 is a plan, not a fact: apart from `processing/schema.py`, `processing/kata.py`, `processing/batch_silver.py`, `ingestion/load_bronze.py` and `serving/check_infra.py`,
 nothing under `ingestion/`, `processing/`, `serving/`, `warehouse/`, `benchmark/`, `web/` or `seed/` exists today. **Live status comes from the repo, not from this table** —
 the SessionStart hook prints it each session ([.claude/README.md](.claude/README.md)).
 
@@ -87,7 +87,7 @@ star for BR2, BR4, BR6 and BR7 (SYSTEM_DESIGN 8 step 4), `funnel_daily` aggregat
 
 Locked, and CLAUDE.md holds the table of record: PySpark local mode (`local[*]`) with Structured Streaming and Spark
 SQL; Cassandra single node in Docker for the hot gold tables; Parquet on the local filesystem for everything analytical;
-a JSON file source for ingestion, Kafka only behind a gate; PostgreSQL (Docker) and DuckDB as benchmark-only baselines;
+a JSON file source for ingestion, Kafka only behind a gate; PostgreSQL (Docker) as the second physical realisation of the star schema and a benchmark configuration, DuckDB as the other baseline — neither serves the application;
 FastAPI; React + TypeScript. **This list is closed.** No Airflow, dbt, Flink, Iceberg, Delta, Redis or Docker-for-Spark,
 and no Spark-Cassandra connector — Cassandra is written through `foreachBatch` plus the plain `cassandra-driver`.
 
@@ -128,11 +128,14 @@ wc -c data/raw/2019-Nov.csv                       # must print 9006762395; less 
 
 ```bash
 # (b) infrastructure
-docker compose up -d                 # (not written yet — W38) Cassandra + Postgres
+docker compose up -d --wait          # Cassandra 4.1.12 + Postgres 16.15; --wait returns when both are healthy
+python serving/check_infra.py        # both drivers connect; prints INFRA OK
 python serving/apply_schema.py       # (not written yet — W38, Nguyen) Cassandra keyspace + tables
-psql -f warehouse/ddl.sql            # (not written yet — W39, Tin) Postgres star schema. NEEDS CONNECTION FLAGS:
-#   psql -h localhost -p 5432 -U <user> -d <db> -f warehouse/ddl.sql — host, port, user and database are undecided
-#   until docker-compose.yml lands (W38); SYSTEM_DESIGN 11 gives the bare command against a Dockerised Postgres.
+docker compose exec -T postgres psql -U shopinsight -d shopinsight < warehouse/ddl.sql
+#   (warehouse/ddl.sql not written yet — W39, Tin). Runs psql INSIDE the container: no client to install on the
+#   host and no password prompt. From the host instead, if you have psql:
+#   PGPASSWORD=local_dev_only psql -h 127.0.0.1 -p 5432 -U shopinsight -d shopinsight -f warehouse/ddl.sql
+#   All four values are decided in .env.example and docker-compose.yml (W38).
 # (c) build the data — once, 15-25 minutes
 python ingestion/load_bronze.py      # 7% user sample, rule hard-coded; prints BRONZE OK
 python processing/batch_silver.py    # bronze -> silver, 7 cleaning rules; prints SILVER OK. Batch needs this
@@ -199,12 +202,13 @@ lives in `seed/`, **not** under `data/` — `data/raw/holidays_2019.csv` is sile
         each tracked only through its .gitkeep; a new data/ directory needs its own .gitignore negation
 [~] docs/            [x] AI_USAGE.md SETUP_SPARK.md SPARK_GUIDE_VI.md  [ ] STREAMING_PATTERN.md DATA_MODEL.md evidence/
 [x] requirements.txt    [x] conf/spark-defaults.conf  driver memory + UTC, read by every script
-[ ] docker-compose.yml  Cassandra + Postgres    [ ] web/  React + TypeScript
+[x] docker-compose.yml  Cassandra 4.1.12 + Postgres 16.15   [x] .env.example  ports, db, user, password
+[ ] web/  React + TypeScript
 [ ] seed/holidays_2019.csv  Committed, feeds dim_date.is_holiday
 [~] ingestion/       [x] load_bronze.py  [ ] replayer.py gen_catalog.py gen_inventory.py
 [~] processing/      [x] schema.py kata.py batch_silver.py  [ ] source.py batch_warehouse.py streaming_gold.py batch_gold.py
 [ ] warehouse/ddl.sql  Postgres star schema DDL   [ ] benchmark/  queries.sql run_benchmark.py results/
-[ ] serving/         cassandra_schema.cql apply_schema.py load_star_postgres.py api/ (one router per BR)
+[~] serving/         [x] check_infra.py  [ ] cassandra_schema.cql apply_schema.py load_star_postgres.py api/
 ```
 
 ## Four traps that bite on day one
