@@ -11,7 +11,7 @@ quy trình**: ai sửa một lệnh ở file này thì sửa luôn ở file kia.
 
 **Thời gian:** khoảng 30 phút cài đặt, cộng thời gian tải 9 GB dữ liệu.
 
-**Ổ đĩa:** cần trống khoảng 12 GB.
+**Ổ đĩa:** cần trống khoảng 14 GB (thêm 1,2 GB cho hai image Docker ở phần 4).
 
 **Kẹt quá 48 giờ:** cắm cờ đỏ trong nhóm ngay, đừng đợi checkpoint thứ Tư.
 
@@ -20,11 +20,12 @@ quy trình**: ai sửa một lệnh ở file này thì sửa luôn ở file kia.
 | [1](#phần-1--spark-là-gì) | Spark là gì, các khái niệm sẽ gặp | Trước khi cài |
 | [2](#phần-2--cài-đặt-từng-bước) | Cài đặt từng bước, mỗi lệnh làm gì | W38 |
 | [3](#phần-3--chạy-katapy-và-đọc-kết-quả) | Chạy `kata.py`, đọc từng dòng kết quả | W38 |
-| [4](#phần-4--w39-chạy-load_bronzepy-và-đọc-kết-quả) | Chạy `load_bronze.py` rồi `batch_silver.py` | Đầu W39 |
-| [5](#phần-5--từng-file-nghĩa-là-gì) | Từng file trong repo làm gì, đọc từng đoạn code | Trước khi viết script đầu tiên |
-| [6](#phần-6--những-gì-đã-thay-đổi-trong-w38-và-vì-sao) | Những gì đã thay đổi trong W38, và vì sao | Khi thắc mắc một con số |
-| [7](#phần-7--khi-có-lỗi) | Bảng tra lỗi | Khi có lỗi |
-| [8](#phần-8--tiện-ích-vscode) | Tiện ích VSCode nên cài, và hai dòng cấu hình | Sau khi cài xong, tuỳ bạn |
+| [4](#phần-4--docker-cassandra-và-postgres) | Cài Docker, chạy hai container, kiểm tra kết nối | W38 |
+| [5](#phần-5--w39-chạy-load_bronzepy-và-đọc-kết-quả) | Chạy `load_bronze.py` rồi `batch_silver.py` | Đầu W39 |
+| [6](#phần-6--từng-file-nghĩa-là-gì) | Từng file trong repo làm gì, đọc từng đoạn code | Trước khi viết script đầu tiên |
+| [7](#phần-7--những-gì-đã-thay-đổi-trong-w38-và-vì-sao) | Những gì đã thay đổi trong W38, và vì sao | Khi thắc mắc một con số |
+| [8](#phần-8--khi-có-lỗi) | Bảng tra lỗi | Khi có lỗi |
+| [9](#phần-9--tiện-ích-vscode) | Tiện ích VSCode nên cài, và hai dòng cấu hình | Sau khi cài xong, tuỳ bạn |
 
 ---
 
@@ -313,7 +314,197 @@ Các con số mong đợi được đếm **không dùng Spark**, bằng lệnh 
 
 ---
 
-## Phần 4 — (W39) Chạy `load_bronze.py` và đọc kết quả
+## Phần 4 — Docker: Cassandra và Postgres
+
+Hai server chạy trong container. **Cassandra** giữ năm bảng gold mà dashboard đọc ở W40.
+**Postgres** giữ **hiện thực vật lý thứ hai** của star schema — `warehouse/ddl.sql`, Tín
+nạp ở W39 — và các cấu hình benchmark ở W41.
+
+Chỗ này quan trọng hơn bản kế hoạch cũ tưởng: Postgres **không phải** chỉ là baseline để
+đo cho vui. `SYSTEM_DESIGN.md` mục 5.3 nói rõ — cùng một mô hình logic được hiện thực hai
+lần (Parquet và Postgres), và chính điều đó làm phép so sánh "DuckDB trên Parquet star" với
+"Postgres trên Postgres star" trở nên công bằng.
+
+**Spark KHÔNG chạy trong Docker** (luật cứng số 1 trong `CLAUDE.md`), và phần 1-3 cũng
+không cần Docker. Bronze với silver cũng không cần container nào cả — bạn chạy được trọn
+phần 5 trong lúc Docker đang tắt.
+
+**Nếu bạn đã làm xong phần 1-3 từ tuần trước thì bắt đầu thẳng từ đây — nhưng `git pull`
+trước đã.** Phần này cần ba file chưa hề tồn tại lúc bạn clone, và một `requirements.txt`
+vừa có thêm hai thư viện:
+
+```bash
+cd ~/shop-insight
+git pull
+ls docker-compose.yml .env.example serving/check_infra.py    # phải liệt kê đủ cả ba
+```
+
+Không pull thì `docker compose up` trả lời `no configuration file provided: not found`,
+một câu không gợi ý gì về nguyên nhân.
+
+### Ba khái niệm Docker, đủ để dùng
+
+| Khái niệm | Là gì |
+|---|---|
+| **image** | Bản đóng gói sẵn của một phần mềm, tải từ mạng về. `cassandra:4.1.12` là một image. Nó chỉ đọc, không đổi |
+| **container** | Một lần chạy của image đó, như một tiến trình. Xoá container không mất image |
+| **volume** | Chỗ container ghi dữ liệu ra, nằm ngoài container. Nhờ nó, xoá container xong dữ liệu vẫn còn. `docker compose down -v` mới xoá volume |
+| **`docker-compose.yml`** | File mô tả hai container: image nào, cổng nào, bộ nhớ bao nhiêu. Cả bốn máy chạy đúng file này |
+
+Vì sao Cassandra và Postgres nằm trong container còn Spark thì không: hai server kia cần
+**bốn máy giống hệt nhau** (cùng phiên bản, cùng cấu hình), và Docker cho đúng điều đó bằng
+một dòng `image:`. Spark thì chạy `local[*]` — một JVM ngay trên máy bạn, không có cluster,
+thêm Docker vào chỉ tốn một tuần mà không đổi được gì (luật cứng số 1).
+
+Các thẻ image được ghim tới **số vá** (`cassandra:4.1.12`, chứ không phải `cassandra:4.1`),
+lý do ghi ở `SYSTEM_DESIGN.md` mục 11.1: thẻ `4.1` tự đổi dưới chân bạn, và một node khởi
+động ở bản vá này rồi khởi động lại ở bản vá khác là một buổi gỡ lỗi mà nhóm không có thời
+gian cho nó.
+
+### Bước 1. Cài Docker — Windows với WSL2
+
+Cài **Docker Desktop for Windows**, giữ nguyên WSL2 backend mà nó chọn sẵn.
+
+**Bước ai cũng quên:** Settings → Resources → **WSL Integration** → bật `Ubuntu-26.04` →
+Apply & Restart. Rồi mở một cửa sổ Ubuntu **mới**. Docker Desktop tự đặt `/usr/bin/docker`
+vào trong distro từ phía Windows; không bật nút đó thì trong Ubuntu không hề có lệnh
+`docker`.
+
+**Đừng** cài thêm `sudo apt install docker.io` bên trong WSL. Hai bản Docker chồng lên nhau
+sinh ra lỗi không đọc nổi và image tự nhiên biến mất — phần 8 có dòng đó.
+
+**Kiểm tra:** `docker version` in ra **cả** khối `Client` **và** khối `Server`. Chỉ có
+`Client`, hoặc `Cannot connect to the Docker daemon`, là do nút WSL Integration hoặc do
+Docker Desktop chưa chạy: xem phần 8, bảng "Windows và WSL".
+
+### Bước 2. Cài Docker — Ubuntu cài thẳng
+
+Dùng kho apt của chính Docker (<https://docs.docker.com/engine/install/ubuntu/>). Nó cho
+`docker-ce` kèm **plugin `docker compose`** mà mọi lệnh trong repo này đều dùng. Gói
+`docker.io` của Ubuntu và bản snap đều cũ hơn, lại kèm `docker-compose` v1 đã khai tử.
+
+```bash
+sudo usermod -aG docker $USER
+```
+
+rồi **đăng xuất và đăng nhập lại**. Một group vừa được thêm vào **không tồn tại** trong
+phiên đăng nhập đã mở từ trước — đó là dòng đầu tiên của bảng lỗi phần 8, và ai cũng dính
+đúng một lần.
+
+**Kiểm tra:** `docker run --rm hello-world` in ra `Hello from Docker!`
+
+### Bước 3. Giấy phép, cho sinh viên
+
+Docker **Engine** trên Linux là Apache-2.0, miễn phí trong mọi trường hợp. Docker
+**Desktop** miễn phí theo điều khoản Personal cho cá nhân, **giáo dục** và doanh nghiệp
+nhỏ; đồ án môn học nằm trong đó, không ai phải trả tiền. (Ngưỡng này từng đổi — muốn chắc
+thì xem <https://www.docker.com/pricing/>.)
+
+**Kiểm tra:** không có. Đoạn này viết ra để không ai kẹt ở câu hỏi giấy phép.
+
+### Bước 4. Chạy hai container
+
+```bash
+cd ~/shop-insight
+docker compose up -d --wait
+```
+
+`-d` cho chúng chạy nền. `--wait` mới là phần quan trọng: nó chỉ trả quyền điều khiển lại
+khi **cả hai container đã healthy**, chứ không phải vừa mới start. Cassandra cần 30-60 giây
+mới mở cổng 9042, và nếu chỉ `up -d` thì lệnh ngay sau đó sẽ lỗi mà không hiểu vì sao.
+
+Bạn **không cần** tạo file `.env`. `docker-compose.yml` tự lấy đúng các giá trị trong
+`.env.example`. Chỉ khi nào cần đổi cổng hoặc mật khẩu mới `cp .env.example .env`.
+
+Lần đầu phải tải khoảng 1,2 GB image. Đo trên máy 20 nhân: **75 giây** từ đầu, **19 giây**
+cho những lần sau khi đã có image và volume.
+
+**Kiểm tra:** `docker compose ps` hiện cả hai dòng `Up ... (healthy)`.
+
+### Bước 5. Hai thư viện Python
+
+`requirements.txt` có thêm `cassandra-driver` và `psycopg2-binary`, kèm bốn gói mà
+`cassandra-driver` kéo theo. Cả hai đều có sẵn wheel dựng trước cho Python 3.14 — không cần
+trình biên dịch, không cần `libpq-dev`.
+
+```bash
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+**Kiểm tra:** `python -c "import cassandra, psycopg2; print(cassandra.__version__)"` in ra
+`3.30.1`.
+
+### Bước 6. Kiểm tra kết nối
+
+```bash
+python serving/check_infra.py
+```
+
+**Kiểm tra:** kết quả kết thúc bằng `INFRA OK`, và các con số phải khớp.
+
+```
+cassandra 127.0.0.1:9042
+  release_version       4.1.12          (expect 4.1.12: the docker-compose.yml tag)
+  data_center           datacenter1     (the name the W40 driver will need)
+  keyspace shopinsight  absent          (created by serving/apply_schema.py; either state is fine here)
+postgres 127.0.0.1:5432
+  server_version        16.15           (expect 16.15: the docker-compose.yml tag)
+  current_database      shopinsight     (connected as shopinsight)
+  shared_buffers        512MB           (expect 512MB: docker-compose.yml)
+  maintenance_work_mem  256MB           (expect 256MB: room for the W39 GIN build)
+  gin jsonb_path_ops    present         (expect present: postgres:16 needs no extension)
+took                       0.2 s
+INFRA OK
+```
+
+| Dòng | Nó chứng minh điều gì |
+|---|---|
+| `release_version 4.1.12` | Bạn đang chạy đúng image mà `docker-compose.yml` ghim, không phải một bản cũ còn nằm trong cache từ thẻ trôi `cassandra:4.1` |
+| `data_center datacenter1` | Tên vùng mà `DCAwareRoundRobinPolicy` sẽ cần ở W40 — có sẵn trên màn hình rồi |
+| `keyspace shopinsight absent` | **Đúng, không phải lỗi.** Nguyên tạo keyspace bằng `serving/apply_schema.py`. Script này cố tình không cần keyspace, nên nó chạy được **trước** khi file đó tồn tại |
+| `server_version 16.15` | Như trên, cho Postgres |
+| `current_database shopinsight` | Bạn vào đúng database container đã tạo, đúng role. Lệch nghĩa là `.env` bị sửa **sau** khi volume đã khởi tạo |
+| `shared_buffers 512MB` | Cấu hình bộ nhớ trong `docker-compose.yml` thật sự đã tới được server |
+| `maintenance_work_mem 256MB` | Đây là chỗ GIN index của Tín ở W39 (trên cột `dim_product.attributes`) có để dựng |
+| `gin jsonb_path_ops present` | `postgres:16` có sẵn lớp toán tử này trong lõi, nên `warehouse/ddl.sql` **không cần** `CREATE EXTENSION` |
+| `took` | Dưới một giây. Script chỉ đọc, không tạo gì cả |
+
+**Post toàn bộ khối này vào nhóm**, giống như đã post `KATA OK`. Xong bước này là xong phần
+cài đặt W38 của bạn.
+
+### Bước 7. Tắt, bật, và bài toán RAM
+
+| Lệnh | Nó làm gì |
+|---|---|
+| `docker compose stop` | Dừng cả hai, giữ nguyên mọi thứ. `docker compose start` bật lại |
+| `docker compose down` | Xoá luôn container. Dữ liệu vẫn còn trong volume |
+| `docker compose down -v` | Xoá cả volume. Mất sạch dữ liệu hai kho — mà thứ gì trong đó cũng dựng lại được |
+
+Máy 16 GB, WSL mặc định chỉ lấy một nửa (8 GB), và có ba thứ cùng muốn chỗ đó:
+
+| Ai cần | Khoảng |
+|---|---|
+| Spark driver (`spark.driver.memory 6g`) | 6 GB heap, cả tiến trình khoảng 7 GB |
+| Cassandra (`MAX_HEAP_SIZE=2G`) | khoảng 3 GB |
+| Postgres (`shared_buffers=512MB`) | khoảng 1 GB |
+| Tổng | **khoảng 11 GB trên 8 GB có** |
+
+Hai cách sửa, theo thứ tự. Một là cho WSL thêm bộ nhớ: tạo `%UserProfile%\.wslconfig` với
+`[wsl2]` ở dòng đầu và `memory=12GB` ở dòng sau, chạy `wsl --shutdown` trong PowerShell rồi
+mở lại Ubuntu — đúng file mà bảng "Windows và WSL" ở phần 8 đã nhắc. Hai là cách luôn đúng:
+**bronze và silver không cần container**, nên cứ `docker compose stop` trước khi chạy
+`load_bronze.py` với `batch_silver.py`, xong thì `docker compose start`.
+
+**Đừng bao giờ hạ `6g` trong `conf/`**, và đừng hạ heap Cassandra xuống dưới 1 GB — dưới
+mức đó nó chập chờn theo kiểu trông y như lỗi trong code của bạn. Nếu máy bạn không kham nổi
+ngay cả khi đã tắt container, cắm cờ đỏ trong nhóm.
+
+**Kiểm tra:** `docker compose stop`, rồi `docker compose ps -a` hiện cả hai `exited` (lệnh
+`docker compose ps` trần chỉ liệt kê container đang chạy nên sẽ ra bảng rỗng), và
+`python processing/kata.py` vẫn in `KATA OK` trong lúc Docker đang tắt.
+
+## Phần 5 — (W39) Chạy `load_bronze.py` và đọc kết quả
 
 ```bash
 source .venv/bin/activate
@@ -370,7 +561,7 @@ sớm, thay vì tới W44 mới phát hiện lệch.
 python processing/batch_silver.py
 ```
 
-Script này đọc bronze, làm sạch theo **bảy quy tắc** (giải thích ở phần 5) rồi ghi tầng
+Script này đọc bronze, làm sạch theo **bảy quy tắc** (giải thích ở phần 6) rồi ghi tầng
 **silver**. Máy 20 lõi chạy khoảng 15 giây.
 
 **Kết quả đúng** (mọi máy phải ra **y hệt**):
@@ -428,20 +619,34 @@ qua mọi thư mục khác mà không mở file nào. Kỹ thuật này gọi l�
 
 ---
 
-## Phần 5 — Từng file nghĩa là gì
+## Phần 6 — Từng file nghĩa là gì
 
 ### `requirements.txt`: danh sách thư viện Python
 
 ```
 pyspark==4.1.3
 py4j==0.10.9.9
+cassandra-driver==3.30.1
+psycopg2-binary==2.9.13
+click==8.5.0
+Deprecated==1.3.1
+geomet==1.1.0
+wrapt==2.4.1
 ```
 
 - `==` nghĩa là **đúng phiên bản này**, không phải "từ bản này trở lên".
 - `py4j` là cầu nối Python sang JVM mà PySpark cần. Nó cũng được ghim, để bốn máy giống
   nhau.
-- Ai cần thêm thư viện (ví dụ `cassandra-driver` ở W40) thì ghi kèm `==phiên bản` vào
-  file này, trong **cùng PR** với code đầu tiên dùng thư viện đó.
+- `cassandra-driver` và `psycopg2-binary` vào từ **W38** cùng `serving/check_infra.py`
+  (kế hoạch cũ ghi W40 — đã đổi). `cassandra-driver` còn là cách duy nhất project này ghi
+  vào Cassandra ở W40: `foreachBatch` cộng driver Python thuần, không bao giờ dùng
+  Spark-Cassandra connector (luật cứng số 2).
+- `psycopg2-binary` chứ không phải `psycopg2`: bản nguồn cần `libpq-dev` và `gcc`, còn bản
+  `-binary` có wheel dựng sẵn cho Python 3.14.
+- `click`, `Deprecated`, `geomet`, `wrapt` là phụ thuộc của `cassandra-driver`, ghim y như
+  `py4j`: bốn máy, một bộ phiên bản.
+- Ai cần thêm thư viện thì ghi kèm `==phiên bản` vào file này, trong **cùng PR** với code
+  đầu tiên dùng thư viện đó.
 
 ### `conf/spark-defaults.conf`: cấu hình Spark dùng chung
 
@@ -513,7 +718,7 @@ Hai chi tiết đáng nhớ khi tự viết query:
   sai. Vì vậy kata cố ý lấy thêm thời điểm đầu và cuối.
 - **Spark không hứa `limit()` lấy đúng những dòng đầu file.** Trên máy Đắt nó lấy đúng.
   Nếu máy bạn ra `KATA MISMATCH` trong khi heap, múi giờ và kích thước file đều đúng, hãy
-  post kết quả vào nhóm (xem phần 7).
+  post kết quả vào nhóm (xem phần 8).
 
 ### `ingestion/load_bronze.py`: tạo tầng bronze
 
@@ -624,6 +829,77 @@ Thứ tự trong `main()`:
    - `mode("overwrite")` và khối `try/finally` giữ `.gitkeep`, giống hệt bronze.
 5. **`report(spark)`:** đọc lại silver **từ đĩa** rồi so từng số với `EXPECTED`, như bronze.
 
+### `docker-compose.yml`: hai container
+
+Đọc từ trên xuống:
+
+1. **`name: shopinsight`** — tên project của compose, để volume trên máy nào cũng tên
+   `shopinsight_cassandra_data`, kể cả người clone vào thư mục tên khác.
+2. **`image: cassandra:4.1.12`, `image: postgres:16.15`** — ghim tới số vá, không phải
+   `4.1` / `16`. Thẻ ngắn tự đổi dưới chân bạn.
+3. **`MAX_HEAP_SIZE: 2G` và `HEAP_NEWSIZE: 256M`** — phải đặt **cả hai**. Không đặt gì thì
+   `cassandra-env.sh` lấy một phần tư RAM máy (khoảng 3,7 GB trong WSL 16 GB) trong khi
+   Spark đã xin 6 GB. Đo trên 4.1.12: image này chạy CMS chứ không phải G1, mà dưới CMS
+   script sẽ `exit 1` nếu chỉ đặt một trong hai.
+4. **`command: postgres -c shared_buffers=512MB -c maintenance_work_mem=256MB`** — cấu hình
+   *của hồ sơ*, không phải tinh chỉnh (luật cứng số 3: benchmark ở W41). `maintenance_work_mem`
+   là chỗ GIN index của Tín ở W39 dựng trong đó.
+5. **`${CASSANDRA_PORT:-9042}`** — lấy từ `.env` nếu có, không thì dùng 9042. Nhờ vậy clone
+   mới không cần `.env` vẫn chạy được.
+6. **`127.0.0.1:` trước cổng** — chỉ máy bạn kết nối được. Hai kho này không có mật khẩu
+   Cassandra, không nên để wifi trường với tới.
+7. **`volumes: cassandra_data:`** — volume có tên, **không** mount vào `data/`. `data/` bị
+   `.gitignore` chặn trừ `.gitkeep`, mà container ghi bằng uid 999 thì sẽ hiện lên trong
+   `git status` và vướng quyền của WSL.
+8. **`healthcheck`** — dùng `cqlsh` chứ không dùng `nodetool`: `nodetool` báo "UN" từ trước
+   khi cổng 9042 mở, nên `--wait` sẽ trả về quá sớm. `cqlsh` đi đúng giao thức mà
+   `cassandra-driver` dùng.
+9. **Không có `restart:`** — cố tình. Hai container này không được tự bật lại sau khi khởi
+   động máy rồi âm thầm giữ 3 GB trong lúc bạn chạy Spark.
+
+### `.env.example`: giá trị dùng chung
+
+Cổng, tên database, user, mật khẩu — `docker-compose.yml` và các script Python đọc chung.
+
+- `.env` bị `.gitignore` chặn, còn `.env.example` thì **không** (`.gitignore` đã có dòng
+  `!.env.example`). Nên giá trị mặc định đi theo git, còn thay đổi riêng của bạn thì không.
+- Bạn **không bắt buộc** phải copy file này. Chỉ `cp .env.example .env` khi cần đổi cổng
+  hoặc mật khẩu.
+- Mỗi dòng một `KEY=value`. **Không** dấu nháy, **không** chú thích sau giá trị trên cùng
+  dòng — cả compose lẫn `read_env()` đều sẽ nuốt luôn phần chú thích vào giá trị.
+- Mật khẩu `local_dev_only` **không phải bí mật**: nó bảo vệ một container trên laptop của
+  bạn, và không có gì trong hai kho đó là không dựng lại được.
+- `CASSANDRA_KEYSPACE=shopinsight` đã khai báo nhưng keyspace **chưa tồn tại** — Nguyên tạo
+  nó ở `serving/apply_schema.py`.
+
+### `serving/check_infra.py`: kiểm tra hạ tầng
+
+Nó là `kata.py` của phần Docker: chạy xong in `INFRA OK`. Thứ tự đọc:
+
+1. **Docstring** — mục đích, cách chạy, kết quả mong đợi nguyên văn, và một câu quan trọng:
+   script này **không tạo gì cả**, không keyspace, không bảng, không dòng nào.
+2. **Hằng số** `EXPECTED_CASSANDRA_VERSION`, `EXPECTED_POSTGRES_VERSION`,
+   `EXPECTED_SHARED_BUFFERS`, `EXPECTED_MAINTENANCE_WORK_MEM` — lấy từ `docker-compose.yml`,
+   sửa thì sửa cùng nhau.
+3. **`read_env()`** — tám dòng đọc `.env.example` rồi cho `.env` đè lên. Không dùng
+   `python-dotenv`: thêm một thư viện cho tám dòng là đi ngược luật cứng số 1 và số 4. W39
+   `apply_schema.py` và `load_star_postgres.py` **import** lại hàm này chứ không chép, đúng
+   như `streaming_gold.py` import `clean()` từ `batch_silver.py`.
+4. **`check_cassandra()`** — `SELECT ... FROM system.local`: tên bảng đủ đầy đủ nên **không
+   cần keyspace**, không cần `USE`. Rồi hỏi `system_schema.keyspaces` xem keyspace đã có
+   chưa, nhưng **in ra thôi, không tính vào đậu/rớt** — nếu tính thì tới W39 script sẽ rớt
+   đúng lúc Nguyên làm đúng việc của mình.
+5. **`check_postgres()`** — đọc ngược `shared_buffers` và `maintenance_work_mem` ra khỏi
+   server đang chạy, nên cấu hình không tới nơi thì thấy ngay bằng một lệnh, chứ không phải
+   tới cuối buổi dựng index W39 mới biết. Và hỏi `pg_opclass` xem `jsonb_path_ops` có trong
+   bản build không — đó là lớp toán tử của GIN index W39; `CREATE INDEX` thật là việc của
+   `warehouse/ddl.sql`, không phải của W38.
+6. **`main()`** — chạy **cả hai** rồi mới kết luận: một kho chết không được che mất tình
+   trạng của kho kia.
+
+**Không có vòng lặp retry**, cố tình. `docker compose up -d --wait` đã đợi hộ rồi, nên lỗi
+ở đây là lỗi thật chứ không phải "Cassandra còn đang khởi động".
+
 ### Mẫu cho script mới
 
 Mọi script tầng sau (`batch_silver.py`, `batch_warehouse.py`, ...) nên giống
@@ -639,9 +915,11 @@ Script ghi vào `data/` thì dùng `try/finally` để giữ `.gitkeep` như tr�
 
 ---
 
-## Phần 6 — Những gì đã thay đổi trong W38, và vì sao
+## Phần 7 — Những gì đã thay đổi trong W38, và vì sao
 
-Hai PR đã merge: #3 (cài đặt Spark) và #4 (bronze).
+Các PR W38 đã merge: #3 (cài đặt Spark), #4 (bronze), #5 (bản hướng dẫn tiếng Việt
+này), #6 và #7 (tiện ích VSCode), rồi `batch_silver.py` (silver) và hạ tầng Docker
+(`docker-compose.yml`, `.env.example`, `serving/check_infra.py`).
 
 ### File mới
 
@@ -655,12 +933,17 @@ Hai PR đã merge: #3 (cài đặt Spark) và #4 (bronze).
 | `processing/kata.py` | Bài kiểm tra cài đặt |
 | `ingestion/load_bronze.py` | Tạo `data/bronze/` |
 | `processing/batch_silver.py` | Tạo `data/silver/` (thêm sau, cùng W38) |
+| `docker-compose.yml` | Cassandra 4.1.12 + Postgres 16.15, ghim tới số vá |
+| `.env.example` | Cổng, tên database, user, mật khẩu — compose và Python dùng chung |
+| `serving/check_infra.py` | Hai driver Python nói chuyện được với hai container; in `INFRA OK` |
 
 ### File đã sửa
 
 | File | Sửa gì |
 |---|---|
 | `README.md` | Trạng thái dự án; lệnh cài đặt; đoạn nói `spark-defaults.conf` "không phải file của repo" (giờ đã là file của repo); số liệu mẫu; cây thư mục |
+| `requirements.txt` | Thêm 6 ghim: `cassandra-driver`, `psycopg2-binary` và bốn phụ thuộc |
+| `docs/SETUP_SPARK.md` | Thêm mục 9 (Docker), đánh số lại 9→10 và 10→11, thêm 16 dòng bảng lỗi |
 | `SYSTEM_DESIGN.md` | Mục 3.1 (số liệu mẫu, `remove_from_cart`), 8, 10 (thêm `conf/`), 11 và 11.1 (cấu hình, múi giờ, bẫy bộ nhớ) |
 | `CLAUDE.md` | Số dòng mẫu, trạng thái hiện tại |
 | `PLAN.md` | Số người dùng trong bronze, cách mô tả bẫy bộ nhớ |
@@ -677,7 +960,7 @@ Hai PR đã merge: #3 (cài đặt Spark) và #4 (bronze).
      phiên bản SCD2, 12.659 sản phẩm có lượt mua, kích thước range-join.
      `SYSTEM_DESIGN.md` mục 3.1 ghi rõ sẽ đo lại ở W39.
 2. **`user_id` phải là BIGINT.** Đọc thành INT thì mẫu gần như là một nhóm người khác
-   (xem bảng ví dụ ở phần 5).
+   (xem bảng ví dụ ở phần 6).
 3. **Máy chạy múi giờ UTC+7.** Không ghim UTC thì bronze có 31 thư mục ngày.
 4. **File tháng 11 không có `remove_from_cart`.** Toàn file chỉ có view 63.556.110,
    cart 3.028.930 và purchase 916.939.
@@ -698,10 +981,29 @@ Hai PR đã merge: #3 (cài đặt Spark) và #4 (bronze).
     Việt Nam, ngày 15/11 chỉ có 170 đơn mua so với 35.812 lượt thêm giỏ, nên phễu BR2 ngày
     đó gần bằng 0, GMV của BR1 phẳng trong khoảng đó, và BR8 sẽ báo bất thường. Chi tiết ở
     `SYSTEM_DESIGN.md` mục 3.1.
+12. **Postgres nặng ký hơn kế hoạch cũ.** Nó là **hiện thực vật lý thứ hai** của star
+    schema (`SYSTEM_DESIGN.md` mục 5.3), không chỉ là baseline benchmark. W39 Tín nạp
+    `warehouse/ddl.sql` và dựng GIN index `jsonb_path_ops` trên cột `attributes` của
+    `dim_product`. `postgres:16` có sẵn `jsonb` và lớp toán tử đó trong lõi — **không cần
+    extension**, chỉ cần đủ RAM, nên `maintenance_work_mem=256MB` nằm thẳng trong
+    `docker-compose.yml`. `check_infra.py` đọc ngược con số đó ra để chứng minh nó đã tới
+    nơi.
+13. **Vào group `docker` rồi vẫn `permission denied`.** Đo trên máy Đắt: `getent group
+    docker` có tên mình, nhưng `id` trong shell đang mở thì không — phiên đó mở ra từ
+    trước lúc được thêm vào group. Phải mở phiên mới (`wsl --shutdown` rồi mở lại Ubuntu).
+14. **Phải chặn heap của Cassandra, và phải đặt theo cặp.** Mặc định `cassandra-env.sh` lấy
+    một phần tư RAM máy — khoảng 3,7 GB trong WSL 16 GB — trong khi Spark đã xin 6 GB. Đo
+    trên `cassandra:4.1.12`: image này chọn **CMS** chứ không phải G1 (`-XX:+UseG1GC` bị
+    comment trong `/etc/cassandra/jvm11-server.options`), và dưới CMS thì script `exit 1`
+    với `please set or unset MAX_HEAP_SIZE and HEAP_NEWSIZE in pairs` nếu chỉ đặt một
+    trong hai. Đặt cả hai thì JVM khởi động với `-Xms2G -Xmx2G -Xmn256M`, không cảnh báo.
+15. **`--wait` không phải tuỳ chọn cho đẹp.** Đo trên máy 20 nhân: `docker compose up -d
+    --wait` mất 75 giây lần đầu (Cassandra mở cổng 9042 ở giây thứ 61) và 19 giây những
+    lần sau. Chỉ `up -d` thì lệnh kế tiếp gặp `Connection refused`.
 
 ---
 
-## Phần 7 — Khi có lỗi
+## Phần 8 — Khi có lỗi
 
 Spark in lỗi Java rất dài. Tìm dòng bắt đầu bằng `Caused by:` hoặc chứa `Exception`, rồi
 tra theo cột đầu của bảng dưới.
@@ -725,6 +1027,19 @@ tra theo cột đầu của bảng dưới.
 | `BRONZE CHECK FAILED` với file gốc đúng kích thước | Có ai đó đã sửa quy tắc lấy mẫu, `processing/schema.py` hoặc `conf/` | `git status` và `git diff` để tìm chỗ bị sửa |
 | `Service 'SparkUI' could not bind on port 4040. Attempting port 4041` | Một Spark khác vẫn đang chạy | Vô hại. Tắt cái kia khi tiện |
 | `Unable to load native-hadoop library for your platform` | Spark tìm thư viện tuỳ chọn không có sẵn | Vô hại, bỏ qua |
+| `permission denied while trying to connect to the Docker API at unix:///var/run/docker.sock` | Bạn đã ở trong group `docker`, nhưng phiên shell này mở ra từ trước lúc đó | `getent group docker` có tên bạn, còn `id` trong shell này thì không. Mở phiên hoàn toàn mới: trong WSL chạy `wsl --shutdown` ở PowerShell rồi mở lại Ubuntu. Máy Linux thật thì đăng xuất rồi đăng nhập lại |
+| `Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?` | Docker Desktop chưa chạy (Windows), hoặc `dockerd` chưa chạy (Ubuntu cài thẳng) | Mở Docker Desktop, đợi con cá voi ngừng động đậy. Ubuntu: `sudo systemctl start docker` |
+| `no configuration file provided: not found` | Bạn không đứng trong thư mục repo, hoặc chưa `git pull` từ lúc `docker-compose.yml` được đẩy lên | `cd ~/shop-insight && git pull`, rồi `ls docker-compose.yml`. Phần 4 mở đầu bằng đúng chuyện này |
+| `docker-compose: command not found` | Tutorial cũ. `docker-compose` v1 đã khai tử, thay bằng lệnh con `docker compose` | Dùng `docker compose`, **có dấu cách**. Mọi lệnh trong repo này đều vậy |
+| `port is already allocated`, hoặc `bind: address already in use` ở 5432 / 9042 | Có thứ khác đang giữ cổng đó — một Postgres cài bằng apt, hoặc một bản cũ của chính stack này | `sudo ss -lptn 'sport = :5432'` chỉ ra thủ phạm. Hoặc tắt nó, hoặc `cp .env.example .env` rồi đổi `POSTGRES_PORT`: compose và `check_infra.py` đọc chung đúng một giá trị đó |
+| `INFRA CHECK FAILED` kèm `connect FAILED ... Connection refused`, ngay sau `docker compose up -d` | Cassandra cần 30-60 giây mới mở cổng 9042, mà `up -d` trả về ngay khi container vừa start | Chạy `docker compose up -d --wait`, nó chỉ trả về khi cả hai healthcheck đã đậu, rồi chạy lại lệnh kiểm tra |
+| `docker compose ps` hiện container Cassandra `exited (137)`, hoặc nó restart liên tục | Kernel giết nó: không đủ RAM cho heap JVM | Xem bài toán RAM ở phần 4 bước 7. Cho WSL thêm bộ nhớ, hoặc `docker compose stop` trong lúc chạy Spark. Đừng hạ `spark.driver.memory` |
+| `ModuleNotFoundError: No module named 'cassandra'` hoặc `'psycopg2'` | Chưa bật venv trong terminal này, hoặc bạn cài `requirements.txt` từ trước khi hai gói này được thêm vào | `source .venv/bin/activate`, rồi `pip install -r requirements.txt` |
+| `INFRA CHECK FAILED` kèm `<-- expected 4.1.12` hoặc `<-- expected 16.15` | Máy còn cache một image cũ, từ trước khi thẻ được ghim | `docker compose pull`, rồi `docker compose up -d --wait`. **Đừng** "sửa" bằng cách đổi thẻ trong `docker-compose.yml` |
+| `password authentication failed for user "shopinsight"`, hoặc `role "..." does not exist` | Bạn đổi `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB` trong `.env` **sau** khi volume đã tạo. Image chỉ đọc mấy biến đó lúc khởi tạo volume rỗng | `docker compose down -v` (xoá database — chưa có gì trong đó là không dựng lại được), rồi `docker compose up -d --wait` |
+| `docker compose config` hiện sai cổng hoặc sai user, hoặc `.env` như bị bỏ qua | `.env` được đọc từ thư mục bạn **đang đứng** khi gõ `docker compose`, không phải thư mục chứa file | `cd ~/shop-insight` trước đã. `check_infra.py` in ra host và cổng nó thật sự dùng, ngay hai dòng đầu |
+| `please set or unset MAX_HEAP_SIZE and HEAP_NEWSIZE in pairs when using CMS GC` | Một trong hai biến bị xoá khỏi `docker-compose.yml`. `cassandra:4.1.12` chạy CMS, cần cả hai hoặc không cái nào | Đặt lại cả hai. Thiếu một cái là container `exit 1` |
+| `manifest for cassandra:4.1.12 not found` (hoặc `postgres:16.15`) | Thẻ đã ghim không có trong registry | **Đừng** lùi về `cassandra:4.1`. Post vào nhóm: thẻ được đổi ở `docker-compose.yml` và `SYSTEM_DESIGN.md` 11.1 cùng một PR |
 
 ### Windows và WSL
 
@@ -738,10 +1053,15 @@ tra theo cột đầu của bảng dưới.
 | `apt update` báo `Release file ... is not valid yet` | Đồng hồ WSL bị lệch sau khi laptop ngủ | `sudo hwclock -s`, hoặc `wsl --shutdown` rồi mở lại |
 | `$'\r': command not found`, hoặc lỗi lạ ở file bạn không sửa | Repo được clone bằng git của Windows, nên dòng kết thúc bằng `\r\n` | Xoá bản clone đó, clone lại **bên trong** WSL (bước 1) |
 | `sudo: unable to resolve host` ngay sau khi cài | Tên máy của distro mới chưa có trong `/etc/hosts` | Không ảnh hưởng dự án. `wsl --shutdown` rồi mở lại thường sẽ hết |
+| `docker: command not found` trong Ubuntu, trong khi Docker Desktop đang chạy trên Windows | Chưa bật WSL integration cho distro này | Docker Desktop → Settings → Resources → **WSL Integration** → bật `Ubuntu-26.04` → Apply & Restart. Rồi mở cửa sổ Ubuntu **mới** |
+| `docker version` in khối Client rồi tới `Server: ERROR` | Docker Desktop đang tắt, hoặc nút integration cho distro này bị tắt | Mở Docker Desktop, kiểm tra lại nút WSL Integration, mở terminal mới |
+| Hai bản Docker: lỗi lạ, image tự nhiên biến mất | Bạn cài thêm `sudo apt install docker.io` trong WSL, chồng lên bản của Docker Desktop | `which docker` phải ra `/usr/bin/docker` — Docker Desktop tự đặt vào, dpkg không sở hữu nó (`dpkg -S /usr/bin/docker` không tìm thấy gì). Gỡ bản apt: `sudo apt remove docker.io docker-compose` |
+| Client Windows (DBeaver, pgAdmin) không vào được 5432 / 9042 | Cổng cố tình chỉ mở trên `127.0.0.1`, để hai kho không mật khẩu không nằm trên mạng trường | Kết nối tới `localhost`, đừng dùng IP của WSL (`172.x.x.x`). Docker Desktop chuyển tiếp `127.0.0.1` sang localhost của Windows |
+| WSL treo, hoặc job Spark chết, trong lúc hai container đang chạy | 6 GB driver của Spark cộng 2 GB heap Cassandra cộng Postgres không vừa nửa RAM mà WSL lấy mặc định | Bài toán RAM ở phần 4 bước 7: `%UserProfile%\.wslconfig` với `memory=12GB`, `wsl --shutdown`, mở lại. Và `docker compose stop` trước khi chạy `load_bronze.py` với `batch_silver.py` — cả hai đều không cần container |
 
 ---
 
-## Phần 8 — Tiện ích VSCode
+## Phần 9 — Tiện ích VSCode
 
 Không bắt buộc, và tuỳ mỗi người. Trình soạn thảo không nằm trong stack, nên luật cứng
 số 1 (không thêm công nghệ) không áp dụng ở đây: không có bước nào trong pipeline phụ
@@ -770,8 +1090,8 @@ code --install-extension ms-python.python \
 | `ms-python.debugpy` | Đặt breakpoint trong code chạy ở driver | W38 |
 | `dvirtz.parquet-viewer` | Mở `data/silver/event_date=*/part-*.parquet` dưới dạng bảng, để nhìn tận mắt việc dời giờ sang UTC+7 và bảy quy tắc trong `clean()`. Chỉ để xem nhanh — muốn đếm thì dùng DuckDB | W39 |
 | `mechatroner.rainbow-csv` | Tô màu từng cột của `seed/holidays_2019.csv` và các file trích nhỏ. **Đừng bao giờ** mở `data/raw/2019-Nov.csv` bằng nó: 9 GB sẽ treo editor | W39 |
-| `ms-azuretools.vscode-docker` | Xem log container Cassandra và Postgres, mở shell bên trong container mà không phải nhớ cờ của compose. Nó kéo theo `ms-azuretools.vscode-containers` | W40 |
-| `ms-ossdata.vscode-pgsql` | Chạy thẳng `warehouse/ddl.sql` vào container Postgres từ file đang mở | W41 |
+| `ms-azuretools.vscode-docker` | Xem log container Cassandra và Postgres, mở shell bên trong container mà không phải nhớ cờ của compose. Nó kéo theo `ms-azuretools.vscode-containers` | W38 |
+| `ms-ossdata.vscode-pgsql` | Chạy thẳng `warehouse/ddl.sql` vào container Postgres từ file đang mở | W39 |
 | `humao.rest-client` | Một file `.http` commit cạnh router FastAPI, để người khác gọi lại endpoint một mình thay vì phải hỏi bạn câu `curl` | W42 |
 
 Tới W42 khi có thư mục `web/`, cài thêm `dbaeumer.vscode-eslint` và
@@ -817,4 +1137,4 @@ gắn vào. Chỗ đó cứ `df.show()` và đếm số dòng.
 |---|---|
 | Jupyter, Data Wrangler | Quy ước của nhóm cấm dùng notebook cho code chạy thật: khó review, khó chạy lại. Tiện ích Python vẫn sẽ mời bạn cài chúng |
 | Mọi tiện ích tên "Spark", "Databricks" hay "Big Data" | Chúng viết ra để điều khiển cluster từ xa. Cả dự án này chạy `local[*]` |
-| Tiện ích Cassandra | Loại còn được bảo trì thì không có. Dùng `cqlsh` bên trong container (W40) |
+| Tiện ích Cassandra | Loại còn được bảo trì thì không có. Dùng `cqlsh` bên trong container (`docker compose exec cassandra cqlsh`) |

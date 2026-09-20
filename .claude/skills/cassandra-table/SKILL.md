@@ -76,6 +76,8 @@ Spark-Cassandra connector is banned (CLAUDE.md rule 2).
 him the Cassandra schema, and its W39 row "photograph the 5 Cassandra tables"
 is priced assuming the `.cql` was paid for in W38.
 
-Checked 2026-09-16: `serving/` does not exist. Until it does, new CQL goes into
-SYSTEM_DESIGN section 6 and the files stay with their owner. Do not create a
-partial `serving/` tree as a side effect of another task.
+Checked 2026-09-20: `serving/` exists and holds `check_infra.py` (the W38
+infrastructure check) and nothing else. `cassandra_schema.cql` and
+`apply_schema.py` are still Nguyen's W38 deliverables - until they exist, new CQL
+goes into SYSTEM_DESIGN section 6 and the files stay with their owner. Do not
+write them as a side effect of another task.

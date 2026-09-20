@@ -486,3 +486,126 @@ Carried forward:
 - Required approvals on `main` are still 0.
 - Whether BR9 was ever promised to the lecturer is still open.
 - `SETUP_SPARK.md` steps 1 and 7 still need a first real run by a teammate.
+
+## Session 7 — 20 September 2026 (W38)
+
+**Tool:** Claude Code (Opus 5).
+**Scope:** The last unbuilt W38 deliverable: Cassandra and Postgres in Docker, plus the
+Docker install written into the setup guides so the other three do not need to be
+messaged individually. No BR code and no Spark code; the one new Python file only reads.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| `docker-compose.yml` — `cassandra:4.1.12` + `postgres:16.15`, pinned to the patch, healthchecks, named volumes, heap and memory settings | Run and verified: pulled, started, restarted, torn down and brought back |
+| `.env.example` — ports, database, user, password, keyspace. Decides the values `README.md` called "undecided until docker-compose.yml lands" | Run and verified: `docker compose config` resolves with no `.env` present |
+| `serving/check_infra.py` — both drivers connect, prints `INFRA OK`. Carries `read_env()` for W39 | Run and verified, pass and fail paths both exercised |
+| `requirements.txt` — 6 pins added, taken from `pip freeze` after a real install, not guessed | Run and verified |
+| `docs/SETUP_SPARK.md` — new step 9 (Docker), old 9→10 and 10→11, 16 new troubleshooting rows, header budget, three stale W40/W41 dates | AI-drafted, human review pending |
+| `docs/SPARK_GUIDE_VI.md` — new Phần 4, old 4-8→5-9 with TOC anchors rewritten, three file entries in Phần 6, four measured facts in Phần 7, 16 error rows in Phần 8 | AI-drafted, human review pending |
+| `README.md`, `SYSTEM_DESIGN.md` (10, 11, 11.1), `CLAUDE.md`, `.claude/hooks/session_status.py`, `.claude/skills/cassandra-table/SKILL.md` — statements this work made false | AI-drafted, human review pending |
+
+### How it was checked
+
+Every command below was run on Dat's machine (WSL2 Ubuntu 26.04, 20 cores, 15 GiB).
+
+```bash
+docker compose config                      # resolves with no .env present
+docker compose pull                        # both pinned tags exist in the registry
+docker compose up -d --wait                # both Healthy
+docker compose logs cassandra | grep -iE "JVM Arguments|Heap size|in pairs|G1"
+docker compose exec cassandra nodetool info | grep -i "Heap Memory"
+docker compose exec postgres psql -U shopinsight -d shopinsight \
+  -c "SHOW shared_buffers; SHOW maintenance_work_mem; SELECT current_database(), current_user;"
+pip install -r requirements.txt && pip freeze | grep -iE '^(cassandra-driver|psycopg2-binary|click|Deprecated|geomet|wrapt)=='
+python serving/check_infra.py              # INFRA OK, exit 0; run twice, identical
+docker compose stop cassandra && python serving/check_infra.py   # exit 1, Postgres still reported
+docker compose down && docker compose up -d --wait               # volumes survived
+docker compose stop && python processing/kata.py                 # KATA OK with Docker down
+echo '{}' | python3 .claude/hooks/session_status.py | grep -i docker
+```
+
+| Claim | How it was measured |
+|---|---|
+| Both drivers have Python 3.14 wheels, so no compiler is needed | PyPI JSON API for `cassandra-driver==3.30.1` and `psycopg2-binary==2.9.13`: both publish `cp314 manylinux_2_17_x86_64`. Then confirmed by a real `pip install` |
+| `cassandra:4.1.12` starts with a 2 GB heap | `docker compose logs cassandra` shows `-Xms2G -Xmx2G -Xmn256M` and `Heap size: 1.975GiB/1.975GiB`; `nodetool info` reports `143.12 / 2022.44` MB |
+| `cassandra:4.1.12` runs CMS, not G1 | `-XX:+UseConcMarkSweepGC` is in the logged JVM arguments, and `-XX:+UseG1GC` is commented out in `/etc/cassandra/jvm11-server.options` |
+| `MAX_HEAP_SIZE` alone would stop the container | Lines 148-153 of `/etc/cassandra/cassandra-env.sh` inside the image: the `elif` branch prints `please set or unset MAX_HEAP_SIZE and HEAP_NEWSIZE in pairs when using CMS GC` and `exit 1` |
+| `postgres:16` needs no extension for the W39 GIN index | `SELECT count(*) FROM pg_opclass c JOIN pg_am a ON a.oid = c.opcmethod WHERE a.amname = 'gin' AND c.opcname = 'jsonb_path_ops'` returns 1 on a stock container |
+| 75 s cold start, 19 s warm | `time docker compose up -d --wait`, first run and after a `down`/`up` |
+| ~1.2 GB of images | `docker system df` → `Images 1.146GB` |
+| Renumbering `SETUP_SPARK.md` breaks no cross-reference | `grep -rniE "SETUP_SPARK(\.md)? (step\|section) *[0-9]+"` across the repo: every hit names steps 3, 6, 7 or 8. Nothing referenced sections 9, 10 or 11 |
+| The 9 VI table-of-contents anchors still resolve | A script that regenerates each anchor from the `## Phần` headings and compares; 9/9 match |
+
+### What the AI got wrong, and was corrected on
+
+- **The draft asserted Cassandra 4.1 runs G1GC and therefore ignores `HEAP_NEWSIZE`.**
+  Both halves are wrong for `cassandra:4.1.12`: the image selects CMS, and under CMS
+  `HEAP_NEWSIZE` becomes `-Xmn256M` and is honoured. The comment in `docker-compose.yml`
+  was rewritten from what the container actually logged, and the real rule — the container
+  exits 1 unless **both** variables are set — became a troubleshooting row in both guides
+  and a clause in `SYSTEM_DESIGN.md` 11.1. The draft had this flagged as unverified with
+  the command to settle it, which is why it was caught before the commit rather than by
+  a teammate in W40.
+- **A `**Check:**` line said `docker compose ps` shows both containers `exited`.** It does
+  not: plain `ps` lists only running containers and prints an empty table. Corrected to
+  `docker compose ps -a` in both guides, with the reason in parentheses.
+- **The draft planned to put the Docker section at the end, as asked.** Grepping first
+  showed nothing in the repo references `SETUP_SPARK.md` sections 9, 10 or 11 by number,
+  so the renumber cost two heading lines. Put back to Dat, who chose step 9 — which also
+  keeps the Docker error rows in the single troubleshooting section instead of two
+  sections before the thing they troubleshoot.
+- **The expected-output block in the docstring did not match the real output.** It was
+  regenerated from an actual run rather than hand-edited, so the block a teammate compares
+  against is the one the script prints.
+- **`click==8.5.0` was left as a placeholder in the draft**, because no plan can know it.
+  All six pins were taken from `pip freeze` after installing.
+
+### Judgement that stayed with the team
+
+Dat decided four things, before implementation:
+- pin the image tags to the patch (`4.1.12`, `16.15`) rather than the floating `4.1` / `16`
+  the task named, and record both in `SYSTEM_DESIGN.md` 11.1;
+- set Postgres memory now as a config of record rather than leaving defaults until W41,
+  so the W41 DuckDB comparison is not run against a 128 MB `shared_buffers`;
+- mirror the whole thing into `docs/SPARK_GUIDE_VI.md` rather than the English file only;
+- fix the `README.md` and `SYSTEM_DESIGN.md` statements this work makes false, in the
+  same PR.
+
+And, once the grep evidence existed, that Docker becomes step 9 with the old 9 and 10
+renumbered.
+
+Made by AI, flagged for review:
+- **2 GB for Cassandra's heap and 512MB/256MB for Postgres.** Modest and documented as
+  config of record, but they are still numbers chosen without a benchmark (rule 3). The
+  argument is that they are what lets both containers and a 6 GB Spark driver share one
+  laptop, not that they are fast.
+- **`shm_size: 256mb` on Postgres.** Prevents `could not resize shared memory segment` in
+  parallel workers and large index builds — Tin's W39 and W41 territory. It is a judgement
+  call, not a measurement.
+- **Publishing both ports on `127.0.0.1` only.** Deliberate, because neither store has
+  authentication. It means a Windows GUI client must use `localhost` and not the WSL IP;
+  there is a troubleshooting row for that.
+- **`read_env()` living in `serving/check_infra.py`** rather than in a config module, with
+  a written trigger to move it to `serving/config.py` when a caller outside `serving/`
+  needs it in W42.
+- **`shopinsight` as database, role and keyspace name, password `local_dev_only`.** The
+  keyspace name must survive CQL without quoting, which rules out `shop-insight`.
+
+Open:
+- The Cassandra keyspace is named in `.env.example` but nothing creates it.
+  `serving/apply_schema.py` is still Nguyen's W38 deliverable; `check_infra.py` reports the
+  keyspace as `absent` without failing, so it keeps passing either way.
+- `cassandra-driver` 3.30.1 printed no `local_dc` warning on `Cluster.connect()` here, so
+  no execution profile was set. W40's `foreachBatch` code may still need
+  `DCAwareRoundRobinPolicy(local_dc="datacenter1")`; the check prints `datacenter1` so the
+  value is already on screen.
+- ARM laptops are unverified: nobody on the team has one, and `docker manifest inspect`
+  was not run for these two tags.
+
+Carried forward:
+- Required approvals on `main` are still 0.
+- Whether BR9 was ever promised to the lecturer is still open.
+- `SETUP_SPARK.md` steps 1 and 7 still need a first real run by a teammate — and now
+  step 9 does too. Every number in step 9 comes from Dat's machine only.
