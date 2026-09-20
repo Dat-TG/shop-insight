@@ -329,6 +329,19 @@ lần (Parquet và Postgres), và chính điều đó làm phép so sánh "DuckD
 không cần Docker. Bronze với silver cũng không cần container nào cả — bạn chạy được trọn
 phần 5 trong lúc Docker đang tắt.
 
+**Nếu bạn đã làm xong phần 1-3 từ tuần trước thì bắt đầu thẳng từ đây — nhưng `git pull`
+trước đã.** Phần này cần ba file chưa hề tồn tại lúc bạn clone, và một `requirements.txt`
+vừa có thêm hai thư viện:
+
+```bash
+cd ~/shop-insight
+git pull
+ls docker-compose.yml .env.example serving/check_infra.py    # phải liệt kê đủ cả ba
+```
+
+Không pull thì `docker compose up` trả lời `no configuration file provided: not found`,
+một câu không gợi ý gì về nguyên nhân.
+
 ### Ba khái niệm Docker, đủ để dùng
 
 | Khái niệm | Là gì |
@@ -1016,6 +1029,7 @@ tra theo cột đầu của bảng dưới.
 | `Unable to load native-hadoop library for your platform` | Spark tìm thư viện tuỳ chọn không có sẵn | Vô hại, bỏ qua |
 | `permission denied while trying to connect to the Docker API at unix:///var/run/docker.sock` | Bạn đã ở trong group `docker`, nhưng phiên shell này mở ra từ trước lúc đó | `getent group docker` có tên bạn, còn `id` trong shell này thì không. Mở phiên hoàn toàn mới: trong WSL chạy `wsl --shutdown` ở PowerShell rồi mở lại Ubuntu. Máy Linux thật thì đăng xuất rồi đăng nhập lại |
 | `Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?` | Docker Desktop chưa chạy (Windows), hoặc `dockerd` chưa chạy (Ubuntu cài thẳng) | Mở Docker Desktop, đợi con cá voi ngừng động đậy. Ubuntu: `sudo systemctl start docker` |
+| `no configuration file provided: not found` | Bạn không đứng trong thư mục repo, hoặc chưa `git pull` từ lúc `docker-compose.yml` được đẩy lên | `cd ~/shop-insight && git pull`, rồi `ls docker-compose.yml`. Phần 4 mở đầu bằng đúng chuyện này |
 | `docker-compose: command not found` | Tutorial cũ. `docker-compose` v1 đã khai tử, thay bằng lệnh con `docker compose` | Dùng `docker compose`, **có dấu cách**. Mọi lệnh trong repo này đều vậy |
 | `port is already allocated`, hoặc `bind: address already in use` ở 5432 / 9042 | Có thứ khác đang giữ cổng đó — một Postgres cài bằng apt, hoặc một bản cũ của chính stack này | `sudo ss -lptn 'sport = :5432'` chỉ ra thủ phạm. Hoặc tắt nó, hoặc `cp .env.example .env` rồi đổi `POSTGRES_PORT`: compose và `check_infra.py` đọc chung đúng một giá trị đó |
 | `INFRA CHECK FAILED` kèm `connect FAILED ... Connection refused`, ngay sau `docker compose up -d` | Cassandra cần 30-60 giây mới mở cổng 9042, mà `up -d` trả về ngay khi container vừa start | Chạy `docker compose up -d --wait`, nó chỉ trả về khi cả hai healthcheck đã đậu, rồi chạy lại lệnh kiểm tra |

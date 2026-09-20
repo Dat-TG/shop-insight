@@ -237,6 +237,18 @@ build with Docker stopped. Everyone runs the same `docker-compose.yml`, and its 
 are pinned to the patch (SYSTEM_DESIGN.md section 11.1), so four machines get the same two
 servers.
 
+**If you already finished steps 1-8 last week, start here — but pull first.** This step
+needs three files that did not exist when you cloned, and a `requirements.txt` that gained
+two packages:
+
+```bash
+cd ~/shop-insight
+git pull
+ls docker-compose.yml .env.example serving/check_infra.py    # all three must be listed
+```
+
+Without the pull, `docker compose up` answers `no configuration file provided: not found`.
+
 ### Install Docker — Windows with WSL2
 
 Install **Docker Desktop for Windows** and keep the WSL2 backend it offers by default.
@@ -401,6 +413,7 @@ them for the line that starts with `Caused by:` or `Exception`.
 | `Unable to load native-hadoop library for your platform` | Spark looks for optional native libraries | Harmless, ignore |
 | `permission denied while trying to connect to the Docker API at unix:///var/run/docker.sock` | You are in the `docker` group, but this shell's session started before you were added | `getent group docker` lists you; `id` in this shell does not. Open a brand new session: in WSL, `wsl --shutdown` in PowerShell, then reopen Ubuntu. Native: log out and back in |
 | `Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?` | Docker Desktop is not started (Windows), or `dockerd` is not running (native Ubuntu) | Start Docker Desktop and wait for the whale to stop animating. Native: `sudo systemctl start docker` |
+| `no configuration file provided: not found` | You are not in the repo directory, or you have not pulled since `docker-compose.yml` landed | `cd ~/shop-insight && git pull`, then `ls docker-compose.yml`. Step 9 opens with this |
 | `docker-compose: command not found` | An old tutorial. v1 `docker-compose` was retired and replaced by the `docker compose` subcommand | Use `docker compose`, with a space. Every command in this repo does |
 | `port is already allocated`, or `bind: address already in use` on 5432 or 9042 | Something else already holds that port — a Postgres installed with apt, or an older copy of this stack | `sudo ss -lptn 'sport = :5432'` names it. Either stop it, or `cp .env.example .env` and change `POSTGRES_PORT`: compose and `check_infra.py` both read that one value |
 | `INFRA CHECK FAILED` with `connect FAILED ... Connection refused`, right after `docker compose up -d` | Cassandra needs 30-60 s to open port 9042, and plain `up -d` returns as soon as the container starts | `docker compose up -d --wait`, which returns only when both healthchecks pass, then run the check again |
