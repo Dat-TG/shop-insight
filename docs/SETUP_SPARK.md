@@ -257,3 +257,80 @@ them for the line that starts with `Caused by:` or `Exception`.
 | `apt update` fails with `Release file ... is not valid yet` | WSL's clock drifted while the laptop slept | `sudo hwclock -s`, or `wsl --shutdown` in PowerShell and reopen |
 | `$'\r': command not found`, or odd errors in files you did not change | The repo was cloned with Windows git, so lines end in `\r\n` | Delete that clone and clone again inside WSL (step 1) |
 | `sudo: unable to resolve host` right after installing | The new distro's hostname is missing from `/etc/hosts` | Harmless for this project. `wsl --shutdown` and reopen usually clears it |
+
+## 10. Editor: VSCode extensions
+
+Optional and personal. The editor is not part of the stack, so hard rule 1 (do not add
+technologies) does not apply here — nothing in the pipeline depends on any of this. It is
+listed because four people who have never written Spark get real autocompletion for
+`pyspark.sql.functions`, and because you cannot read a Parquet file with `cat`.
+
+**In WSL:** run this in a terminal **inside** the WSL window — the title bar says
+`[WSL: Ubuntu-26.04]`, and the command confirms `Installing extensions on WSL`.
+Extensions installed on the Windows side cannot see the repo or the venv.
+
+```bash
+code --install-extension ms-python.python \
+     --install-extension ms-python.vscode-pylance \
+     --install-extension ms-python.debugpy \
+     --install-extension dvirtz.parquet-viewer \
+     --install-extension mechatroner.rainbow-csv \
+     --install-extension ms-azuretools.vscode-docker \
+     --install-extension ms-ossdata.vscode-pgsql \
+     --install-extension humao.rest-client
+```
+
+| Extension | What it gives you | Useful from |
+|---|---|---|
+| `ms-python.python` + `ms-python.vscode-pylance` | Interpreter selection, go-to-definition, autocompletion. `pyspark==4.1.3` ships `py.typed`, so `DataFrame` and `F.*` complete for real instead of falling back to `Any` | W38 |
+| `ms-python.debugpy` | Breakpoints in Spark driver code | W38 |
+| `dvirtz.parquet-viewer` | Opens `data/silver/event_date=*/part-*.parquet` as a table, for eyeballing the UTC+7 date shift and the seven `clean()` rules. Spot checks only — counts go through DuckDB | W39 |
+| `mechatroner.rainbow-csv` | Colours the columns of `seed/holidays_2019.csv` and small extracts. **Never** open `data/raw/2019-Nov.csv` with it: 9 GB freezes the editor | W39 |
+| `ms-azuretools.vscode-docker` | Cassandra and Postgres container logs and a shell inside them, without memorising compose flags. Pulls in `ms-azuretools.vscode-containers` as its dependency | W40 |
+| `ms-ossdata.vscode-pgsql` | Runs `warehouse/ddl.sql` against the Postgres container from the open file | W41 |
+| `humao.rest-client` | A committed `.http` file next to the FastAPI routers, so a teammate can replay an endpoint alone instead of asking for the curl you ran | W42 |
+
+When `web/` exists in W42, add `dbaeumer.vscode-eslint` and `esbenp.prettier-vscode`; the
+Vite scaffold brings the config they read.
+
+**Then pick the interpreter**, or none of the Python ones help:
+
+```
+Ctrl+Shift+P  ->  Python: Select Interpreter  ->  ./.venv/bin/python
+```
+
+**Check:** open `processing/kata.py`. The bottom status bar names `.venv`, the
+`from pyspark.sql import SparkSession` line has no warning underline, and typing `F.`
+inside a function offers `col`, `when`, `window`.
+
+### Two settings worth more than any extension
+
+`.gitignore` ignores `.vscode/`, so this file never leaves your machine — each of us
+creates it:
+
+```jsonc
+// .vscode/settings.json
+{
+  "files.watcherExclude": { "**/data/**": true },
+  "search.exclude":       { "**/data/**": true }
+}
+```
+
+From W40 the replayer writes a new JSON file into `data/stream_landing/` every few
+seconds and Spark rewrites `data/checkpoints/` on every micro-batch. Without the
+exclude, the editor's file watcher re-scans all of it continuously — during the demo.
+
+### Debugging Spark
+
+Breakpoints work in driver-side code, **including inside `foreachBatch`**, which runs on
+the driver. They do **not** fire inside a UDF or anything else that runs on an executor:
+those are separate Python worker processes the debugger never attached to. Debug that
+code with `df.show()` and counts instead.
+
+### Do not install
+
+| | Why |
+|---|---|
+| Jupyter, Data Wrangler | The conventions ban notebooks for production code: hard to review, hard to rerun. The Python extension will keep offering them anyway |
+| Any "Spark", "Databricks" or "Big Data" extension | They drive remote clusters. Everything here runs `local[*]` |
+| A Cassandra extension | The maintained ones do not exist. Use `cqlsh` inside the container (W40) |

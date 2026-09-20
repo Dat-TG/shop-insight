@@ -24,6 +24,7 @@ quy trình**: ai sửa một lệnh ở file này thì sửa luôn ở file kia.
 | [5](#phần-5--từng-file-nghĩa-là-gì) | Từng file trong repo làm gì, đọc từng đoạn code | Trước khi viết script đầu tiên |
 | [6](#phần-6--những-gì-đã-thay-đổi-trong-w38-và-vì-sao) | Những gì đã thay đổi trong W38, và vì sao | Khi thắc mắc một con số |
 | [7](#phần-7--khi-có-lỗi) | Bảng tra lỗi | Khi có lỗi |
+| [8](#phần-8--tiện-ích-vscode) | Tiện ích VSCode nên cài, và hai dòng cấu hình | Sau khi cài xong, tuỳ bạn |
 
 ---
 
@@ -737,3 +738,83 @@ tra theo cột đầu của bảng dưới.
 | `apt update` báo `Release file ... is not valid yet` | Đồng hồ WSL bị lệch sau khi laptop ngủ | `sudo hwclock -s`, hoặc `wsl --shutdown` rồi mở lại |
 | `$'\r': command not found`, hoặc lỗi lạ ở file bạn không sửa | Repo được clone bằng git của Windows, nên dòng kết thúc bằng `\r\n` | Xoá bản clone đó, clone lại **bên trong** WSL (bước 1) |
 | `sudo: unable to resolve host` ngay sau khi cài | Tên máy của distro mới chưa có trong `/etc/hosts` | Không ảnh hưởng dự án. `wsl --shutdown` rồi mở lại thường sẽ hết |
+
+---
+
+## Phần 8 — Tiện ích VSCode
+
+Không bắt buộc, và tuỳ mỗi người. Trình soạn thảo không nằm trong stack, nên luật cứng
+số 1 (không thêm công nghệ) không áp dụng ở đây: không có bước nào trong pipeline phụ
+thuộc vào mấy tiện ích này. Có mục này vì cả nhóm chưa ai viết Spark — cài Pylance thì
+`pyspark.sql.functions` mới gợi ý đúng tên hàm — và vì file Parquet không đọc được
+bằng `cat`.
+
+**Nếu dùng WSL:** chạy lệnh dưới trong terminal **bên trong** cửa sổ WSL (thanh tiêu đề
+ghi `[WSL: Ubuntu-26.04]`, và lệnh sẽ in `Installing extensions on WSL`). Tiện ích cài ở
+phía Windows không nhìn thấy repo lẫn venv.
+
+```bash
+code --install-extension ms-python.python \
+     --install-extension ms-python.vscode-pylance \
+     --install-extension ms-python.debugpy \
+     --install-extension dvirtz.parquet-viewer \
+     --install-extension mechatroner.rainbow-csv \
+     --install-extension ms-azuretools.vscode-docker \
+     --install-extension ms-ossdata.vscode-pgsql \
+     --install-extension humao.rest-client
+```
+
+| Tiện ích | Được gì | Cần từ |
+|---|---|---|
+| `ms-python.python` + `ms-python.vscode-pylance` | Chọn trình thông dịch, nhảy tới định nghĩa hàm, gợi ý code. `pyspark==4.1.3` có sẵn file `py.typed`, nên `DataFrame` và `F.*` gợi ý thật chứ không rơi về `Any` | W38 |
+| `ms-python.debugpy` | Đặt breakpoint trong code chạy ở driver | W38 |
+| `dvirtz.parquet-viewer` | Mở `data/silver/event_date=*/part-*.parquet` dưới dạng bảng, để nhìn tận mắt việc dời giờ sang UTC+7 và bảy quy tắc trong `clean()`. Chỉ để xem nhanh — muốn đếm thì dùng DuckDB | W39 |
+| `mechatroner.rainbow-csv` | Tô màu từng cột của `seed/holidays_2019.csv` và các file trích nhỏ. **Đừng bao giờ** mở `data/raw/2019-Nov.csv` bằng nó: 9 GB sẽ treo editor | W39 |
+| `ms-azuretools.vscode-docker` | Xem log container Cassandra và Postgres, mở shell bên trong container mà không phải nhớ cờ của compose. Nó kéo theo `ms-azuretools.vscode-containers` | W40 |
+| `ms-ossdata.vscode-pgsql` | Chạy thẳng `warehouse/ddl.sql` vào container Postgres từ file đang mở | W41 |
+| `humao.rest-client` | Một file `.http` commit cạnh router FastAPI, để người khác gọi lại endpoint một mình thay vì phải hỏi bạn câu `curl` | W42 |
+
+Tới W42 khi có thư mục `web/`, cài thêm `dbaeumer.vscode-eslint` và
+`esbenp.prettier-vscode`; bản Vite dựng sẵn đã kèm file cấu hình cho hai cái đó.
+
+**Sau đó phải chọn trình thông dịch**, không thì mấy tiện ích Python ở trên vô dụng:
+
+```
+Ctrl+Shift+P  ->  Python: Select Interpreter  ->  ./.venv/bin/python
+```
+
+**Kiểm tra:** mở `processing/kata.py`. Thanh dưới cùng hiện `.venv`, dòng
+`from pyspark.sql import SparkSession` không bị gạch chân vàng, và gõ `F.` trong một hàm
+thì hiện gợi ý `col`, `when`, `window`.
+
+### Hai dòng cấu hình đáng giá hơn mọi tiện ích
+
+`.gitignore` bỏ qua thư mục `.vscode/`, nên file này không đi theo git — mỗi người tự tạo
+trên máy mình:
+
+```jsonc
+// .vscode/settings.json
+{
+  "files.watcherExclude": { "**/data/**": true },
+  "search.exclude":       { "**/data/**": true }
+}
+```
+
+Từ W40, replayer ghi một file JSON mới vào `data/stream_landing/` sau vài giây, còn Spark
+ghi lại `data/checkpoints/` sau mỗi micro-batch. Không loại trừ hai thư mục đó thì bộ
+theo dõi file của editor quét lại liên tục — đúng lúc đang demo.
+
+### Gỡ lỗi Spark
+
+Breakpoint có tác dụng với code chạy ở driver, **kể cả bên trong `foreachBatch`**, vì
+`foreachBatch` chạy ở driver. Nhưng breakpoint **không** dừng bên trong UDF hay bất cứ
+thứ gì chạy ở executor: đó là các tiến trình Python worker riêng, trình gỡ lỗi không hề
+gắn vào. Chỗ đó cứ `df.show()` và đếm số dòng.
+
+### Đừng cài
+
+| | Vì sao |
+|---|---|
+| Jupyter, Data Wrangler | Quy ước của nhóm cấm dùng notebook cho code chạy thật: khó review, khó chạy lại. Tiện ích Python vẫn sẽ mời bạn cài chúng |
+| Mọi tiện ích tên "Spark", "Databricks" hay "Big Data" | Chúng viết ra để điều khiển cluster từ xa. Cả dự án này chạy `local[*]` |
+| Tiện ích Cassandra | Loại còn được bảo trì thì không có. Dùng `cqlsh` bên trong container (W40) |
