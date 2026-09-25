@@ -1,0 +1,29 @@
+holiday_date,holiday_name,holiday_type
+2019-01-01,New Year's Day,public_holiday
+2019-01-26,Tet Holiday Begin,public_holiday
+2019-01-27,Tet Holiday,public_holiday
+2019-01-28,Tet Holiday,public_holiday
+2019-01-29,Tet Holiday,public_holiday
+2019-01-30,Tet Holiday,public_holiday
+2019-01-31,Tet Holiday,public_holiday
+2019-02-01,Tet Holiday End,public_holiday
+2019-04-18,Hung Kings Festival,public_holiday
+2019-04-30,Reunification Day,public_holiday
+2019-05-01,International Labor Day,public_holiday
+2019-09-02,National Day,public_holiday
+2019-10-01,October Golden Week Begin,observance
+2019-10-02,October Golden Week,observance
+2019-10-03,October Golden Week,observance
+2019-10-04,October Golden Week,observance
+2019-10-05,October Golden Week,observance
+2019-10-06,October Golden Week,observance
+2019-10-07,October Golden Week End,observance
+2019-10-31,Halloween,observance
+2019-11-01,All Saints Day,observance
+2019-11-11,Singles Day,retail_event
+2019-11-29,Black Friday,retail_event
+2019-12-02,Cyber Monday,retail_event
+2019-12-10,Human Rights Day,observance
+2019-12-24,Christmas Eve,observance
+2019-12-25,Christmas Day,public_holiday
+2019-12-31,New Year's Eve,observance

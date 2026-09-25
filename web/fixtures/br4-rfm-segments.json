@@ -1,11 +1,12 @@
 {
-  "_contract": "BR4 — RFM Segmentation",
+  "_contract": "BR4 — RFM Customer Segmentation",
   "_endpoint": "GET /api/br4/segments",
-  "_warehouse": "Parquet",
-  "_table": "rfm_segments",
-  "_gold_columns": "user_id, recency_days, frequency, monetary, r_score, f_score, m_score, segment",
+  "_warehouse": "Postgres",
+  "_table": "dim_user",
   "_source": "dim_user WHERE is_current = true",
-  "_note": "r_score/f_score/m_score/rfm_cell/recency_days are null for no_purchase users (~88% at first snapshot). snapshot_date is a partition column, included here for API context.",
+  "_note": "W39: source changed from gold/rfm_segments/ Parquet to dim_user star schema. rfm_cell, segment, is_current are required. ~88% of users are no_purchase at first snapshot.",
+  "_columns_required": ["rfm_cell", "segment", "is_current"],
+  "_warning": "Always filter WHERE is_current = TRUE. SCD2 table has historical rows for the same user_id.",
   "default": {
     "data": [
       {
@@ -18,7 +19,8 @@
         "f_score": 5,
         "m_score": 5,
         "rfm_cell": "555",
-        "segment": "champion"
+        "segment": "champion",
+        "is_current": true
       },
       {
         "user_id": 530253200,
@@ -30,7 +32,8 @@
         "f_score": 5,
         "m_score": 4,
         "rfm_cell": "554",
-        "segment": "champion"
+        "segment": "champion",
+        "is_current": true
       },
       {
         "user_id": 515915625,
@@ -42,7 +45,8 @@
         "f_score": 4,
         "m_score": 4,
         "rfm_cell": "444",
-        "segment": "loyal"
+        "segment": "loyal",
+        "is_current": true
       },
       {
         "user_id": 572756958,
@@ -54,7 +58,8 @@
         "f_score": 3,
         "m_score": 2,
         "rfm_cell": "332",
-        "segment": "promising"
+        "segment": "promising",
+        "is_current": true
       },
       {
         "user_id": 601038353,
@@ -66,7 +71,8 @@
         "f_score": 2,
         "m_score": 2,
         "rfm_cell": "222",
-        "segment": "needs_attention"
+        "segment": "needs_attention",
+        "is_current": true
       },
       {
         "user_id": 490474477,
@@ -78,7 +84,8 @@
         "f_score": 1,
         "m_score": 1,
         "rfm_cell": "111",
-        "segment": "at_risk"
+        "segment": "at_risk",
+        "is_current": true
       },
       {
         "user_id": 609319077,
@@ -90,7 +97,8 @@
         "f_score": null,
         "m_score": null,
         "rfm_cell": null,
-        "segment": "no_purchase"
+        "segment": "no_purchase",
+        "is_current": true
       },
       {
         "user_id": 611879131,
@@ -102,12 +110,13 @@
         "f_score": null,
         "m_score": null,
         "rfm_cell": null,
-        "segment": "no_purchase"
+        "segment": "no_purchase",
+        "is_current": true
       }
     ],
     "meta": {
       "ms": 24.6,
-      "warehouse": "Parquet",
+      "warehouse": "Postgres",
       "partitions": 1,
       "rows": 8
     }
@@ -116,7 +125,7 @@
     "data": [],
     "meta": {
       "ms": 5.8,
-      "warehouse": "Parquet",
+      "warehouse": "Postgres",
       "partitions": 0,
       "rows": 0
     }
