@@ -72,22 +72,34 @@ CREATE TABLE IF NOT EXISTS dim_warehouse (
 
 -- ── dim_product (SCD Type 2) ──────────────────────────────────────────────────
 -- Loaded in W40 by Nguyên. DDL created now so fact_event FK compiles.
--- attributes is JSONB: stores category_code, brand, and any future flexible fields.
+--
+-- DESIGN CONTRACT (SYSTEM_DESIGN.md section 5.4):
+--   • product_sk is BIGINT, NOT BIGSERIAL. Spark assigns it in the same window
+--     pass that detects the price change (monotonically_increasing_id or
+--     xxhash64). Postgres never generates it — doing so would require a range-join
+--     at load time: ON event_time BETWEEN valid_from AND valid_to, which produces
+--     305M intermediate rows (65× the fact table). Do not change to BIGSERIAL.
+--   • valid_to is DATE NOT NULL. Open/current rows use 9999-12-31, not NULL.
+--     NULL valid_to forces COALESCE in every query predicate.
+--   • attributes is JSONB for flexible product metadata (GIN indexed below).
 CREATE TABLE IF NOT EXISTS dim_product (
-    product_sk      BIGSERIAL     PRIMARY KEY,
+    product_sk      BIGINT        PRIMARY KEY,    -- assigned by Spark, NOT by Postgres
     product_id      BIGINT        NOT NULL,       -- natural key from silver
+    version_no      INTEGER       NOT NULL DEFAULT 1,  -- 1 = first version
     category_id     BIGINT,
     category_code   VARCHAR(200),                 -- e.g. "electronics.smartphone"
     category_l1     VARCHAR(50),
     category_l2     VARCHAR(50),
     category_l3     VARCHAR(50),
     brand           VARCHAR(100),
-    price           NUMERIC(10,2),                -- price at which the product first appeared
-    attributes      JSONB,                        -- flexible attributes; GIN indexed below
+    price           NUMERIC(10,2),                -- price at this SCD2 version
+    attributes      JSONB,                        -- flexible metadata; GIN indexed below
     valid_from      DATE          NOT NULL,
-    valid_to        DATE,                         -- NULL means current
-    is_current      BOOLEAN       NOT NULL DEFAULT TRUE,
-    loaded_at       TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+    valid_to        DATE          NOT NULL,        -- 9999-12-31 = open (current row)
+    is_current      BOOLEAN       NOT NULL,
+    loaded_at       TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_dim_product_ver  UNIQUE (product_id, valid_from),
+    CONSTRAINT ck_dim_product_range CHECK (valid_from < valid_to)
 );
 
 -- GIN index on dim_product.attributes for @> containment operator.
@@ -102,22 +114,40 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_dim_product_current
 
 -- ── dim_user (SCD Type 2) ────────────────────────────────────────────────────
 -- Loaded in W40 by Khang (stg_rfm_snapshot → dim_user).
+--
+-- DESIGN CONTRACT (SYSTEM_DESIGN.md section 5.4):
+--   • user_sk is BIGINT, NOT BIGSERIAL. Spark assigns it in the same window
+--     pass over stg_rfm_snapshot that detects the rfm_cell change.
+--     Postgres-generated keys require joining fact_event back to dim_user on
+--     event_time BETWEEN valid_from AND valid_to — the range-join SYSTEM_DESIGN
+--     section 5.4 explicitly prohibits (65× row explosion).
+--   • valid_to is DATE NOT NULL. Current rows use 9999-12-31, not NULL.
+--   • Change detection must use IS DISTINCT FROM (not <>): rfm_cell is NULL
+--     for the ~88% of users who have never purchased. NULL <> NULL is NULL,
+--     not TRUE, so <> would emit a new version every snapshot for every
+--     non-buyer. See SYSTEM_DESIGN.md "Two traps in the SCD2 build".
+--   • segment domain constraint mirrors the SYSTEM_DESIGN CHECK.
 CREATE TABLE IF NOT EXISTS dim_user (
-    user_sk         BIGSERIAL     PRIMARY KEY,
+    user_sk         BIGINT        PRIMARY KEY,    -- assigned by Spark, NOT by Postgres
     user_id         BIGINT        NOT NULL,       -- natural key from silver
-    recency_days    SMALLINT,                     -- NULL for no-purchase users
+    version_no      INTEGER       NOT NULL DEFAULT 1,
+    snapshot_date   DATE          NOT NULL,       -- RFM snapshot that produced this row
+    recency_days    INTEGER,                      -- NULL when never purchased
     frequency       INTEGER       NOT NULL DEFAULT 0,
     monetary        NUMERIC(14,2) NOT NULL DEFAULT 0,
     r_score         SMALLINT,                     -- 1–5; NULL for no-purchase
     f_score         SMALLINT,
     m_score         SMALLINT,
-    rfm_cell        CHAR(3),                      -- e.g. '555'; NULL for no-purchase
+    rfm_cell        CHAR(3),                      -- e.g. '555'; the SCD2-tracked attribute
     segment         VARCHAR(30)   NOT NULL DEFAULT 'no_purchase',
-    snapshot_date   DATE          NOT NULL,
     valid_from      DATE          NOT NULL,
-    valid_to        DATE,
-    is_current      BOOLEAN       NOT NULL DEFAULT TRUE,
-    loaded_at       TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+    valid_to        DATE          NOT NULL,        -- 9999-12-31 = open (current row)
+    is_current      BOOLEAN       NOT NULL,
+    loaded_at       TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_dim_user_ver UNIQUE (user_id, valid_from),
+    CONSTRAINT ck_dim_user_seg CHECK (segment IN
+        ('champion', 'loyal', 'promising', 'needs_attention',
+         'at_risk', 'hibernating', 'no_purchase'))
 );
 
 -- Unique partial index: only ONE current row per user_id.
@@ -140,17 +170,31 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_dim_user_current
 --     needing to ADD PARTITION before INSERT.
 --   • Partition pruning on event_date is the primary performance lever (PLAN.md
 --     benchmark goal W41).
+-- DESIGN CONTRACT (SYSTEM_DESIGN.md section 5.5):
+--   • event_sk is BIGINT, NOT BIGSERIAL — assigned by Spark (monotonically_increasing_id).
+--   • product_sk and user_sk are already on each silver row after the dim build;
+--     no range-join needed at load time.
+--   • event_time is TIMESTAMP (not TIMESTAMPTZ): silver already stores Vietnam
+--     wall-clock time (+07:00 shifted), stored without timezone to avoid
+--     double-shifting in JDBC.
+--   • user_session stores the UUID as TEXT (silver column is text; UUID cast
+--     would fail the ~1 null row and any malformed sessions in replay).
+--   • date_key FK to dim_date for star joins.
+--   • Column order: 8-byte columns first to minimise alignment padding
+--     (~8 bytes/row on 4.7M rows ≈ 37 MB saved — SYSTEM_DESIGN section 5.5).
 CREATE TABLE IF NOT EXISTS fact_event (
-    event_sk        BIGSERIAL,
-    event_date      DATE          NOT NULL,   -- partition key
-    event_time      TIMESTAMPTZ   NOT NULL,   -- Vietnam wall-clock time
-    event_type_key  INTEGER       NOT NULL REFERENCES dim_event_type(event_type_key),
-    product_sk      BIGINT        REFERENCES dim_product(product_sk),
-    user_sk         BIGINT        REFERENCES dim_user(user_sk),
-    warehouse_id    INTEGER       REFERENCES dim_warehouse(warehouse_id),
-    user_session    VARCHAR(50)   NOT NULL,
+    event_sk        BIGINT        NOT NULL,    -- assigned by Spark, NOT by Postgres
+    product_sk      BIGINT        NOT NULL REFERENCES dim_product(product_sk),
+    user_sk         BIGINT        NOT NULL REFERENCES dim_user(user_sk),
+    event_time      TIMESTAMP     NOT NULL,   -- Vietnam wall-clock, already shifted
+    user_session    TEXT          NOT NULL,   -- degenerate dimension (no dim table)
     price           NUMERIC(10,2) NOT NULL CHECK (price > 0),
-    PRIMARY KEY (event_sk, event_date)
+    date_key        INTEGER       NOT NULL REFERENCES dim_date(date_key),
+    event_date      DATE          NOT NULL,   -- partition key; must equal event_time::date
+    event_type_key  SMALLINT      NOT NULL REFERENCES dim_event_type(event_type_key),
+    CONSTRAINT pk_fact_event    PRIMARY KEY (event_sk, event_date),
+    CONSTRAINT ck_fact_price    CHECK (price > 0),
+    CONSTRAINT ck_fact_date     CHECK (event_date = event_time::date)
 ) PARTITION BY RANGE (event_date);
 
 -- 30 daily partitions: 2019-11-01 to 2019-11-30
