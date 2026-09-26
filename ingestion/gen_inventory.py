@@ -28,9 +28,12 @@ EXPECTED_ROWS = EXPECTED_PRODUCTS * WAREHOUSES * DAYS
 INVENTORY_COLUMNS = ["product_id", "warehouse_id", "snapshot_date", "stock_on_hand", "reorder_point", "units_received"]
 
 
-def build_inventory(bronze):
-    spark = bronze.sparkSession
-    products = bronze.where(F.col("event_type") == "purchase").select("product_id").distinct()
+def purchased_products(bronze):
+    return bronze.where(F.col("event_type") == "purchase").select("product_id").distinct()
+
+
+def build_inventory(products):
+    spark = products.sparkSession
     warehouses = spark.range(1, WAREHOUSES + 1).select(F.col("id").cast("int").alias("warehouse_id"))
     days = spark.range(1).select(F.explode(F.sequence(F.lit(FIRST_DAY), F.lit(LAST_DAY))).alias("snapshot_date"))
     pair = F.xxhash64("product_id", "warehouse_id")
@@ -58,33 +61,49 @@ def build_inventory(bronze):
     )
 
 
+def write_inventory(inventory):
+    try:
+        inventory.repartition("snapshot_date").write.mode("overwrite").partitionBy("snapshot_date").parquet(
+            str(INVENTORY_DIR)
+        )
+    finally:
+        INVENTORY_DIR.mkdir(parents=True, exist_ok=True)
+        (INVENTORY_DIR / ".gitkeep").touch()
+
+
 def main():
     if not list(BRONZE_DIR.glob("event_date=*")):
         sys.exit(f"{BRONZE_DIR} is empty. Run python ingestion/load_bronze.py first.")
     spark = SparkSession.builder.master("local[*]").appName("gen_inventory").getOrCreate()
-    inventory = build_inventory(spark.read.parquet(str(BRONZE_DIR)))
-    inventory.repartition("snapshot_date").write.mode("overwrite").partitionBy("snapshot_date").parquet(
-        str(INVENTORY_DIR)
-    )
-    (INVENTORY_DIR / ".gitkeep").touch()
+    products = purchased_products(spark.read.parquet(str(BRONZE_DIR)))
+    product_count = products.count()
+    if product_count != EXPECTED_PRODUCTS:
+        spark.stop()
+        sys.exit(
+            f"bronze has {product_count:,} purchased products, expected {EXPECTED_PRODUCTS:,}. "
+            "Re-run ingestion/load_bronze.py; nothing was overwritten."
+        )
+    write_inventory(build_inventory(products))
     inventory = spark.read.parquet(str(INVENTORY_DIR))
-    last_day = inventory.where(F.col("snapshot_date") == F.lit(LAST_DAY))
-    below_reorder = 100 * last_day.where(F.col("stock_on_hand") < F.col("reorder_point")).count() / last_day.count()
-    stats = {
-        "products": inventory.select("product_id").distinct().count(),
-        "rows": inventory.count(),
-        "negative values": inventory.where(
+    last_day = F.col("snapshot_date") == F.lit(LAST_DAY)
+    totals = inventory.agg(
+        F.countDistinct("product_id").alias("products"),
+        F.count("*").alias("rows"),
+        F.count_if(
             (F.col("stock_on_hand") < 0) | (F.col("units_received") < 0) | (F.col("reorder_point") <= 0)
-        ).count(),
-    }
+        ).alias("negative values"),
+        F.count_if(last_day & (F.col("stock_on_hand") < F.col("reorder_point"))).alias("below"),
+        F.count_if(last_day).alias("last_day"),
+    ).first()
     spark.stop()
-    for name, value in stats.items():
-        print(f"{name:<24}{value:>10,}")
+    below_reorder = 100 * totals["below"] / totals["last_day"]
+    for name in ("products", "rows", "negative values"):
+        print(f"{name:<24}{totals[name]:>10,}")
     print(f"{'below reorder ' + LAST_DAY.isoformat():<24}{below_reorder:>9.1f}%")
     ok = (
-        stats["products"] == EXPECTED_PRODUCTS
-        and stats["rows"] == EXPECTED_ROWS
-        and stats["negative values"] == 0
+        totals["products"] == EXPECTED_PRODUCTS
+        and totals["rows"] == EXPECTED_ROWS
+        and totals["negative values"] == 0
         and abs(below_reorder - LOW_STOCK_PERCENT) <= LOW_STOCK_TOLERANCE
     )
     if not ok:

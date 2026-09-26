@@ -18,6 +18,7 @@ DIM_USER_DIR = REPO / "data" / "warehouse" / "dim_user"
 SNAPSHOTS = [date(2019, 11, 7), date(2019, 11, 14), date(2019, 11, 21), date(2019, 11, 28), date(2019, 11, 30)]
 FIRST_DAY = date(2019, 11, 1)
 OPEN_END = date(9999, 12, 31)
+EXPECTED_SILVER_ROWS = 4_754_015
 EXPECTED_USERS = 258_330
 VERSION_SLOTS = 10
 RFM_COLUMNS = [
@@ -71,7 +72,7 @@ def build_rfm_snapshot(silver):
         .withColumn("m_score", score(F.col("monetary")))
         .withColumn("rfm_cell", F.concat(*[F.col(s).cast("string") for s in ("r_score", "f_score", "m_score")]))
         .withColumn("segment", segment(F.col("r_score"), F.col("f_score")))
-        .withColumn("version_no", F.sum(cell_changed.cast("int")).over(by_user))
+        .withColumn("version_no", F.sum(cell_changed.cast("int")).over(by_user).cast("int"))
         .withColumn("user_sk", F.col("user_id") * VERSION_SLOTS + F.col("version_no"))
         .select(*RFM_COLUMNS)
     )
@@ -83,7 +84,10 @@ def build_dim_user(rfm_snapshot):
     return (
         rfm_snapshot.withColumn("first_snapshot", F.min("snapshot_date").over(by_version))
         .where(F.col("snapshot_date") == F.col("first_snapshot"))
-        .withColumn("valid_from", F.when(F.col("version_no") == 1, F.lit(FIRST_DAY)).otherwise(F.col("snapshot_date")))
+        .withColumn(
+            "valid_from",
+            F.when(F.col("version_no") == 1, F.lit(FIRST_DAY)).otherwise(F.date_add("snapshot_date", 1)),
+        )
         .withColumn("valid_to", F.coalesce(F.lead("valid_from").over(by_user), F.lit(OPEN_END)))
         .withColumn("is_current", F.col("valid_to") == F.lit(OPEN_END))
         .select(*DIM_USER_COLUMNS)
@@ -93,7 +97,7 @@ def build_dim_user(rfm_snapshot):
 def snapshot_of(day):
     snapshot = F.lit(SNAPSHOTS[0])
     for cutoff in SNAPSHOTS[1:]:
-        snapshot = F.when(day >= F.lit(cutoff), F.lit(cutoff)).otherwise(snapshot)
+        snapshot = F.when(day > F.lit(cutoff), F.lit(cutoff)).otherwise(snapshot)
     return snapshot
 
 
@@ -106,9 +110,35 @@ def with_user_sk(events, rfm_snapshot):
     )
 
 
+def check_events(events, dim):
+    versions = dim.select("user_sk", F.col("user_id").alias("version_user_id"), "valid_from", "valid_to")
+    in_version = (
+        (F.col("version_user_id") == F.col("user_id"))
+        & (F.col("event_date") >= F.col("valid_from"))
+        & (F.col("event_date") < F.col("valid_to"))
+    )
+    return (
+        events.join(versions, "user_sk", "left")
+        .agg(
+            F.count("*").alias("events"),
+            F.count_if(F.col("user_sk").isNull()).alias("events without user_sk"),
+            F.count_if(F.col("user_sk").isNotNull() & ~F.coalesce(in_version, F.lit(False))).alias(
+                "events on wrong version"
+            ),
+        )
+        .first()
+        .asDict()
+    )
+
+
+def non_buyers_with_extra_versions(dim):
+    per_user = dim.groupBy("user_id").agg(F.count("*").alias("versions"), F.max("frequency").alias("frequency"))
+    return per_user.where((F.col("frequency") == 0) & (F.col("versions") != 1)).count()
+
+
 def report(stats):
     for name, value in stats.items():
-        print(f"{name:<24}{value:>10,}")
+        print(f"{name:<25}{value:>10,}")
 
 
 def main():
@@ -118,31 +148,46 @@ def main():
         sys.exit(f"user_sk holds at most {VERSION_SLOTS - 1} versions per user: raise VERSION_SLOTS.")
     spark = SparkSession.builder.master("local[*]").appName("dim_user").getOrCreate()
     silver = spark.read.parquet(str(SILVER_DIR))
-    build_rfm_snapshot(silver).write.mode("overwrite").parquet(str(RFM_DIR))
+    source = silver.agg(F.count("*").alias("rows"), F.countDistinct("user_id").alias("users")).first()
+    if (source["rows"], source["users"]) != (EXPECTED_SILVER_ROWS, EXPECTED_USERS):
+        spark.stop()
+        sys.exit(
+            f"silver has {source['rows']:,} rows / {source['users']:,} users, expected "
+            f"{EXPECTED_SILVER_ROWS:,} / {EXPECTED_USERS:,}. Re-run processing/batch_silver.py; nothing was overwritten."
+        )
+    (
+        build_rfm_snapshot(silver)
+        .repartition("snapshot_date")
+        .write.mode("overwrite")
+        .partitionBy("snapshot_date")
+        .parquet(str(RFM_DIR))
+    )
     rfm = spark.read.parquet(str(RFM_DIR))
     build_dim_user(rfm).write.mode("overwrite").parquet(str(DIM_USER_DIR))
     dim = spark.read.parquet(str(DIM_USER_DIR))
-    events = with_user_sk(silver, rfm)
+    versions = dim.agg(F.count("*").alias("all"), F.count_if("is_current").alias("current")).first()
+    violations = scd2_violations(dim, "user_id")
     stats = {
         "stg_rfm_snapshot": rfm.count(),
-        "dim_user versions": dim.count(),
-        "dim_user current": dim.where("is_current").count(),
+        "dim_user versions": versions["all"],
+        "dim_user current": versions["current"],
         "duplicate user_sk": dim.groupBy("user_sk").count().where("count > 1").count(),
-        "events": events.count(),
-        "events without user_sk": events.where(F.col("user_sk").isNull()).count(),
-        **scd2_violations(dim, "user_id"),
+        "non-buyers not 1 version": non_buyers_with_extra_versions(dim),
+        **check_events(with_user_sk(silver, rfm), dim),
+        **violations,
     }
-    silver_rows = silver.count()
     spark.stop()
     report(stats)
+    must_be_zero = [
+        "duplicate user_sk", "non-buyers not 1 version", "events without user_sk", "events on wrong version",
+        *violations,
+    ]
     ok = (
         stats["stg_rfm_snapshot"] == EXPECTED_USERS * len(SNAPSHOTS)
         and stats["dim_user current"] == EXPECTED_USERS
         and EXPECTED_USERS <= stats["dim_user versions"] <= EXPECTED_USERS * len(SNAPSHOTS)
-        and stats["duplicate user_sk"] == 0
-        and stats["events"] == silver_rows
-        and stats["events without user_sk"] == 0
-        and not any(stats[name] for name in ("overlaps", "not_one_current", "gaps", "empty_ranges"))
+        and stats["events"] == EXPECTED_SILVER_ROWS
+        and not any(stats[name] for name in must_be_zero)
     )
     if not ok:
         print("DIM_USER MISMATCH")
