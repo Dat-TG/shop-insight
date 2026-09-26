@@ -81,8 +81,13 @@ def build_attributes(product_id: int) -> dict:
  
  
 def read_product_ids(spark) -> list:
-    if not SILVER_DIR.exists() or not any(SILVER_DIR.iterdir()):
-        print(f"{SILVER_DIR} is empty. Run processing/batch_silver.py first.")
+    # A directory holding only .gitkeep passes `any(iterdir())` but has no
+    # real Parquet in it, which sent Spark straight to a confusing
+    # AnalysisException instead of a clear message. _SUCCESS is the marker
+    # Spark itself writes only after a full, successful write, so it is
+    # the honest "does real data exist here" check.
+    if not (SILVER_DIR / "_SUCCESS").exists():
+        print(f"{SILVER_DIR} has no data yet (no _SUCCESS marker). Run processing/batch_silver.py first.")
         sys.exit(1)
     silver = spark.read.parquet(str(SILVER_DIR))
     rows = silver.select("product_id").distinct().collect()

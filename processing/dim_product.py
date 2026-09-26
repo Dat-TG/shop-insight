@@ -18,14 +18,16 @@ OPEN_DATE = "9999-12-31"  # valid_to sentinel for the current version
  
  
 def read_silver_events(spark):
-    if not SILVER_DIR.exists() or not any(SILVER_DIR.iterdir()):
-        print(f"{SILVER_DIR} is empty. Run processing/batch_silver.py first.")
+    # Same fix as gen_catalog.py: a directory holding only .gitkeep must not
+    # look like "has data." _SUCCESS is what Spark writes after a complete
+    # write, so its presence is the real signal.
+    if not (SILVER_DIR / "_SUCCESS").exists():
+        print(f"{SILVER_DIR} has no data yet (no _SUCCESS marker). Run processing/batch_silver.py first.")
         sys.exit(1)
     return spark.read.parquet(str(SILVER_DIR)).select(
         "product_id", "event_time", "price", "brand",
         "category_id", "category_code",
         "category_l1", "category_l2", "category_l3",
-        "user_session",
     )
  
  
@@ -40,52 +42,89 @@ def read_catalog(spark):
  
  
 def assign_versions(events):
-    """One pass over silver: detect every price change per product and
-    assign version_no AND product_sk directly onto the event row.
+    """Attach version_no and product_sk to every event row.
  
-    Ordering: partitioned by product_id, ordered by (event_time,
-    user_session). event_time alone is not always unique to the second,
-    so user_session is a deterministic tie-breaker — it does not
-    recover true sub-second order, but it makes the assignment
-    byte-identical across all four machines, which is the property that
-    actually matters here (the same one CLAUDE.md's hash-based sampling
-    protects). Worth a line in the report, not a defect.
+    dim_product's valid_from/valid_to are DATE columns (SYSTEM_DESIGN.md
+    5.4 DDL), so a "version" only means anything at day grain. Detecting
+    price changes at EVENT grain (this file's first draft) can produce
+    two versions that both start on the same calendar day, whenever a
+    product reprices more than once in one day -- measured on this
+    dataset, that happens 32,241 times -- which violates the DDL's
+    `CHECK (valid_from < valid_to)`.
  
-    Change detection uses eqNullSafe, per PLAN.md's SCD2 warning: `<>`
-    would treat NULL <> NULL as NULL rather than true. price is NOT
-    NULL in silver (rule 1 drops price <= 0), so this is technically
-    unnecessary here the way it is NOT unnecessary for dim_user.rfm_cell
-    -- eqNullSafe is used anyway so the two SCD2 builds in this repo
-    follow one rule, not two.
+    So this collapses to one row per (product_id, calendar day) FIRST,
+    keeping each day's LAST price via max_by(price, event_time), and
+    only then detects day-over-day changes. Two versions can no longer
+    share a start day, by construction: a "change" is only recorded
+    when a day's price differs from the previous day's.
+ 
+    The event-level join back at the end is a plain equality join on
+    (product_id, local_date) -- not the BETWEEN range join
+    SYSTEM_DESIGN.md 5.4 warns against. Each (product_id, local_date)
+    key matches exactly one row on the right (it is that table's own
+    group key), so this cannot fan out the way the range join does.
+ 
+    One residual edge case, negligible and left alone per CLAUDE.md hard
+    rule 3 (no optimising before there are numbers): if a product logs
+    two events in the exact same second with different prices, max_by's
+    tie-break between them is not specified. Rare enough on this
+    dataset not to be worth solving before W41's benchmarks.
     """
-    order_w = Window.partitionBy("product_id").orderBy("event_time", "user_session")
-    running_w = order_w.rowsBetween(Window.unboundedPreceding, Window.currentRow)
+    events_with_day = events.withColumn("local_date", F.to_date("event_time"))
  
-    prev_price = F.lag("price").over(order_w)
-    # eqNullSafe(NULL, price) is False -> "not equal" is True, so the
-    # very first event of a product is flagged as a change for free and
-    # version_no starts at 1 with no separate first-row case.
+    daily = (
+        events_with_day
+        .groupBy("product_id", "local_date")
+        .agg(
+            F.max_by("price", "event_time").alias("price"),
+            F.max_by("brand", "event_time").alias("brand"),
+            F.max_by("category_id", "event_time").alias("category_id"),
+            F.max_by("category_code", "event_time").alias("category_code"),
+            F.max_by("category_l1", "event_time").alias("category_l1"),
+            F.max_by("category_l2", "event_time").alias("category_l2"),
+            F.max_by("category_l3", "event_time").alias("category_l3"),
+        )
+    )
+ 
+    day_w = Window.partitionBy("product_id").orderBy("local_date")
+    running_w = day_w.rowsBetween(Window.unboundedPreceding, Window.currentRow)
+    prev_price = F.lag("price").over(day_w)
+    # eqNullSafe(NULL, price) is False -> "not equal" is True, so a
+    # product's first day is flagged as a change for free and
+    # version_no starts at 1 with no separate first-row case. Also the
+    # null-safe rule PLAN.md's SCD2 warning asks for, even though price
+    # is NOT NULL in silver -- both SCD2 builds in this repo follow one
+    # rule, not two.
     changed = (~F.col("price").eqNullSafe(prev_price)).cast("int")
- 
-    versioned = (
-        events
+    daily = (
+        daily
         .withColumn("changed", changed)
         .withColumn("version_no", F.sum("changed").over(running_w))
         .drop("changed")
     )
  
     # Small window on purpose: distinct (product_id, version_no) pairs
-    # are ~100-250K rows (measure with dim_product's own report(), not
-    # guessed), nowhere near fact_event's 4.7M. Spark will warn "No
-    # Partition Defined for Window operation" because row_number here
-    # is intentionally global, not per-product -- product_sk must be
-    # unique across the whole table, not just within one product.
+    # are on the order of 100-250K rows (see dim_product's own report()
+    # for the measured count), nowhere near fact_event's 4.7M. Spark
+    # will warn "No Partition Defined for Window operation" because
+    # row_number here is intentionally global, not per-product --
+    # product_sk must be unique across the whole table.
     sk_w = Window.orderBy("product_id", "version_no")
     product_sk = (
-        versioned.select("product_id", "version_no").distinct()
+        daily.select("product_id", "version_no").distinct()
         .withColumn("product_sk", F.row_number().over(sk_w))
     )
-    return versioned.join(product_sk, ["product_id", "version_no"], "left")
+    daily = daily.join(product_sk, ["product_id", "version_no"], "left")
+ 
+    return (
+        events_with_day
+        .join(
+            daily.select("product_id", "local_date", "version_no", "product_sk"),
+            ["product_id", "local_date"],
+            "left",
+        )
+        .drop("local_date")
+    )
  
  
 def build_dim_product(versioned_events, catalog):
@@ -106,7 +145,11 @@ def build_dim_product(versioned_events, catalog):
         versioned_events.groupBy("product_id", "version_no")
         .agg(
             F.min("event_time").alias("valid_from_ts"),
-            F.first("price", ignorenulls=True).alias("price"),  # constant within a version by construction
+            # constant within a version by construction (assign_versions
+            # guarantees it), but max_by is used instead of first() so the
+            # value is deterministic even if that ever stops being true,
+            # matching the other Type 1 columns below.
+            F.max_by("price", "event_time").alias("price"),
             F.max_by("brand", "event_time").alias("brand"),
             F.max_by("category_id", "event_time").alias("category_id"),
             F.max_by("category_code", "event_time").alias("category_code"),
@@ -234,4 +277,3 @@ def main():
  
 if __name__ == "__main__":
     main()
- 
