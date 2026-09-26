@@ -15,9 +15,10 @@ def scd2_violations(dim, key):
     versions = dim.withColumn("next_from", F.lead("valid_from").over(by_key))
     current_per_key = dim.groupBy(key).agg(F.sum(F.col("is_current").cast("int")).alias("current"))
     return {
-        "overlaps": versions.where(F.col("valid_to") >= F.col("next_from")).count(),
+        "overlaps": versions.where(F.col("valid_to") > F.col("next_from")).count(),
         "not_one_current": current_per_key.where(F.col("current") != 1).count(),
-        "gaps": versions.where(F.date_add("valid_to", 1) < F.col("next_from")).count(),
+        "gaps": versions.where(F.col("valid_to") < F.col("next_from")).count(),
+        "empty_ranges": dim.where(F.col("valid_from") >= F.col("valid_to")).count(),
     }
 
 

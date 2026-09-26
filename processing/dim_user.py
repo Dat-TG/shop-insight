@@ -84,7 +84,7 @@ def build_dim_user(rfm_snapshot):
         rfm_snapshot.withColumn("first_snapshot", F.min("snapshot_date").over(by_version))
         .where(F.col("snapshot_date") == F.col("first_snapshot"))
         .withColumn("valid_from", F.when(F.col("version_no") == 1, F.lit(FIRST_DAY)).otherwise(F.col("snapshot_date")))
-        .withColumn("valid_to", F.coalesce(F.date_sub(F.lead("valid_from").over(by_user), 1), F.lit(OPEN_END)))
+        .withColumn("valid_to", F.coalesce(F.lead("valid_from").over(by_user), F.lit(OPEN_END)))
         .withColumn("is_current", F.col("valid_to") == F.lit(OPEN_END))
         .select(*DIM_USER_COLUMNS)
     )
@@ -142,7 +142,7 @@ def main():
         and stats["duplicate user_sk"] == 0
         and stats["events"] == silver_rows
         and stats["events without user_sk"] == 0
-        and not any(stats[name] for name in ("overlaps", "not_one_current", "gaps"))
+        and not any(stats[name] for name in ("overlaps", "not_one_current", "gaps", "empty_ranges"))
     )
     if not ok:
         print("DIM_USER MISMATCH")
