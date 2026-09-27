@@ -1,6 +1,8 @@
 """BR4 — RFM Customer Segmentation router.
 
-Owner: Khang (W39: connects to star schema dim_user).
+Owner: Khang. Fixture wiring: Tin.
+
+CONTRACT FROZEN — see docs/API_CONTRACT.md section 6.
 
 Endpoint
 --------
@@ -8,7 +10,9 @@ GET /api/br4/segments
     Query parameters (all optional):
         snapshot_date : str  e.g. "2019-11-30"  (default: "2019-11-30")
         segment       : str  e.g. "champion"     (default: "all")
-        limit         : int  (default: 100)
+        r_score       : int  1-5                 (default: no filter)
+        f_score       : int  1-5                 (default: no filter)
+        m_score       : int  1-5                 (default: no filter)
 
 Response shape
 --------------
@@ -17,27 +21,38 @@ Response shape
     {
       "user_id":       541312140,
       "snapshot_date": "2019-11-30",
-      "recency_days":  1,
+      "recency_days":  1,          // null if never purchased
       "frequency":     48,
       "monetary":      22480.50,
-      "r_score":       5,
-      "f_score":       5,
-      "m_score":       5,
-      "rfm_cell":      "555",
-      "segment":       "champion",
-      "is_current":    true
+      "r_score":       5,          // null if never purchased
+      "f_score":       5,          // null if never purchased
+      "m_score":       5,          // null if never purchased
+      "rfm_cell":      "555",      // null if never purchased
+      "segment":       "champion"
     },
     ...
   ],
-  "meta": { "ms": 24.6, "warehouse": "Postgres", "partitions": 1, "rows": 8 }
+  "meta": { "ms": 24.6, "warehouse": "Parquet", "partitions": 1, "rows": 2 }
 }
 
-Source (W39+):  dim_user WHERE is_current = TRUE
-Required cols:  rfm_cell, segment, is_current
+Storage mapping: Parquet -> data/gold/rfm_segments/snapshot_date=2019-11-30/
+Gold columns:    user_id, recency_days, frequency, monetary,
+                 r_score, f_score, m_score, segment
+                 (rfm_cell is in the response but not a gold column yet)
 
-W38 status: returns empty data.
-W39: update to return fixture data from web/fixtures/br4-rfm-segments.json.
-W40 plan:   replace _load_fixture() with Postgres query over dim_user.
+batch_gold.py projects rfm_segments from dim_user WHERE is_current
+(SYSTEM_DESIGN section 7), so this endpoint never sees an SCD2 history row
+and never filters on is_current itself.
+
+Nullable handling: send null, never 0. About 88% of users at the first
+snapshot have never purchased and have null scores.
+
+Now:  returns fixture data from web/fixtures/br4-rfm-segments.json -> "default",
+      with meta.warehouse "Fixture" and partitions 0, because nothing was read
+      from storage (docs/API_CONTRACT.md section 1.2). The fixture file itself
+      carries the production meta shown above.
+Next: replace _load_fixture() with DuckDB over data/gold/rfm_segments/, then
+      set meta.warehouse to "Parquet" (API_CONTRACT section 2).
 """
 
 from __future__ import annotations
@@ -53,62 +68,45 @@ from serving.api.models import ApiResponse, QueryMeta
 
 router = APIRouter(prefix="/api/br4", tags=["BR4 — RFM Segmentation"])
 
+# Path to the canonical fixture bundle (relative to the repository root).
 _REPO = Path(__file__).resolve().parents[3]
-_FIXTURE = _REPO / "web" / "fixtures" / "br4-rfm-segments.json"
+_FIXTURE_PATH = _REPO / "web" / "fixtures" / "br4-rfm-segments.json"
 
 
 def _load_fixture(empty: bool = False) -> list[dict[str, Any]]:
-    """Return fixture data rows.
+    """Return fixture data rows from the canonical bundle.
 
-    W39: source = dim_user (SCD2 star schema).
-    W40: replace this with a Postgres query:
-        SELECT
-            u.user_id,
-            u.snapshot_date,
-            u.recency_days,
-            u.frequency,
-            u.monetary,
-            u.r_score,
-            u.f_score,
-            u.m_score,
-            u.rfm_cell,
-            u.segment,
-            u.is_current
-        FROM dim_user u
-        WHERE u.is_current = TRUE          -- SCD2: always filter current rows only
-          AND (:segment = 'all' OR u.segment = :segment)
-        ORDER BY u.monetary DESC NULLS LAST
-        LIMIT :limit
+    Reads the "empty" scenario when empty=True, otherwise "default".
+    Next: swap this function body for DuckDB over data/gold/rfm_segments/.
     """
-    with open(_FIXTURE) as fh:
-        payload = json.load(fh)
-    key = "empty" if empty else "default"
-    return payload[key]["data"]
+    with open(_FIXTURE_PATH) as fh:
+        bundle = json.load(fh)
+    scenario = "empty" if empty else "default"
+    return bundle[scenario]["data"]
 
 
 @router.get(
     "/segments",
     response_model=ApiResponse,
-    summary="RFM customer segments (dim_user star schema)",
+    summary="RFM customer segments",
     description=(
-        "Returns RFM-segmented users from the star schema dimension table.  \n\n"
-        "**Source (W39+)**: `dim_user WHERE is_current = TRUE`  \n"
-        "**Required columns**: `rfm_cell`, `segment`, `is_current`  \n\n"
-        "⚠️ **Always filter `WHERE is_current = TRUE`** — dim_user is SCD Type 2: "
-        "each user may have historical rows with is_current = FALSE.  \n\n"
-        "**W38**: returns empty data.  \n"
-        "**W39**: returns fixture data.  \n"
-        "**W40**: will query `dim_user` in Postgres."
+        "Returns RFM-segmented users for one snapshot date, optionally narrowed "
+        "to one segment or to one R/F/M score (a heatmap cell).  Users who never "
+        "purchased carry null scores, never 0.\n\n"
+        "**Now**: returns fixture data (warehouse=Fixture, partitions=0).  "
+        "**Next**: DuckDB over `data/gold/rfm_segments/`, then warehouse=Parquet."
     ),
 )
 def get_segments(
     snapshot_date: str = Query("2019-11-30", description="RFM snapshot date YYYY-MM-DD"),
     segment: str = Query("all", description='Segment filter or "all"'),
-    limit: int = Query(100, ge=1, le=10000, description="Max rows to return"),
+    r_score: int | None = Query(None, ge=1, le=5, description="Filter to R score (1-5)"),
+    f_score: int | None = Query(None, ge=1, le=5, description="Filter to F score (1-5)"),
+    m_score: int | None = Query(None, ge=1, le=5, description="Filter to M score (1-5)"),
 ) -> ApiResponse:
     t0 = time.perf_counter()
 
-    # W39: fixture. W40: replace with dim_user Postgres query (filter is_current=TRUE).
+    # Fixture for now.  Next: DuckDB over data/gold/rfm_segments/.
     data = _load_fixture(empty=False)
 
     elapsed_ms = (time.perf_counter() - t0) * 1000
@@ -117,8 +115,8 @@ def get_segments(
         data=data,
         meta=QueryMeta(
             ms=round(elapsed_ms, 2),
-            warehouse="Postgres",
-            partitions=1,
+            warehouse="Fixture",  # "Parquet" once DuckDB reads data/gold/rfm_segments/
+            partitions=0,
             rows=len(data),
         ),
     )

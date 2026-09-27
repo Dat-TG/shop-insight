@@ -54,9 +54,9 @@ All eight BR endpoints return the same JSON shape:
 |---|---|
 | `"Cassandra"` | BR1, BR3, BR5, BR6, BR8 (streaming-path Cassandra gold tables) |
 | `"Parquet"` | BR2, BR4, BR7 (batch-path Parquet gold files) |
-| `"Postgres"` | Reserved for future Postgres-backed endpoints |
+| `"Postgres"` | Reserved; no BR endpoint reads Postgres, which is the benchmark tier (SYSTEM_DESIGN 12) |
 | `"DuckDB"` | Reserved; BR2/BR4/BR7 may migrate to DuckDB over Parquet |
-| `"Fixture"` | Transitional only — placeholder endpoints before real storage is wired |
+| `"Fixture"` | Transitional only: an endpoint returning fixture or empty placeholder data instead of querying its §2 store; `partitions` is `0`. Fixture files carry the production value. |
 
 ### 1.3 Empty-result semantics
 
@@ -630,6 +630,10 @@ Run fixture validation:
 python tests/test_fixtures.py
 ```
 
+Besides the envelope, it checks the exact field set of each BR's default rows,
+that each fixture's `meta.warehouse` is its §2 engine, and that each router's
+`warehouse="..."` literal is `"Fixture"` or that engine.
+
 ---
 
 ## 12. How to implement a new BR screen
@@ -641,8 +645,10 @@ python tests/test_fixtures.py
 4. Load the fixture's `"default"` scenario in your page component for local development.
 5. In the FastAPI router, import the Pydantic row model from `serving/api/models.py`.
 6. Return `ApiResponse(data=..., meta=QueryMeta(...))` — never deviate from the envelope.
+   While the router still serves fixture or placeholder data, `meta` is `warehouse="Fixture", partitions=0`;
+   it becomes the §2 engine when the router queries its §2 store (§1.2).
 7. Run `python tests/test_fixtures.py` to confirm your fixture is valid.
-8. Run `cd web && npx tsc --noEmit` to confirm type-checking passes.
+8. Run `cd web && npx tsc -b` (or `npm run build`) to confirm type-checking passes.
 
 ---
 

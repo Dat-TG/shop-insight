@@ -1,54 +1,58 @@
 -- docs/evidence/explain_fact_event_partition.sql
 -- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
--- EXPLAIN evidence for W39 Postgres star schema.
--- These queries were run after batch_warehouse.py loaded the 3 small dims.
--- The output files were captured as:
---   docs/evidence/explain_fact_event_partition.txt
---   docs/evidence/explain_gin_attributes.txt
---   docs/evidence/explain_session_funnel.txt
+-- EXPLAIN evidence for the W39 Postgres star schema (warehouse/ddl.sql).
+-- What it proves: partition pruning (a date or warehouse filter reads only its
+-- own partition) and index choice (the GIN index answers @> on attributes).
+--
+-- In W39 the three facts and dim_product are empty, so these are planner
+-- estimates, not speed: plain EXPLAIN, no ANALYZE. Once the facts are loaded,
+-- rerun it with EXPLAIN ANALYZE to measure.
+--
+-- Run it after serving/load_star_postgres.py. The output file is generated raw
+-- by this one command and is never hand-edited:
+--   docker exec -i shopinsight-postgres psql -X -a -v ON_ERROR_STOP=1 -U shopinsight -d <db> < docs/evidence/explain_fact_event_partition.sql > docs/evidence/explain_output_w39.txt
 -- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+SELECT version();
+
 -- 1. Partition pruning on fact_event for a single day (Black Friday).
---    Expected: only fact_event_20191129 should appear in the plan.
-EXPLAIN (ANALYZE OFF, BUFFERS OFF, FORMAT TEXT)
-SELECT COUNT(*) FROM fact_event WHERE event_date = '2019-11-29';
+--    Expected: only fact_event_20191129 appears in the plan.
+EXPLAIN
+SELECT count(*) FROM fact_event WHERE event_date = '2019-11-29';
+
+-- 1b. The same for 2019-12-01, the partial last day.
+--    Expected: only fact_event_20191201, not the DEFAULT partition.
+EXPLAIN
+SELECT count(*) FROM fact_event WHERE event_date = '2019-12-01';
 
 -- 2. GIN index containment search on dim_product.attributes.
---    Expected: Index Scan using idx_dim_product_attributes_gin.
-EXPLAIN (ANALYZE OFF, BUFFERS OFF, FORMAT TEXT)
-SELECT p.product_id, p.brand, p.category_l1
-FROM   dim_product p
-WHERE  p.attributes @> '{"brand": "samsung"}'::jsonb
-  AND  p.is_current = TRUE;
+--    Expected: a Bitmap Index Scan using ix_dim_product_attrs. A GIN index can only
+--    be read through a Bitmap Index Scan, never a plain Index Scan. seqscan is
+--    turned off because the table is empty and a sequential scan of nothing
+--    would win. color is an attribute key (SYSTEM_DESIGN.md 3.3); brand is a
+--    column, not an attribute, so it is not the key to test.
+SET enable_seqscan = off;
+EXPLAIN
+SELECT product_id, brand, category_l1
+FROM   dim_product
+WHERE  attributes @> '{"color": "space_grey"}';
+RESET enable_seqscan;
 
--- 3. fact_session_funnel date-range scan (BR2 source table).
---    Expected: Index Scan on idx_fact_session_funnel_date_key.
-EXPLAIN (ANALYZE OFF, BUFFERS OFF, FORMAT TEXT)
-SELECT
-    f.funnel_stage,
-    COUNT(*)                                AS session_count,
-    AVG(f.view_to_cart_sec)                 AS avg_view_to_cart_sec,
-    AVG(f.cart_to_purchase_sec)             AS avg_cart_to_purchase_sec,
-    COUNT(*) FILTER (WHERE f.is_abandoned)  AS abandoned_sessions
-FROM fact_session_funnel f
-WHERE f.session_date BETWEEN '2019-11-01' AND '2019-11-30'
-GROUP BY f.funnel_stage
-ORDER BY f.funnel_stage;
+SELECT indexdef FROM pg_indexes WHERE indexname = 'ix_dim_product_attrs';
 
--- 4. fact_inventory_daily LIST-partition pruning for a single warehouse.
---    Expected: only fact_inventory_daily_wh1 in plan.
-EXPLAIN (ANALYZE OFF, BUFFERS OFF, FORMAT TEXT)
-SELECT
-    f.product_id,
-    f.stock_on_hand,
-    f.days_to_stockout,
-    f.is_below_reorder
-FROM fact_inventory_daily f
-WHERE f.inventory_date = '2019-11-30'
-  AND f.warehouse_id = 1
-ORDER BY f.days_to_stockout;
+-- 3. fact_session_funnel date-range scan (BR2's source table), one ISO week.
+--    Expected: only fact_session_funnel_20191111 .. _20191117, no _default.
+EXPLAIN
+SELECT funnel_stage, count(*)
+FROM   fact_session_funnel
+WHERE  session_start_date BETWEEN '2019-11-11' AND '2019-11-17'
+GROUP BY funnel_stage;
 
--- Run all four and save output:
---   PGPASSWORD=local_dev_only psql -h localhost -U shopinsight -d shopinsight \
---     -f docs/evidence/explain_fact_event_partition.sql \
---     -o docs/evidence/explain_output_w39.txt
+-- 4. fact_inventory_daily LIST-partition pruning for a single warehouse (BR6).
+--    Expected: only fact_inventory_daily_wh1 in the plan.
+EXPLAIN
+SELECT product_id, stock_on_hand, days_to_stockout
+FROM   fact_inventory_daily
+WHERE  snapshot_date = '2019-11-30'
+  AND  warehouse_id = 1
+ORDER BY days_to_stockout;

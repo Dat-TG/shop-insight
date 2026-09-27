@@ -1,50 +1,35 @@
 {
   "_contract": "BR2 — Conversion Funnel",
   "_endpoint": "GET /api/br2/funnel",
-  "_warehouse": "Postgres",
-  "_table": "fact_session_funnel",
+  "_warehouse": "Parquet",
+  "_table": "funnel_daily",
+  "_gold_columns": "event_date, category_l1, views, carts, purchases, cr_view_to_cart, cr_cart_to_purchase",
   "_source": "fact_session_funnel",
-  "_note": "W39: source changed from silver Parquet to fact_session_funnel (star schema). Returns per-stage aggregation plus timing and abandonment stats.",
-  "_columns_required": ["funnel_stage", "view_to_cart_sec", "cart_to_purchase_sec", "is_abandoned"],
+  "_note": "API returns 3 rows (one per stage). funnel_stage source: 0=no events, 1=view, 2=cart, 3=purchase",
   "default": {
     "data": [
       {
         "step": "view",
-        "funnel_stage": 1,
         "count": 3801822,
         "session_count": 1058882,
-        "conversion_rate": 1.0,
-        "avg_view_to_cart_sec": null,
-        "avg_cart_to_purchase_sec": null,
-        "abandoned_sessions": 0,
-        "is_abandoned": false
+        "conversion_rate": 1.0
       },
       {
         "step": "cart",
-        "funnel_stage": 2,
         "count": 474997,
         "session_count": 316027,
-        "conversion_rate": 0.1249,
-        "avg_view_to_cart_sec": 842.6,
-        "avg_cart_to_purchase_sec": null,
-        "abandoned_sessions": 161355,
-        "is_abandoned": true
+        "conversion_rate": 0.1249
       },
       {
         "step": "purchase",
-        "funnel_stage": 3,
         "count": 186720,
         "session_count": 154672,
-        "conversion_rate": 0.0491,
-        "avg_view_to_cart_sec": 782.3,
-        "avg_cart_to_purchase_sec": 1243.8,
-        "abandoned_sessions": 0,
-        "is_abandoned": false
+        "conversion_rate": 0.0491
       }
     ],
     "meta": {
       "ms": 18.3,
-      "warehouse": "Postgres",
+      "warehouse": "Parquet",
       "partitions": 30,
       "rows": 3
     }
@@ -53,7 +38,7 @@
     "data": [],
     "meta": {
       "ms": 4.2,
-      "warehouse": "Postgres",
+      "warehouse": "Parquet",
       "partitions": 0,
       "rows": 0
     }

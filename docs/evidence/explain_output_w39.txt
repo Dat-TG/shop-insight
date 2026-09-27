@@ -1,93 +1,134 @@
--- ═══════════════════════════════════════════════════════════════════════════
--- EXPLAIN EVIDENCE — W39 Postgres Star Schema
--- Generated: 2026-09-25 (W39)
--- Database:  shopinsight (PostgreSQL 16)
--- Purpose:   Prove partition pruning, GIN index, and session funnel scans
--- ═══════════════════════════════════════════════════════════════════════════
+-- docs/evidence/explain_fact_event_partition.sql
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+-- EXPLAIN evidence for the W39 Postgres star schema (warehouse/ddl.sql).
+-- What it proves: partition pruning (a date or warehouse filter reads only its
+-- own partition) and index choice (the GIN index answers @> on attributes).
+--
+-- In W39 the three facts and dim_product are empty, so these are planner
+-- estimates, not speed: plain EXPLAIN, no ANALYZE. Once the facts are loaded,
+-- rerun it with EXPLAIN ANALYZE to measure.
+--
+-- Run it after serving/load_star_postgres.py. The output file is generated raw
+-- by this one command and is never hand-edited:
+--   docker exec -i shopinsight-postgres psql -X -a -v ON_ERROR_STOP=1 -U shopinsight -d <db> < docs/evidence/explain_fact_event_partition.sql > docs/evidence/explain_output_w39.txt
+-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SELECT version();
+                                                       version                                                        
+----------------------------------------------------------------------------------------------------------------------
+ PostgreSQL 16.15 (Debian 16.15-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
+(1 row)
 
--- ─────────────────────────────────────────────────────────────────────────
--- 1. PARTITION PRUNING — fact_event single-day query (Black Friday 2019-11-29)
---    Query: SELECT COUNT(*) FROM fact_event WHERE event_date = '2019-11-29'
--- ─────────────────────────────────────────────────────────────────────────
-
-                                         QUERY PLAN
----------------------------------------------------------------------------------------------
- Aggregate  (cost=12.42..12.43 rows=1 width=8)
-   ->  Bitmap Heap Scan on fact_event_20191129 fact_event  (cost=7.07..12.41 rows=2 width=0)
+-- 1. Partition pruning on fact_event for a single day (Black Friday).
+--    Expected: only fact_event_20191129 appears in the plan.
+EXPLAIN
+SELECT count(*) FROM fact_event WHERE event_date = '2019-11-29';
+                                                           QUERY PLAN                                                            
+---------------------------------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=12.65..12.66 rows=1 width=8)
+   ->  Bitmap Heap Scan on fact_event_20191129 fact_event  (cost=4.18..12.64 rows=4 width=0)
          Recheck Cond: (event_date = '2019-11-29'::date)
-         ->  Bitmap Index Scan on fact_event_20191129_pkey  (cost=0.00..7.07 rows=2 width=0)
+         ->  Bitmap Index Scan on fact_event_20191129_event_date_event_type_key_event_time_idx  (cost=0.00..4.18 rows=4 width=0)
                Index Cond: (event_date = '2019-11-29'::date)
+(5 rows)
 
-✓ PRUNING VERIFIED: Only partition fact_event_20191129 appears in plan.
-  All other 29 daily partitions + DEFAULT are excluded by the planner.
+-- 1b. The same for 2019-12-01, the partial last day.
+--    Expected: only fact_event_20191201, not the DEFAULT partition.
+EXPLAIN
+SELECT count(*) FROM fact_event WHERE event_date = '2019-12-01';
+                                                           QUERY PLAN                                                            
+---------------------------------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=12.65..12.66 rows=1 width=8)
+   ->  Bitmap Heap Scan on fact_event_20191201 fact_event  (cost=4.18..12.64 rows=4 width=0)
+         Recheck Cond: (event_date = '2019-12-01'::date)
+         ->  Bitmap Index Scan on fact_event_20191201_event_date_event_type_key_event_time_idx  (cost=0.00..4.18 rows=4 width=0)
+               Index Cond: (event_date = '2019-12-01'::date)
+(5 rows)
 
--- ─────────────────────────────────────────────────────────────────────────
--- 2. GIN INDEX — dim_product.attributes containment search
---    Query: SELECT ... FROM dim_product WHERE attributes @> '{"brand":"samsung"}'
---           AND is_current = TRUE
--- ─────────────────────────────────────────────────────────────────────────
+-- 2. GIN index containment search on dim_product.attributes.
+--    Expected: a Bitmap Index Scan using ix_dim_product_attrs. A GIN index can only
+--    be read through a Bitmap Index Scan, never a plain Index Scan. seqscan is
+--    turned off because the table is empty and a sequential scan of nothing
+--    would win. color is an attribute key (SYSTEM_DESIGN.md 3.3); brand is a
+--    column, not an attribute, so it is not the key to test.
+SET enable_seqscan = off;
+SET
+EXPLAIN
+SELECT product_id, brand, category_l1
+FROM   dim_product
+WHERE  attributes @> '{"color": "space_grey"}';
+                                    QUERY PLAN                                     
+-----------------------------------------------------------------------------------
+ Bitmap Heap Scan on dim_product  (cost=8.57..15.68 rows=3 width=72)
+   Recheck Cond: (attributes @> '{"color": "space_grey"}'::jsonb)
+   ->  Bitmap Index Scan on ix_dim_product_attrs  (cost=0.00..8.57 rows=3 width=0)
+         Index Cond: (attributes @> '{"color": "space_grey"}'::jsonb)
+(4 rows)
 
-                                QUERY PLAN
---------------------------------------------------------------------------
- Seq Scan on dim_product p  (cost=0.00..10.88 rows=1 width=344)
-   Filter: (is_current AND (attributes @> '{"brand": "samsung"}'::jsonb))
+RESET enable_seqscan;
+RESET
+SELECT indexdef FROM pg_indexes WHERE indexname = 'ix_dim_product_attrs';
+                                           indexdef                                            
+-----------------------------------------------------------------------------------------------
+ CREATE INDEX ix_dim_product_attrs ON public.dim_product USING gin (attributes jsonb_path_ops)
+(1 row)
 
-NOTE: Seq Scan is expected on an empty table (no rows loaded yet — dim_product
-      loads in W40). With data, Postgres switches to:
-        Index Scan using idx_dim_product_attributes_gin on dim_product
-      The index EXISTS and is confirmed by:
-        SELECT indexname FROM pg_indexes
-        WHERE tablename = 'dim_product'
-          AND indexname = 'idx_dim_product_attributes_gin';
-        => idx_dim_product_attributes_gin  (confirmed via batch_warehouse.py verify())
+-- 3. fact_session_funnel date-range scan (BR2's source table), one ISO week.
+--    Expected: only fact_session_funnel_20191111 .. _20191117, no _default.
+EXPLAIN
+SELECT funnel_stage, count(*)
+FROM   fact_session_funnel
+WHERE  session_start_date BETWEEN '2019-11-11' AND '2019-11-17'
+GROUP BY funnel_stage;
+                                                                   QUERY PLAN                                                                   
+------------------------------------------------------------------------------------------------------------------------------------------------
+ GroupAggregate  (cost=66.94..67.18 rows=14 width=10)
+   Group Key: fact_session_funnel.funnel_stage
+   ->  Sort  (cost=66.94..66.97 rows=14 width=2)
+         Sort Key: fact_session_funnel.funnel_stage
+         ->  Append  (cost=4.17..66.67 rows=14 width=2)
+               ->  Bitmap Heap Scan on fact_session_funnel_20191111 fact_session_funnel_1  (cost=4.17..9.51 rows=2 width=2)
+                     Recheck Cond: ((session_start_date >= '2019-11-11'::date) AND (session_start_date <= '2019-11-17'::date))
+                     ->  Bitmap Index Scan on fact_session_funnel_20191111_session_start_date_funnel_stag_idx  (cost=0.00..4.17 rows=2 width=0)
+                           Index Cond: ((session_start_date >= '2019-11-11'::date) AND (session_start_date <= '2019-11-17'::date))
+               ->  Bitmap Heap Scan on fact_session_funnel_20191112 fact_session_funnel_2  (cost=4.17..9.51 rows=2 width=2)
+                     Recheck Cond: ((session_start_date >= '2019-11-11'::date) AND (session_start_date <= '2019-11-17'::date))
+                     ->  Bitmap Index Scan on fact_session_funnel_20191112_session_start_date_funnel_stag_idx  (cost=0.00..4.17 rows=2 width=0)
+                           Index Cond: ((session_start_date >= '2019-11-11'::date) AND (session_start_date <= '2019-11-17'::date))
+               ->  Bitmap Heap Scan on fact_session_funnel_20191113 fact_session_funnel_3  (cost=4.17..9.51 rows=2 width=2)
+                     Recheck Cond: ((session_start_date >= '2019-11-11'::date) AND (session_start_date <= '2019-11-17'::date))
+                     ->  Bitmap Index Scan on fact_session_funnel_20191113_session_start_date_funnel_stag_idx  (cost=0.00..4.17 rows=2 width=0)
+                           Index Cond: ((session_start_date >= '2019-11-11'::date) AND (session_start_date <= '2019-11-17'::date))
+               ->  Bitmap Heap Scan on fact_session_funnel_20191114 fact_session_funnel_4  (cost=4.17..9.51 rows=2 width=2)
+                     Recheck Cond: ((session_start_date >= '2019-11-11'::date) AND (session_start_date <= '2019-11-17'::date))
+                     ->  Bitmap Index Scan on fact_session_funnel_20191114_session_start_date_funnel_stag_idx  (cost=0.00..4.17 rows=2 width=0)
+                           Index Cond: ((session_start_date >= '2019-11-11'::date) AND (session_start_date <= '2019-11-17'::date))
+               ->  Bitmap Heap Scan on fact_session_funnel_20191115 fact_session_funnel_5  (cost=4.17..9.51 rows=2 width=2)
+                     Recheck Cond: ((session_start_date >= '2019-11-11'::date) AND (session_start_date <= '2019-11-17'::date))
+                     ->  Bitmap Index Scan on fact_session_funnel_20191115_session_start_date_funnel_stag_idx  (cost=0.00..4.17 rows=2 width=0)
+                           Index Cond: ((session_start_date >= '2019-11-11'::date) AND (session_start_date <= '2019-11-17'::date))
+               ->  Bitmap Heap Scan on fact_session_funnel_20191116 fact_session_funnel_6  (cost=4.17..9.51 rows=2 width=2)
+                     Recheck Cond: ((session_start_date >= '2019-11-11'::date) AND (session_start_date <= '2019-11-17'::date))
+                     ->  Bitmap Index Scan on fact_session_funnel_20191116_session_start_date_funnel_stag_idx  (cost=0.00..4.17 rows=2 width=0)
+                           Index Cond: ((session_start_date >= '2019-11-11'::date) AND (session_start_date <= '2019-11-17'::date))
+               ->  Bitmap Heap Scan on fact_session_funnel_20191117 fact_session_funnel_7  (cost=4.17..9.51 rows=2 width=2)
+                     Recheck Cond: ((session_start_date >= '2019-11-11'::date) AND (session_start_date <= '2019-11-17'::date))
+                     ->  Bitmap Index Scan on fact_session_funnel_20191117_session_start_date_funnel_stag_idx  (cost=0.00..4.17 rows=2 width=0)
+                           Index Cond: ((session_start_date >= '2019-11-11'::date) AND (session_start_date <= '2019-11-17'::date))
+(33 rows)
 
-GIN INDEX EXISTS: idx_dim_product_attributes_gin (jsonb_path_ops, supports @>)
+-- 4. fact_inventory_daily LIST-partition pruning for a single warehouse (BR6).
+--    Expected: only fact_inventory_daily_wh1 in the plan.
+EXPLAIN
+SELECT product_id, stock_on_hand, days_to_stockout
+FROM   fact_inventory_daily
+WHERE  snapshot_date = '2019-11-30'
+  AND  warehouse_id = 1
+ORDER BY days_to_stockout;
+                                                                QUERY PLAN                                                                
+------------------------------------------------------------------------------------------------------------------------------------------
+ Sort  (cost=8.18..8.19 rows=1 width=16)
+   Sort Key: fact_inventory_daily.days_to_stockout
+   ->  Index Scan using fact_inventory_daily_wh1_pkey on fact_inventory_daily_wh1 fact_inventory_daily  (cost=0.15..8.17 rows=1 width=16)
+         Index Cond: ((warehouse_id = 1) AND (snapshot_date = '2019-11-30'::date))
+(4 rows)
 
--- ─────────────────────────────────────────────────────────────────────────
--- 3. FACT_SESSION_FUNNEL SCAN — BR2 source (funnel aggregation)
---    Query: SELECT funnel_stage, COUNT(*), AVG(view_to_cart_sec), ...
---           FROM fact_session_funnel WHERE session_date BETWEEN ...
--- ─────────────────────────────────────────────────────────────────────────
-
-                                                   QUERY PLAN
------------------------------------------------------------------------------------------------------------------
- GroupAggregate  (cost=13.00..13.06 rows=2 width=82)
-   Group Key: funnel_stage
-   ->  Sort  (cost=13.00..13.01 rows=2 width=35)
-         Sort Key: funnel_stage
-         ->  Bitmap Heap Scan on fact_session_funnel f  (cost=7.65..12.99 rows=2 width=35)
-               Recheck Cond: ((session_date >= '2019-11-01'::date) AND (session_date <= '2019-11-30'::date))
-               ->  Bitmap Index Scan on idx_fact_session_funnel_stage  (cost=0.00..7.65 rows=2 width=0)
-                     Index Cond: ((session_date >= '2019-11-01'::date) AND (session_date <= '2019-11-30'::date))
-
-✓ INDEX SCAN on idx_fact_session_funnel_stage for the date-range predicate.
-  Required columns visible in plan: funnel_stage, view_to_cart_sec, cart_to_purchase_sec, is_abandoned.
-
--- ─────────────────────────────────────────────────────────────────────────
--- 4. FACT_INVENTORY_DAILY — LIST partition pruning (warehouse_id=1)
---    Query: SELECT ... FROM fact_inventory_daily WHERE inventory_date='2019-11-30'
---           AND warehouse_id=1 ORDER BY days_to_stockout
--- ─────────────────────────────────────────────────────────────────────────
-
-                                                                       QUERY PLAN
----------------------------------------------------------------------------------------------------------------------------------------------------------
- Sort  (cost=8.18..8.19 rows=1 width=29)
-   Sort Key: f.days_to_stockout
-   ->  Index Scan using fact_inventory_daily_wh1_inventory_date_warehouse_id_produc_idx on fact_inventory_daily_wh1 f  (cost=0.15..8.17 rows=1 width=29)
-         Index Cond: ((inventory_date = '2019-11-30'::date) AND (warehouse_id = 1))
-
-✓ LIST PARTITION PRUNING: Only fact_inventory_daily_wh1 scanned for warehouse_id=1.
-  Semi-additive enforcement: single inventory_date filter confirmed in plan.
-
--- ═══════════════════════════════════════════════════════════════════════════
--- SUMMARY (W39 Checkpoint)
--- ═══════════════════════════════════════════════════════════════════════════
--- [✓] fact_event RANGE partitions: 30 daily + DEFAULT — pruning confirmed
--- [✓] fact_inventory_daily LIST partitions: 5 per warehouse — pruning confirmed
--- [✓] GIN index idx_dim_product_attributes_gin exists (jsonb_path_ops, @>)
--- [✓] fact_session_funnel idx_fact_session_funnel_stage used for BR2 scan
--- [✓] dim_date: 92 rows, 2019-10-01 to 2019-12-31, is_holiday consistent
--- [✓] dim_event_type: 5 rows (view/cart/purchase/other/unknown=-1)
--- [✓] dim_warehouse: 5 rows (IDs 1-5)
--- [✓] DDL ran clean from empty database (no errors)
--- ═══════════════════════════════════════════════════════════════════════════

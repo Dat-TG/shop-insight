@@ -3,7 +3,7 @@
 Run with:
     python tests/test_fixtures.py
 
-No extra dependencies — uses only stdlib json, pathlib, sys.
+No extra dependencies — uses only stdlib json, pathlib, re, sys.
 
 Validates:
   - Exactly 8 canonical fixture files exist in web/fixtures/.
@@ -15,18 +15,21 @@ Validates:
   - partitions is a non-negative integer.
   - rows is a non-negative integer.
   - rows == len(data).
-  - warehouse is an allowed value.
+  - meta.warehouse is the fixture's engine from docs/API_CONTRACT.md section 2.
   - Empty scenarios have data=[] and rows=0.
-  - Required per-BR fields exist and have the correct types.
+  - Each default row has exactly the contract's fields: required fields typed,
+    BR4's nullable fields present (null allowed), no field the contract lacks.
   - BR1/BR3 default fixtures contain at least one row with category_l1=="unknown".
   - BR6 default fixture contains the 9999.0 sentinel.
   - BR6 default fixture contains at least one urgent row (days_to_stockout < 3).
   - No field or filename containing "br9" or "BR9" exists.
+  - Every router's warehouse="..." literal is "Fixture" or its section-2 engine.
 """
 
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -34,6 +37,7 @@ from typing import Any
 # ── Resolve paths ────────────────────────────────────────────────────────────
 REPO = Path(__file__).resolve().parents[1]
 FIXTURES_DIR = REPO / "web" / "fixtures"
+ROUTERS_DIR = REPO / "serving" / "api" / "routers"
 
 # ── Constants ────────────────────────────────────────────────────────────────
 CANONICAL_FILES = [
@@ -47,7 +51,19 @@ CANONICAL_FILES = [
     "br8-order-velocity-alerts.json",
 ]
 
-ALLOWED_WAREHOUSES = {"Cassandra", "Parquet", "Postgres", "DuckDB", "Fixture"}
+# The storage mapping frozen in docs/API_CONTRACT.md section 2. A fixture carries
+# its BR's production engine. A router may also say "Fixture" while it still
+# serves a fixture (section 1.2). Postgres serves no screen (SYSTEM_DESIGN 12).
+EXPECTED_WAREHOUSE = {
+    "br1-gmv-by-minute.json": "Cassandra",
+    "br2-funnel-daily.json": "Parquet",
+    "br3-trending-products.json": "Cassandra",
+    "br4-rfm-segments.json": "Parquet",
+    "br5-abandoned-carts.json": "Cassandra",
+    "br6-stockout-risk.json": "Cassandra",
+    "br7-product-affinity.json": "Parquet",
+    "br8-order-velocity-alerts.json": "Cassandra",
+}
 META_REQUIRED_KEYS = {"ms", "warehouse", "partitions", "rows"}
 
 # Per-BR required row fields with their allowed Python types.
@@ -81,8 +97,7 @@ BR_ROW_FIELDS: dict[str, dict[str, Any]] = {
         "frequency": int,
         "monetary": (int, float),
         "segment": str,
-        # nullable fields: recency_days, r_score, f_score, m_score, rfm_cell
-        # validated separately
+        # nullable fields: BR_NULLABLE_FIELDS
     },
     "br5-abandoned-carts.json": {
         "event_date": str,
@@ -113,6 +128,18 @@ BR_ROW_FIELDS: dict[str, dict[str, Any]] = {
         "order_count": int,
         "total_value": (int, float),
         "severity": str,
+    },
+}
+
+# Per-BR fields that must be present in every row but may be null
+# (docs/API_CONTRACT.md section 6: null if the user never purchased).
+BR_NULLABLE_FIELDS: dict[str, dict[str, Any]] = {
+    "br4-rfm-segments.json": {
+        "recency_days": int,
+        "r_score": int,
+        "f_score": int,
+        "m_score": int,
+        "rfm_cell": str,
     },
 }
 
@@ -208,12 +235,12 @@ def validate_all() -> list[str]:
             if not isinstance(ms, (int, float)) or ms < 0:
                 errors.append(f"{prefix}.meta.ms: must be a non-negative number, got {ms!r}")
 
-            # ── 3g. warehouse is allowed ─────────────────────────────────────
+            # ── 3g. warehouse is the BR's contract engine ────────────────────
             wh = meta.get("warehouse")
-            if wh not in ALLOWED_WAREHOUSES:
+            if wh != EXPECTED_WAREHOUSE[fname]:
                 errors.append(
-                    f"{prefix}.meta.warehouse: must be one of {sorted(ALLOWED_WAREHOUSES)}, "
-                    f"got {wh!r}"
+                    f"{prefix}.meta.warehouse: contract §2 maps this BR to "
+                    f"{EXPECTED_WAREHOUSE[fname]!r}, got {wh!r}"
                 )
 
             # ── 3h. partitions >= 0 int ──────────────────────────────────────
@@ -246,6 +273,7 @@ def validate_all() -> list[str]:
             # ── 3l. Per-BR row field checks (default scenario only) ──────────
             if scenario_name == "default" and isinstance(data, list):
                 required_fields = BR_ROW_FIELDS.get(fname, {})
+                nullable_fields = BR_NULLABLE_FIELDS.get(fname, {})
                 for i, row in enumerate(data):
                     if not isinstance(row, dict):
                         errors.append(f"{prefix}.data[{i}]: must be an object")
@@ -260,9 +288,45 @@ def validate_all() -> list[str]:
                                 f"{prefix}.data[{i}].{field}: expected {expected_type}, "
                                 f"got {type(row[field]).__name__} ({row[field]!r})"
                             )
+                    # Exactly the contract's fields: nothing extra, nothing nullable omitted.
+                    extra = sorted(set(row) - set(required_fields) - set(nullable_fields))
+                    if extra:
+                        errors.append(
+                            f"{prefix}.data[{i}]: fields not in docs/API_CONTRACT.md: {extra}"
+                        )
+                    for field in nullable_fields:
+                        if field not in row:
+                            errors.append(
+                                f"{prefix}.data[{i}]: missing nullable field '{field}' "
+                                "(send null, do not omit it)"
+                            )
 
                 # Extra per-BR checks
                 _check_br_specifics(fname, scenario_name, data, errors)
+
+    # ── 4. Routers: warehouse literal is "Fixture" or the contract engine ────
+    # The regex matches warehouse="..." or warehouse='...' keyword arguments only.
+    # Docstring examples use "warehouse": "..." (a colon), so they are not matched.
+    # A router with no literal at all (a constant, a variable) is reported too,
+    # because this check could not see what it returns.
+    for fname in CANONICAL_FILES:
+        router = ROUTERS_DIR / f"{fname.split('-')[0]}.py"
+        if not router.exists():
+            errors.append(f"MISSING router for {fname}: {router.name}")
+            continue
+        allowed = {"Fixture", EXPECTED_WAREHOUSE[fname]}
+        literals = re.findall(r'warehouse\s*=\s*["\']([^"\']*)["\']', router.read_text())
+        if not literals:
+            errors.append(
+                f"{router.name}: no warehouse=\"...\" literal found; "
+                "pass QueryMeta a string literal so this check can read it"
+            )
+        for wh in literals:
+            if wh not in allowed:
+                errors.append(
+                    f"{router.name}: warehouse={wh!r}, must be one of {sorted(allowed)} "
+                    "(contract §2, or Fixture while it serves a fixture)"
+                )
 
     return errors
 
@@ -313,13 +377,7 @@ def _check_br_specifics(
                     f"got {seg!r}"
                 )
             # Nullable fields: allowed to be None or their natural type
-            for nullable_field, expected_type in [
-                ("recency_days", int),
-                ("r_score", int),
-                ("f_score", int),
-                ("m_score", int),
-                ("rfm_cell", str),
-            ]:
+            for nullable_field, expected_type in BR_NULLABLE_FIELDS[fname].items():
                 if nullable_field in row:
                     val = row[nullable_field]
                     if val is not None and not isinstance(val, expected_type):
@@ -397,6 +455,7 @@ def main() -> None:
     print("=" * 60)
     print("ShopInsight — Fixture Validation")
     print(f"Fixtures directory: {FIXTURES_DIR}")
+    print(f"Routers directory:  {ROUTERS_DIR}")
     print("=" * 60)
 
     errors = validate_all()

@@ -1,14 +1,16 @@
 """BR7 — Product Affinity (Bought Together) router.
 
-Owner: Nguyen (W39).
+Owner: Nguyen.
 
 Endpoint (placeholder):
     GET /api/br7/affinity
 
-W38 status: returns empty data.
-W39 plan:   read gold/product_affinity/ via DuckDB.
-            Response rows: product_a, product_b, co_count, support, lift.
-            Filter by anchor product_id query param.
+Now:  returns no rows, with meta.warehouse "Fixture" and partitions 0
+      (docs/API_CONTRACT.md section 1.2).
+Next: read gold/product_affinity/ via DuckDB.
+      Response rows: product_a, product_b, co_count, support, lift.
+      Filter by anchor product_id query param.
+      Then set meta.warehouse to "Parquet" (API_CONTRACT section 2).
 """
 
 from fastapi import APIRouter
@@ -20,8 +22,8 @@ router = APIRouter(prefix="/api/br7", tags=["BR7 — Product Affinity"])
 
 @router.get("/affinity", response_model=ApiResponse, summary="Frequently bought together (placeholder)")
 def get_affinity() -> ApiResponse:
-    """Placeholder — to be implemented in W39 by Nguyen."""
+    """Placeholder: returns no rows."""
     return ApiResponse(
         data=[],
-        meta=QueryMeta(ms=0.0, warehouse="fixture", partitions=0, rows=0),
+        meta=QueryMeta(ms=0.0, warehouse="Fixture", partitions=0, rows=0),
     )
