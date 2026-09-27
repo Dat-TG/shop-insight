@@ -6,7 +6,8 @@
 # is deterministic, so all four machines produce byte-identical datasets.
 # ---------------------------------------------------------------------------
 
-# Data lake — raw CSV, bronze/silver/gold Parquet, stream landing, checkpoints.
+# Data lake — raw CSV, bronze/silver/gold Parquet, the star in warehouse/, the generated
+# catalog/ and inventory/, stream landing, checkpoints.
 # The empty directory skeleton is kept via .gitkeep files (see !data/*/.gitkeep).
 data/*
 !data/raw/

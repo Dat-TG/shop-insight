@@ -493,7 +493,10 @@ CREATE TABLE fact_event (
   CONSTRAINT ck_fact_date  CHECK (event_date = event_time::date)
 ) PARTITION BY RANGE (event_date);
 -- 31 daily partitions (Vietnam dates 2019-11-01 .. 2019-12-01, see section 4)
--- + a DEFAULT catch-all, created by the loader.
+-- + a DEFAULT catch-all, created by warehouse/ddl.sql, not by the loader: the
+-- 2019-12-01 partition must exist before the first row arrives, or that row
+-- lands in DEFAULT and adding the partition later fails. fact_session_funnel
+-- gets the same 31 days + DEFAULT in ddl.sql.
 
 -- B-tree for BR1: the executive screen always filters date then category.
 CREATE INDEX ix_fact_event_purchase
@@ -568,6 +571,8 @@ CREATE TABLE fact_inventory_daily (
   CONSTRAINT pk_fid PRIMARY KEY (warehouse_id, snapshot_date, product_id),
   CONSTRAINT ck_fid_dts CHECK ((days_to_stockout IS NULL) = (velocity_7d = 0))
 ) PARTITION BY LIST (warehouse_id);
+-- ddl.sql creates one partition per warehouse (wh1..wh5) and no DEFAULT, so a
+-- row for a warehouse 6 fails loudly instead of hiding.
 -- Partitioned by warehouse_id because that is exactly BR6's access path — and
 -- because it makes the Postgres physical design converge on the Cassandra one:
 -- stockout_risk's partition key is (warehouse_id) too. Same logical model, two
@@ -605,7 +610,10 @@ the RFM note below.
 3. `stg_rfm_snapshot` — R/F/M per user per snapshot date, straight from silver
 4. `dim_user` — SCD2 over `stg_rfm_snapshot`
 5. `fact_event`, `fact_session_funnel`, `fact_inventory_daily`
-6. Write Parquet, then load Postgres from the same DataFrames
+6. Write Parquet, then load Postgres from the same DataFrames: the tables read
+   back from that Parquet, passed to the loading functions in
+   `serving/load_star_postgres.py` (Tin, W40). Until those exist, that script runs
+   on its own and loads the three small dimensions
 
 **Why step 3 exists.** RFM is BR4, a gold table — but `dim_user` is Type 2 on
 RFM segment, and gold is now built from the star. That is a cycle: dim_user needs
@@ -783,7 +791,7 @@ through both is the clearest way to explain the system.
    the streaming job exists.
 3. `batch_warehouse.py` builds the star schema in the order given in 5.6, writes
    it to `data/warehouse/` as Parquet, and loads the same DataFrames into
-   Postgres.
+   Postgres through `serving/load_star_postgres.py` (5.6 step 6).
 4. `batch_gold.py` reads the **star**, not silver, and computes the funnel (BR2),
    RFM projection (BR4), affinity (BR7) and stock-out risk (BR6), writing to
    Parquet gold and — for BR6 only — to Cassandra.
@@ -932,6 +940,8 @@ shop-insight/
 │   ├── kata.py                 Spark install check, prints four expected counts
 │   ├── batch_silver.py         bronze -> silver. Runs before any batch job
 │   ├── batch_warehouse.py      silver -> star schema (Parquet + Postgres)
+│   ├── dim_product.py          dim_product SCD2 + product_sk (5.6 step 2), imported by batch_warehouse
+│   ├── dim_user.py             stg_rfm_snapshot + dim_user SCD2 + user_sk (steps 3-4), imported likewise
 │   ├── streaming_gold.py       BR1, BR3, BR5, BR8
 │   └── batch_gold.py           BR2, BR4, BR6, BR7 — reads the star
 ├── warehouse/
@@ -940,7 +950,7 @@ shop-insight/
 │   ├── check_infra.py          Both drivers reach both containers; prints INFRA OK
 │   ├── cassandra_schema.cql    All CREATE TABLE statements
 │   ├── apply_schema.py
-│   ├── load_star_postgres.py   Star Parquet -> Postgres
+│   ├── load_star_postgres.py   Postgres loader: batch_warehouse step 6 calls it
 │   └── api/                    FastAPI, one router per BR
 ├── benchmark/
 │   ├── queries.sql             Shared query set across all configurations
@@ -948,9 +958,13 @@ shop-insight/
 │   └── results/
 ├── tests/
 │   └── test_fixtures.py        API contract check: fixtures and routers vs docs/API_CONTRACT.md
+├── checks/
+│   └── scd2_integrity.py       SCD2 check: no overlap or gap, one current row per key
 ├── web/                        React + TypeScript
 └── docs/
     ├── SETUP_SPARK.md          Unattended install: JDK, Python, PySpark, Docker
+    ├── SPARK_GUIDE_VI.md       The same, in Vietnamese, explaining every step and file
+    ├── BR_SCOPE.md             The 8 BRs: scope, owners, done criteria
     ├── STREAMING_PATTERN.md    The BR1 reference pattern the other three copy
     ├── DATA_MODEL.md           ERD + star + physical design, for the report
     ├── AI_USAGE.md             Where AI assistance was used
@@ -974,22 +988,20 @@ python serving/check_infra.py        # both drivers connect; prints INFRA OK
 python serving/apply_schema.py       # Cassandra keyspace and tables
 docker compose exec -T postgres psql -U shopinsight -d shopinsight -v ON_ERROR_STOP=1 < warehouse/ddl.sql   # Postgres star schema
 
-# 2. Load base data (once, 15-25 minutes)
-python ingestion/load_bronze.py      # 7% user sample, rule is hard-coded
-python processing/batch_silver.py    # bronze -> silver. Batch needs this
-python ingestion/gen_catalog.py      # product attributes JSON
-python ingestion/gen_inventory.py    # daily inventory series
-python processing/batch_warehouse.py # silver -> star (Parquet + Postgres)
-python serving/load_star_postgres.py # star -> Postgres
+# 2. Build the data, steps 1-6 in this order (1-2 once, 15-25 minutes)
+python ingestion/load_bronze.py      # 1. 7% user sample, rule is hard-coded
+python processing/batch_silver.py    # 2. bronze -> silver. Batch needs this
+python ingestion/gen_catalog.py      # 3. product attributes JSON
+python ingestion/gen_inventory.py    # 4. daily inventory series
+python processing/batch_warehouse.py # 5. silver -> star (Parquet + Postgres)
+python serving/load_star_postgres.py #    optional, Postgres only, until step 6 of batch_warehouse calls it
+python processing/batch_gold.py      # 6. reads the star
 
 # 3. Real-time stream (two terminals)
 python processing/streaming_gold.py       # start FIRST, let it wait
 python ingestion/replayer.py --speed 60   # 1 hour of data per minute
 
-# 4. Batch gold (any time after the warehouse is built)
-python processing/batch_gold.py
-
-# 5. Application
+# 4. Application
 uvicorn serving.api.main:app --reload --port 8000
 cd web && npm ci && npm run dev
 ```

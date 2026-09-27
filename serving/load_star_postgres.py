@@ -8,10 +8,12 @@ exists yet, and upsert them into Postgres:
     - dim_event_type    (5 rows: view, cart, purchase, remove_from_cart, unknown)
     - dim_warehouse     (5 rows: warehouse IDs 1-5)
 
-Later (not yet): once processing/batch_warehouse.py - the Spark build,
-SYSTEM_DESIGN.md 5.6 - lands, these rows move there, and this script switches to
-reading the star Parquet in data/warehouse/ and loading every table from it
-(SYSTEM_DESIGN.md section 10: "Star Parquet -> Postgres"):
+Later (W40, Tin): processing/batch_warehouse.py step 6 (SYSTEM_DESIGN.md 5.6)
+calls loading functions added to this file and passes them the tables it read
+back from the star Parquet in data/warehouse/. This file keeps
+build_dim_date_rows(), DIM_EVENT_TYPE_ROWS and DIM_WAREHOUSE_ROWS;
+batch_warehouse.py step 1 imports them, never copies. Tables still to load that
+way:
     - dim_product SCD2
     - dim_user SCD2
     - fact_event
