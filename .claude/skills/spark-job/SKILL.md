@@ -6,7 +6,8 @@ when_to_use: Triggers on "write batch_silver.py", "change the warehouse build", 
 
 # Batch PySpark in this repo
 
-No batch script exists yet (W38); these are the rules the first one establishes.
+`load_bronze.py`, `batch_silver.py`, `dim_user.py`, `gen_inventory.py` and the
+`batch_warehouse.py` skeleton follow these rules; copy their shape.
 
 ## 1. Shape of a script
 

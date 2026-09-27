@@ -41,11 +41,12 @@ TIERS = ["bronze", "silver", "warehouse", "gold", "catalog", "inventory", "strea
 SCRIPTS = [
     ("ingestion", ["load_bronze.py", "replayer.py", "gen_catalog.py", "gen_inventory.py"]),
     ("processing", ["schema.py", "source.py", "kata.py", "batch_silver.py",
-                    "batch_warehouse.py", "streaming_gold.py", "batch_gold.py"]),
+                    "batch_warehouse.py", "dim_product.py", "dim_user.py",
+                    "streaming_gold.py", "batch_gold.py"]),
     ("serving", ["check_infra.py", "cassandra_schema.cql", "apply_schema.py",
                  "load_star_postgres.py"]),
 ]
-SINGLE_FILES = ["warehouse/ddl.sql", "seed/holidays_2019.csv"]
+SINGLE_FILES = ["warehouse/ddl.sql", "seed/holidays_2019.csv", "checks/scd2_integrity.py"]
 
 
 def week_lines(today):

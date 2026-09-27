@@ -14,8 +14,8 @@ and proven**, not asserted. HCMUT, Semester 1 2026-2027. Group 15: Dat, Khang, N
 
 | | |
 |---|---|
-| What exists | The Spark setup: [docs/SETUP_SPARK.md](docs/SETUP_SPARK.md) (Vietnamese, with explanations: [docs/SPARK_GUIDE_VI.md](docs/SPARK_GUIDE_VI.md)), [requirements.txt](requirements.txt), [conf/spark-defaults.conf](conf/spark-defaults.conf), [processing/schema.py](processing/schema.py), [processing/kata.py](processing/kata.py); bronze: [ingestion/load_bronze.py](ingestion/load_bronze.py); silver: [processing/batch_silver.py](processing/batch_silver.py); infrastructure: [docker-compose.yml](docker-compose.yml), [.env.example](.env.example), [serving/check_infra.py](serving/check_infra.py). Plus [CLAUDE.md](CLAUDE.md), [SYSTEM_DESIGN.md](SYSTEM_DESIGN.md), [PLAN.md](PLAN.md), [docs/AI_USAGE.md](docs/AI_USAGE.md), [.gitignore](.gitignore), a `data/` skeleton, `.claude/`. The app skeleton: the frozen contract [docs/API_CONTRACT.md](docs/API_CONTRACT.md), its 8 fixture bundles in `web/fixtures/` and [tests/test_fixtures.py](tests/test_fixtures.py); FastAPI in `serving/api/`, 8 routers, where BR2, BR4 and BR6 return their fixture and the other five no rows, all with `meta.warehouse` `"Fixture"`; React in `web/`, 8 tabs, the BR2 screen on fixture data. The Postgres star: [warehouse/ddl.sql](warehouse/ddl.sql), [serving/load_star_postgres.py](serving/load_star_postgres.py) (`dim_date`, `dim_event_type`, `dim_warehouse`), [seed/holidays_2019.csv](seed/holidays_2019.csv), `docs/evidence/`. No BR reads real data yet |
-| W38 tasks | Done: `docs/SETUP_SPARK.md` + `processing/kata.py`, so all four install Spark unattended — **everyone runs it and posts `KATA OK`**; `ingestion/load_bronze.py` — **in W39 everyone runs it and posts the `BRONZE OK` numbers**; `processing/batch_silver.py` — **run right after it, post the `SILVER OK` numbers**; `docker-compose.yml` + `serving/check_infra.py`, so all four install Docker unattended — **everyone runs it and posts `INFRA OK`**. Next: the W39 warehouse layer (`processing/batch_warehouse.py`) |
+| What exists | The Spark setup: [docs/SETUP_SPARK.md](docs/SETUP_SPARK.md) (Vietnamese, with explanations: [docs/SPARK_GUIDE_VI.md](docs/SPARK_GUIDE_VI.md)), [requirements.txt](requirements.txt), [conf/spark-defaults.conf](conf/spark-defaults.conf), [processing/schema.py](processing/schema.py), [processing/kata.py](processing/kata.py); bronze: [ingestion/load_bronze.py](ingestion/load_bronze.py); silver: [processing/batch_silver.py](processing/batch_silver.py); infrastructure: [docker-compose.yml](docker-compose.yml), [.env.example](.env.example), [serving/check_infra.py](serving/check_infra.py). Plus [CLAUDE.md](CLAUDE.md), [SYSTEM_DESIGN.md](SYSTEM_DESIGN.md), [PLAN.md](PLAN.md), [docs/AI_USAGE.md](docs/AI_USAGE.md), [docs/BR_SCOPE.md](docs/BR_SCOPE.md) (the 8 BRs: scope, owners, done criteria), [.gitignore](.gitignore), a `data/` skeleton, `.claude/`. The app skeleton: the frozen contract [docs/API_CONTRACT.md](docs/API_CONTRACT.md), its 8 fixture bundles in `web/fixtures/` and [tests/test_fixtures.py](tests/test_fixtures.py); FastAPI in `serving/api/`, 8 routers, where BR2, BR4 and BR6 return their fixture and the other five no rows, all with `meta.warehouse` `"Fixture"`; React in `web/`, 8 tabs, the BR2 screen on fixture data. The Postgres star: [warehouse/ddl.sql](warehouse/ddl.sql), [serving/load_star_postgres.py](serving/load_star_postgres.py) (`dim_date`, `dim_event_type`, `dim_warehouse`), [seed/holidays_2019.csv](seed/holidays_2019.csv), `docs/evidence/`. The warehouse layer: the skeleton [processing/batch_warehouse.py](processing/batch_warehouse.py) (the SYSTEM_DESIGN 5.6 order with one stub per table, owners fill their own; prints `WAREHOUSE PARTIAL: 0 of 9 tables built`), [processing/dim_user.py](processing/dim_user.py) (`stg_rfm_snapshot` + `dim_user` SCD2, standalone until batch_warehouse imports it), [ingestion/gen_inventory.py](ingestion/gen_inventory.py), [checks/scd2_integrity.py](checks/scd2_integrity.py). No BR reads real data yet |
+| W38-W39 tasks | Done: `docs/SETUP_SPARK.md` + `processing/kata.py`, so all four install Spark unattended — **everyone runs it and posts `KATA OK`**; `ingestion/load_bronze.py` — **in W39 everyone runs it and posts the `BRONZE OK` numbers**; `processing/batch_silver.py` — **run right after it, post the `SILVER OK` numbers**; `docker-compose.yml` + `serving/check_infra.py`, so all four install Docker unattended — **everyone runs it and posts `INFRA OK`**. W39: the `batch_warehouse.py` skeleton is in; each owner replaces the body of their own `build_*` stub, keeps its signature and writes through `write_dim`/`write_fact`. Next: `fact_event` (Dat, after PR #11 brings `dim_product`) |
 | Next hard gate | Gate 1, W40 (28 Sep - 4 Oct): BR1 running on Structured Streaming, evidenced by a screenshot of the micro-batch log and rows in `gmv_by_minute` |
 
 Every path in SYSTEM_DESIGN section 10 is a plan, not a fact, until Repository layout below marks it `[x]` or `[~]`.
@@ -54,8 +54,9 @@ create `data/silver/_spark_metadata/`, after which Spark reads only the files in
 loader glob the whole directory, and the correctness gate is void.
 
 Star row counts come from SYSTEM_DESIGN 5.2, 5.4 and 5.5, which labels them measured, but **no Spark warehouse build
-exists to reproduce them** — `batch_warehouse.py` is not written and `data/warehouse/` is empty; only the three small
-dims exist, in Postgres, from `serving/load_star_postgres.py`. Confirm in W39: `fact_event` 4,681,493 ·
+reproduces them yet** — `batch_warehouse.py` is a skeleton whose tables are all stubs, `processing/dim_user.py` builds
+`stg_rfm_snapshot` and `dim_user` on its own, and only the three small dims exist in Postgres, from
+`serving/load_star_postgres.py`. Confirm in W39: `fact_event` 4,681,493 ·
 `fact_session_funnel` 954,686 · `fact_inventory_daily` 1,898,850 (arithmetic: 12,659 purchased SKUs x 5 warehouses x 30
 days) · `dim_product` 127,693 -> 244,025 SCD2 versions · `dim_date` 92 · `dim_event_type`, `dim_warehouse` 5 each.
 These were measured on an **earlier sample drawn with a different hash** (4,694,166 rows); Spark's own sample has
@@ -183,18 +184,18 @@ docker compose exec -T postgres psql -U shopinsight -d shopinsight -v ON_ERROR_S
 #   instead, if you have psql:
 #   PGPASSWORD=local_dev_only psql -h 127.0.0.1 -p 5432 -U shopinsight -d shopinsight -v ON_ERROR_STOP=1 -f warehouse/ddl.sql
 #   All four values are decided in .env.example and docker-compose.yml (W38).
-# (c) build the data — once, 15-25 minutes
-python ingestion/load_bronze.py      # 7% user sample, rule hard-coded; prints BRONZE OK
-python processing/batch_silver.py    # bronze -> silver, 7 cleaning rules; prints SILVER OK. Batch needs this
-python ingestion/gen_catalog.py      # (not written yet — W39, Nguyen) product attributes JSON
-python ingestion/gen_inventory.py    # (not written yet) daily inventory series
-python processing/batch_warehouse.py # (not written yet — W39, skeleton Dat) silver -> star
-python serving/load_star_postgres.py # star -> Postgres; W39: the three small dims; prints POSTGRES STAR OK
+# (c) build the data — steps 1-6 in this order; steps 1-2 run once, 15-25 minutes
+python ingestion/load_bronze.py      # 1. 7% user sample, rule hard-coded; prints BRONZE OK
+python processing/batch_silver.py    # 2. bronze -> silver, 7 cleaning rules; prints SILVER OK. Batch needs this
+python ingestion/gen_catalog.py      # 3. (not written yet — W39, Nguyen, PR #11) product attributes JSON
+python ingestion/gen_inventory.py    # 4. daily inventory series; prints INVENTORY OK
+python processing/batch_warehouse.py # 5. silver -> star (Parquet + Postgres); W39 skeleton: prints WAREHOUSE PARTIAL
+python serving/load_star_postgres.py #    optional, Postgres only, until step 6 of batch_warehouse calls it; W39: the three small dims; prints POSTGRES STAR OK
+python processing/batch_gold.py      # 6. (not written yet — per-BR owners, W40-W41) reads the star
 # (d) run the stream — two terminals, IN THIS ORDER
 python processing/streaming_gold.py       # (not written yet — W40, Dat) start FIRST, let it wait
 python ingestion/replayer.py --speed 60   # (not written yet — W40, Tin) 1 hour of data per minute
-# (e) batch gold and the app
-python processing/batch_gold.py           # (not written yet — per-BR owners, W39-W41) after the star exists
+# (e) the app
 uvicorn serving.api.main:app --reload --port 8000   # from the repo root; web/ calls :8000
 cd web && npm ci && npm run dev           # 2nd terminal; Node ^20.19 or >=22.12 (vite 8.3); :5173, CORS allows 5173-5175
 ```
@@ -248,17 +249,19 @@ lives in `seed/`, **not** under `data/` — `data/raw/holidays_2019.csv` is sile
 [~] data/            gitignored except the .gitkeep skeleton; nothing here travels between machines
     [x] raw/ bronze/ silver/ gold/ stream_landing/ checkpoints/ warehouse/ catalog/ inventory/
         each tracked only through its .gitkeep; a new data/ directory needs its own .gitignore negation
-[~] docs/            [x] AI_USAGE.md API_CONTRACT.md SETUP_SPARK.md SPARK_GUIDE_VI.md evidence/  [ ] STREAMING_PATTERN.md DATA_MODEL.md
+[~] docs/            [x] AI_USAGE.md API_CONTRACT.md BR_SCOPE.md SETUP_SPARK.md SPARK_GUIDE_VI.md evidence/  [ ] STREAMING_PATTERN.md DATA_MODEL.md
 [x] requirements.txt    [x] conf/spark-defaults.conf  driver memory + UTC, read by every script
 [x] docker-compose.yml  Cassandra 4.1.12 + Postgres 16.15   [x] .env.example  ports, db, user, password
 [~] web/  React + TypeScript: 8 tabs, BR2 screen on fixture data; fixtures/ holds the 8 contract bundles
 [x] seed/holidays_2019.csv  Committed, feeds dim_date.is_holiday
-[~] ingestion/       [x] load_bronze.py  [ ] replayer.py gen_catalog.py gen_inventory.py
-[~] processing/      [x] schema.py kata.py batch_silver.py  [ ] source.py batch_warehouse.py streaming_gold.py batch_gold.py
+[~] ingestion/       [x] load_bronze.py gen_inventory.py  [ ] replayer.py gen_catalog.py
+[~] processing/      [x] schema.py kata.py batch_silver.py dim_user.py  [~] batch_warehouse.py (skeleton: every table a stub)
+                     [ ] source.py dim_product.py (PR #11) streaming_gold.py batch_gold.py
 [x] warehouse/ddl.sql  Postgres star schema DDL   [ ] benchmark/  queries.sql run_benchmark.py results/
 [~] serving/         [x] check_infra.py  [~] api/ (fixtures only) load_star_postgres.py (3 small dims)
                      [ ] cassandra_schema.cql apply_schema.py
 [x] tests/test_fixtures.py  API contract check: fixtures and routers vs docs/API_CONTRACT.md
+[x] checks/scd2_integrity.py  SCD2 check: no overlap or gap, exactly one current row per key
 ```
 
 ## Four traps that bite on day one
@@ -285,8 +288,8 @@ git switch -c br2-funnel            # one branch per slice
 git push -u origin HEAD             # then open the PR on GitHub
 ```
 
-Required approvals are **0 for now**, because only Dat-TG is a collaborator and GitHub never counts an author's own
-approval — at 1, nothing could merge. Once Khang, Nguyen and Tin are added, raise it to match PLAN.md's review rule:
+Required approvals are still **0**. Khang, Nguyen and Tin are now collaborators with write access, so a teammate's
+approval can count (GitHub never counts the author's own). Raise it to 1 to match PLAN.md's review rule:
 
 ```bash
 gh api -X PATCH repos/Dat-TG/shop-insight/branches/main/protection/required_pull_request_reviews \

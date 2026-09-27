@@ -12,14 +12,12 @@
 --   docker exec shopinsight-postgres psql -U shopinsight -d shopinsight -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'
 --
 -- Between BEGIN and COMMIT this is SYSTEM_DESIGN.md 5.4/5.5 verbatim. A change starts
--- there and is copied here. The only differences are marked "-- not in 5.4" or
--- "-- not in 5.5":
---   - no INSERT INTO dim_event_type. serving/load_star_postgres.py writes the five
---     rows; the Spark build (processing/batch_warehouse.py) will write the same rows
---     to Parquet.
---   - the fact partitions are created here, not by a loader, because 2019-12-01 must
---     exist before the first row: a Dec-01 row sitting in DEFAULT makes adding that
---     partition fail with ERROR 23514.
+-- there and is copied here. Two differences:
+--   - no INSERT INTO dim_event_type, marked "-- not in 5.4". serving/load_star_postgres.py
+--     writes the five rows; the Spark build (processing/batch_warehouse.py) will write
+--     the same rows to Parquet.
+--   - the CREATE TABLE ... PARTITION OF statements. 5.5 says in a comment which
+--     partitions exist and that this file creates them; the statements spell them out.
 --
 -- W39 loads the three small dims only (dim_date, dim_event_type, dim_warehouse);
 -- dim_product, dim_user and the three facts stay empty until the Spark build.
@@ -171,8 +169,10 @@ CREATE TABLE fact_event (
   CONSTRAINT ck_fact_date  CHECK (event_date = event_time::date)
 ) PARTITION BY RANGE (event_date);
 -- 31 daily partitions (Vietnam dates 2019-11-01 .. 2019-12-01, see section 4)
--- + a DEFAULT catch-all, created by the loader.
--- not in 5.5: created here, not by the loader, so 2019-12-01 exists before any row
+-- + a DEFAULT catch-all, created by warehouse/ddl.sql, not by the loader: the
+-- 2019-12-01 partition must exist before the first row arrives, or that row
+-- lands in DEFAULT and adding the partition later fails. fact_session_funnel
+-- gets the same 31 days + DEFAULT in ddl.sql.
 CREATE TABLE fact_event_20191101 PARTITION OF fact_event FOR VALUES FROM ('2019-11-01') TO ('2019-11-02');
 CREATE TABLE fact_event_20191102 PARTITION OF fact_event FOR VALUES FROM ('2019-11-02') TO ('2019-11-03');
 CREATE TABLE fact_event_20191103 PARTITION OF fact_event FOR VALUES FROM ('2019-11-03') TO ('2019-11-04');
@@ -253,7 +253,6 @@ CREATE TABLE fact_session_funnel (
     (view_to_cart_sec     IS NULL) = (first_view_at IS NULL OR first_cart_at IS NULL)
 AND (cart_to_purchase_sec IS NULL) = (first_cart_at IS NULL OR purchase_at   IS NULL))
 ) PARTITION BY RANGE (session_start_date);
--- not in 5.5: the same 31 days + DEFAULT as fact_event, created here for the same reason
 CREATE TABLE fact_session_funnel_20191101 PARTITION OF fact_session_funnel FOR VALUES FROM ('2019-11-01') TO ('2019-11-02');
 CREATE TABLE fact_session_funnel_20191102 PARTITION OF fact_session_funnel FOR VALUES FROM ('2019-11-02') TO ('2019-11-03');
 CREATE TABLE fact_session_funnel_20191103 PARTITION OF fact_session_funnel FOR VALUES FROM ('2019-11-03') TO ('2019-11-04');
@@ -312,11 +311,12 @@ CREATE TABLE fact_inventory_daily (
   CONSTRAINT pk_fid PRIMARY KEY (warehouse_id, snapshot_date, product_id),
   CONSTRAINT ck_fid_dts CHECK ((days_to_stockout IS NULL) = (velocity_7d = 0))
 ) PARTITION BY LIST (warehouse_id);
+-- ddl.sql creates one partition per warehouse (wh1..wh5) and no DEFAULT, so a
+-- row for a warehouse 6 fails loudly instead of hiding.
 -- Partitioned by warehouse_id because that is exactly BR6's access path — and
 -- because it makes the Postgres physical design converge on the Cassandra one:
 -- stockout_risk's partition key is (warehouse_id) too. Same logical model, two
 -- engines, the same pruning decision. That is a clean paragraph for the report.
--- not in 5.5: one partition per warehouse and no DEFAULT, so a warehouse 6 row fails loudly
 CREATE TABLE fact_inventory_daily_wh1 PARTITION OF fact_inventory_daily FOR VALUES IN (1);
 CREATE TABLE fact_inventory_daily_wh2 PARTITION OF fact_inventory_daily FOR VALUES IN (2);
 CREATE TABLE fact_inventory_daily_wh3 PARTITION OF fact_inventory_daily FOR VALUES IN (3);

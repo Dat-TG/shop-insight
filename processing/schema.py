@@ -4,6 +4,23 @@ The columns are the nine columns of data/raw/2019-Nov.csv, in file order. The
 same schema reads the raw CSV (kata.py, load_bronze.py) and, from W40, the JSON
 files the replayer writes (Structured Streaming cannot infer a schema).
 
+The streaming job (processing/streaming_gold.py, W40) reads data/stream_landing/
+with this schema. Two rules bind it; SYSTEM_DESIGN.md section 8 has the argument:
+
+- IT NEVER WRITES data/silver/. Silver has exactly one writer,
+  processing/batch_silver.py; reading with this schema does not make the stream
+  a silver writer. A Parquet file sink would create data/silver/_spark_metadata/,
+  after which Spark reads only the files listed there; a foreachBatch write
+  would add the replayed events a second time. The stream writes to Cassandra
+  only.
+- IT SHIFTS event_time TO UTC+7 AND RECOMPUTES event_date, exactly as batch
+  does, by importing clean() from processing/batch_silver.py rather than
+  copying the rules. The replayer replays bronze, whose times are UTC. Skip the
+  shift and gmv_by_minute files a 17:00-24:00 UTC event under its UTC date,
+  while funnel_daily, built in batch from the star and so on silver's Vietnam
+  dates, files it under the next day: the executive screen and the funnel
+  screen disagree about which day the event belongs to.
+
 Never let Spark guess the types with inferSchema:
 
 - It scans the whole 9 GB file once more just to guess.

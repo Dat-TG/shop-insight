@@ -678,6 +678,17 @@ Nó định nghĩa `EVENT_SCHEMA`, gồm 9 cột theo đúng thứ tự trong fi
 - **Vì sao "đúng một chỗ"?** Streaming (W40) cũng phải dùng đúng schema này: Structured
   Streaming không tự đoán được schema. Khai báo hai nơi thì sớm muộn hai bản sẽ lệch
   nhau. Ai cần schema thì `from processing.schema import EVENT_SCHEMA`.
+- **Hai luật cho job streaming W40**, ghi ngay đầu `schema.py` để người viết streaming đọc
+  thấy trước khi viết dòng đầu tiên:
+  1. Job streaming đọc bằng schema này nhưng **không bao giờ ghi vào `data/silver/`**. Silver
+     chỉ có một writer là `batch_silver.py`. Lý do ở phần `batch_silver.py` bên dưới.
+  2. Job streaming phải dời `event_time` sang UTC+7 **và tính lại `event_date`** y hệt batch,
+     bằng cách import `clean()` từ `batch_silver.py`, không chép lại luật. Quên bước này thì
+     `gmv_by_minute` (BR1) xếp một sự kiện lúc 17:00-24:00 UTC vào ngày UTC, còn `funnel_daily`
+     (BR2) xếp nó vào ngày hôm sau theo giờ Việt Nam: hai màn hình cãi nhau về ngày.
+- `batch_warehouse.py` cũng import `EVENT_SCHEMA`, nhưng không để đọc (Parquet tự mang
+  schema) mà làm thước đo: silver có cột nào lệch kiểu so với `EVENT_SCHEMA`, ví dụ `user_id`
+  thành INT, thì script dừng trước khi ghi đè bất kỳ bảng nào.
 - `RAW_TIMESTAMP_FORMAT = "yyyy-MM-dd HH:mm:ss z"` mô tả cách thời gian được viết trong
   CSV (`2019-11-01 00:00:00 UTC`). Chữ `z` đọc phần tên múi giờ `UTC`, nên giá trị luôn
   được hiểu là UTC, dù máy đặt múi giờ nào.
