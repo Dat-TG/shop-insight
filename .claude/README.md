@@ -16,6 +16,9 @@ skill is a markdown file one of us wrote; its slash name is the **directory** na
 | `skills/br-slice/SKILL.md` | One BR = Spark query + API endpoint + React screen. Section 0 is the BR / owner / sink / screen table; weeks live only in `PLAN.md` |
 | `skills/checkpoint/SKILL.md` | Drafts one person's Wednesday checkpoint post from git, names the gate artefact due, checks the W39 handover trigger |
 | `skills/ai-usage-log/SKILL.md` | How to append a session record to `docs/AI_USAGE.md` |
+| `skills/pr-review/SKILL.md` | Reviews a PR, or a branch before its PR, against CLAUDE.md, SYSTEM_DESIGN, br-slice and PLAN.md. Runs in one context, with no subagents and no long jobs; the three agents' files serve as checklists. Verifies each finding against the PR head and drafts a review in the PR's language. The reviewer posts it |
+| `skills/pr-review/references/layer-checks.md` | What to check in DDL, CQL, API, screens, fixtures, tests, docs and config, each check pointing at the section that owns the rule |
+| `skills/pr-review/scripts/pr_context.py` | Fetches the PR head as `pr/<N>` and exports it outside the repo, sorts the changed files into buckets, prints signals. Never checks out, posts or runs the PR's code |
 | `agents/spark-reviewer.md` | Reviews PySpark against the trap list |
 | `agents/data-fact-checker.md` | Measures a claimed number on this machine and prints the command |
 | `agents/br-slice-auditor.md` | Checks one BR across Spark query, sink, endpoint and screen |
@@ -70,3 +73,4 @@ Hooks match text; nothing checks judgement. These three are what this project hi
 | Proposes a new technology — Airflow to schedule the batch jobs, dbt for the star, Redis in front of a slow screen, the Spark-Cassandra connector instead of `foreachBatch` | "CLAUDE.md rule 1: do not add technologies. Do it with the locked stack, or tell me it cannot be done." The connector case is rule 2 by name |
 | Works horizontally — four Spark queries written, or every API endpoint stubbed, before one BR is visible on a screen | "CLAUDE.md rule 6: vertical slices. Finish BR*n*'s Spark query, endpoint and React screen before touching another BR." Four half-finished BRs demo as zero, and rule 7 puts demonstrated BRs above everything else |
 | Asserts a number it did not measure — "about 8M rows", "roughly 200 ms faster", "this should be 3x quicker" | "Which command produced that number? If there isn't one, delete the sentence." Rule 3 and `docs/AI_USAGE.md` make it standing policy: every number that reaches the report carries its command. `data-fact-checker` settles exactly this |
+| Reviews a teammate's PR with generic advice (add type hints, more unit tests, "cache this", "make it configurable"), or offers to post the review itself | "Use `/pr-review`. Its section 4 lists what this project never asks for, and section 6 says a human posts." The generic `/code-review` knows none of the hard rules, so its advice can break rules 1, 3 and 4 |

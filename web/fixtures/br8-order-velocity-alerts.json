@@ -1,0 +1,60 @@
+{
+  "_contract": "BR8 — Order Velocity Alerts",
+  "_endpoint": "GET /api/br8/alerts",
+  "_warehouse": "Cassandra",
+  "_table": "order_velocity_alerts",
+  "_primary_key": "((event_date), window_start, user_id)",
+  "_clustering": "window_start DESC, user_id ASC",
+  "_severity_vocab": "low | medium | high",
+  "default": {
+    "data": [
+      {
+        "event_date": "2019-11-29",
+        "window_start": "2019-11-29T14:10:00+07:00",
+        "user_id": 541312140,
+        "order_count": 18,
+        "total_value": 8920.50,
+        "severity": "high"
+      },
+      {
+        "event_date": "2019-11-29",
+        "window_start": "2019-11-29T14:05:00+07:00",
+        "user_id": 530253200,
+        "order_count": 7,
+        "total_value": 3240.00,
+        "severity": "medium"
+      },
+      {
+        "event_date": "2019-11-29",
+        "window_start": "2019-11-29T14:05:00+07:00",
+        "user_id": 515915625,
+        "order_count": 3,
+        "total_value": 1450.75,
+        "severity": "medium"
+      },
+      {
+        "event_date": "2019-11-29",
+        "window_start": "2019-11-29T14:00:00+07:00",
+        "user_id": 572756958,
+        "order_count": 2,
+        "total_value": 640.50,
+        "severity": "low"
+      }
+    ],
+    "meta": {
+      "ms": 7.8,
+      "warehouse": "Cassandra",
+      "partitions": 1,
+      "rows": 4
+    }
+  },
+  "empty": {
+    "data": [],
+    "meta": {
+      "ms": 2.3,
+      "warehouse": "Cassandra",
+      "partitions": 1,
+      "rows": 0
+    }
+  }
+}

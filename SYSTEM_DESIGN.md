@@ -140,8 +140,10 @@ holiday_date,holiday_name,holiday_type
 `holiday_type` is one of `public_holiday`, `retail_event`, `promo_period`,
 `observance`. For this dataset the retail events matter far more than national
 holidays: Black Friday falls inside the November window and is the single
-largest demand signal in the file. Vietnamese public holidays are included for
-completeness but none fall in November 2019.
+largest demand signal in the file. No Vietnamese public holiday falls between
+1 October and 31 December 2019, so the file has none. Every date in it must fall
+inside `dim_date` (2019-10-01 .. 2019-12-31); `serving/load_star_postgres.py`
+checks that.
 
 ### 3.3 Product catalogue (generated)
 
@@ -944,12 +946,15 @@ shop-insight/
 │   ├── queries.sql             Shared query set across all configurations
 │   ├── run_benchmark.py        Measures p50/p95, writes CSV
 │   └── results/
+├── tests/
+│   └── test_fixtures.py        API contract check: fixtures and routers vs docs/API_CONTRACT.md
 ├── web/                        React + TypeScript
 └── docs/
     ├── SETUP_SPARK.md          Unattended install: JDK, Python, PySpark, Docker
     ├── STREAMING_PATTERN.md    The BR1 reference pattern the other three copy
     ├── DATA_MODEL.md           ERD + star + physical design, for the report
     ├── AI_USAGE.md             Where AI assistance was used
+    ├── API_CONTRACT.md         Frozen BR1-BR8 endpoint contract
     └── evidence/               EXPLAIN ANALYZE output, DESCRIBE TABLE
                                 screenshots, query plans. Feeds report + slides
 ```
@@ -967,7 +972,7 @@ directory to find a `.gitkeep`.
 docker compose up -d --wait          # Cassandra + Postgres; --wait returns only when both are healthy
 python serving/check_infra.py        # both drivers connect; prints INFRA OK
 python serving/apply_schema.py       # Cassandra keyspace and tables
-docker compose exec -T postgres psql -U shopinsight -d shopinsight < warehouse/ddl.sql   # Postgres star schema
+docker compose exec -T postgres psql -U shopinsight -d shopinsight -v ON_ERROR_STOP=1 < warehouse/ddl.sql   # Postgres star schema
 
 # 2. Load base data (once, 15-25 minutes)
 python ingestion/load_bronze.py      # 7% user sample, rule is hard-coded
@@ -975,6 +980,7 @@ python processing/batch_silver.py    # bronze -> silver. Batch needs this
 python ingestion/gen_catalog.py      # product attributes JSON
 python ingestion/gen_inventory.py    # daily inventory series
 python processing/batch_warehouse.py # silver -> star (Parquet + Postgres)
+python serving/load_star_postgres.py # star -> Postgres
 
 # 3. Real-time stream (two terminals)
 python processing/streaming_gold.py       # start FIRST, let it wait
@@ -984,8 +990,8 @@ python ingestion/replayer.py --speed 60   # 1 hour of data per minute
 python processing/batch_gold.py
 
 # 5. Application
-uvicorn serving.api.main:app --reload
-cd web && npm run dev
+uvicorn serving.api.main:app --reload --port 8000
+cd web && npm ci && npm run dev
 ```
 
 `load_bronze.py` takes no `--rows` flag. The sample size is whatever the
