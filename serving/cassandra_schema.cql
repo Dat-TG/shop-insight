@@ -3,7 +3,7 @@
 -- behaviour described in SYSTEM_DESIGN.md section 6.
 
 -- BR1: GMV per minute, for the executive screen
-CREATE TABLE gmv_by_minute (
+CREATE TABLE IF NOT EXISTS gmv_by_minute (
   event_date    date,
   category_l1   text,
   window_start  timestamp,
@@ -13,7 +13,7 @@ CREATE TABLE gmv_by_minute (
 ) WITH CLUSTERING ORDER BY (window_start DESC);
 
 -- BR3: trending products, 15-minute sliding window
-CREATE TABLE trending_products (
+CREATE TABLE IF NOT EXISTS trending_products (
   window_start  timestamp,
   rank          int,
   product_id    bigint,
@@ -25,7 +25,7 @@ CREATE TABLE trending_products (
 );
 
 -- BR5: abandoned carts, for the CRM team
-CREATE TABLE abandoned_carts (
+CREATE TABLE IF NOT EXISTS abandoned_carts (
   event_date    date,
   user_session  text,
   cart_value    decimal,
@@ -36,7 +36,7 @@ CREATE TABLE abandoned_carts (
 );
 
 -- BR6: stock-out risk per warehouse
-CREATE TABLE stockout_risk (
+CREATE TABLE IF NOT EXISTS stockout_risk (
   warehouse_id      int,
   days_to_stockout  float,
   product_id        bigint,
@@ -46,7 +46,7 @@ CREATE TABLE stockout_risk (
 );
 
 -- BR8: order velocity alerts
-CREATE TABLE order_velocity_alerts (
+CREATE TABLE IF NOT EXISTS order_velocity_alerts (
   event_date    date,
   window_start  timestamp,
   user_id       bigint,
