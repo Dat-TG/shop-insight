@@ -1003,3 +1003,105 @@ Closed here:
 - `fact_event` 4,681,493;
 - "AS OF event_time";
 - Session 9's "spot-check fails for 14.2% by design", now definition (c) of the spot check.
+
+## Session 11 — 28-29 September 2026 (W40)
+
+**Tool:** Claude Code (Opus 5.5).
+**Scope:** the Part 1 tracker sheet (W38–W42) was checked against the repo and edited in place. `PLAN.md` and
+`README.md` were brought in line with it, and three Mermaid diagrams were added to `README.md`. No application code
+was written. At Dat's request the AI committed the repo changes on branch `w40-plan-and-readme-diagrams` and opened the
+PR. Dat reviews it and merges it.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| Part 1 tracker sheet — 89 cells in 54 rows (descriptions, gates, notes and 12 statuses). A new row 66 for Tín (W40, 0.50 h): step 6 of `batch_warehouse.py`, plus the flat silver table the benchmark needs. The hours column rewritten as numbers | Written in place through the Google Sheets connector, then read back and compared (below). Wording: human review pending |
+| `PLAN.md` — two moves, and nobody's total changes. The replayer goes to Dat: the W40 streaming-foundation row goes from 1.00 to 1.25 h, paid by the W41 Spark-memory row (0.25 → 0 h, done since W38). Step 6 and the flat table become Tín's W40 row (0.50 h), paid by the W40 benchmark-harness row (1.00 → 0.50 h). The owner table, week table and totals line follow, with a new "Sửa ngày 28/9" paragraph | AI-drafted, approved by Dat. Tín's confirmation pending |
+| `README.md` — the replayer's run line names Dat. Under Architecture, the ASCII drawing becomes a Mermaid flowchart, and a new "The star schema" subsection holds a Mermaid ER diagram. Under Getting started (d), a sequence diagram shows the stream's start order | AI-drafted, rendered and checked (below). Human review pending |
+| `docs/AI_USAGE.md` — this session | AI-drafted |
+
+### How it was checked
+
+The tracker:
+- **Audit.** A workflow compared every Part 1 row with the repo. 7 auditors and 7 adversarial verifiers, told to
+  refute the findings, left 119 findings standing.
+- **Edits.** 5 drafters wrote the cell edits, and 5 checkers plus 1 consistency critic reviewed them. A script applied
+  them to a local copy and refused any replacement that did not match exactly once: 0 errors.
+- **Writing.** The new row was inserted inside the sheet's Table, which then reaches row 100. Every untouched cell was
+  sent as null, so it was not rewritten.
+- **Reading back.** A full read of `A1:J` was compared cell by cell with the approved text: 0 mismatches in rows 2–100.
+  The header was unchanged, and row 66 is formatted like row 65.
+- **Hours and statuses.** Summed per person per week, the sheet's hours equal the `PLAN.md` week table: 64.50 h for
+  W38–W42. Statuses: Chưa bắt đầu 60, Xong 35, Đang làm 4.
+
+The week table in `PLAN.md`:
+
+```bash
+python3 -c "import re; r=[[float(x) for x in l.strip().strip('|').split('|')[-4:]] for l in open('PLAN.md') if re.match(r'\| W(3[89]|4[0-6]) \|', l)]; print([sum(c) for c in zip(*r)], [sum(h) for h in r], min(map(min, r)), max(map(max, r)))"
+# [25.0, 25.0, 25.0, 25.0] [12.5, 15.0, 15.0, 11.75, 10.25, 8.75, 9.75, 8.75, 8.25] 2.0 4.0
+```
+
+The diagrams:
+- **Which Mermaid GitHub runs.** GitHub's renderer script (`mermaidMarkdown-*.js` on
+  `viewscreen.githubusercontent.com`) calls Mermaid 11.17.2. It sets `securityLevel: "antiscript"` and flowchart
+  padding 48, and switches to the dark theme when the page is dark.
+- **Rendering.** Each `mermaid` block was cut from `README.md` and rendered with `@mermaid-js/mermaid-cli@11`, which is
+  the same 11.17.2, under those settings, light and dark. The images were then inspected. Widths: 874, 1,263 and
+  1,140 px. The blocks also parse on Mermaid 10.9.8 and 12.0.0.
+- **Content.** Every label was checked against SYSTEM_DESIGN sections 1, 4, 5.3–5.6, 6, 7 and 8, against
+  `warehouse/ddl.sql`, and against `main()` in `processing/batch_warehouse.py`.
+
+### What the AI got wrong, and was corrected on
+
+- **The first route to the sheet wiped its formatting.** The AI rebuilt the sheet as an `.xlsx`, and Dat imported it
+  with "Replace spreadsheet". The import wiped the Google Sheets Table formatting (header colour, stripes, dropdown
+  chips), which an `.xlsx` cannot carry. Dat restored the sheet from Version history, and it matched the pre-edit
+  export with 0 differences. He then connected the Google Sheets connector, and the edits were redone in place.
+- **The first diagram drafts were 1,400–2,200 px wide.** GitHub would have shrunk their text, and Mermaid 11 broke
+  long labels in mid-name. They are now 874–1,263 px. The architecture block sets `wrappingWidth: 260` so that no
+  table name breaks.
+- **The first star-schema layout drew a relation that does not exist.** The `dim_user` → `fact_event` edge ran behind
+  `fact_inventory_daily`, so it read as a link between those two tables. Writing some relationships fact-first gives
+  four rows and no crossing.
+- **A "partition key" note was true for Postgres only.** It sat on `fact_inventory_daily.warehouse_id`, but the
+  Parquet copy is partitioned by `snapshot_date` (SYSTEM_DESIGN 5.3; `write_fact` in `batch_warehouse.py`). Both
+  columns are now labelled.
+- **A fourth diagram, the build order inside `batch_warehouse.py`, rendered as a tangle.** It was dropped. The
+  script's docstring and SYSTEM_DESIGN 5.6 already give the order.
+
+### Judgement that stayed with the team
+
+Dat decided:
+- **The edits.** Apply every proposed tracker edit as drafted ("Áp luôn đề xuất"), including the hour moves above,
+  and make `PLAN.md` and `README.md` follow them.
+- **After the failed import.** Restore the sheet, then connect the Sheets connector.
+- **The PR.** One PR carries `PLAN.md`, `README.md` and this entry.
+
+Made by AI, flagged for review:
+- **Tín's new W40 row was assigned without Tín.** He confirms it or hands it back.
+- **Three rows marked Xong are back to Đang làm:**
+  - Row 38: `docs/evidence/` holds no DESCRIBE evidence for the five Cassandra tables yet.
+  - Rows 43 and 44: their Postgres half is done, but `build_dim_date()` and `build_dim_warehouse()` are still stubs.
+
+  Nguyên and Tín review them.
+- **Nguyên's row 58 now covers more for the same 0.75 h.** It adds the BRIN and partial-index plans, and it waits for
+  row 66 (step 6).
+- **The README diagrams.** Above all, the ASCII architecture drawing was replaced, and the `wrappingWidth` setting was
+  added.
+- **Hours now display as "0,25".** That comes from the sheet's vi_VN locale. Switching it to English (US) is Dat's call.
+
+Open, written in the sheet as "CẦN CHỐT":
+- **Keep or drop `fact_session_funnel`.** The row 28 flag fired. Dat decides in the Wednesday 30/9 post.
+- **BR4's source.** Either `dim_user` where `is_current`, or `stg_rfm_snapshot` by snapshot date. Khang asked in PR #10
+  on 26/9, and nobody has answered.
+- **BR2.** Either change the gold column or change the contract (row 68).
+- **BR8's drill-down to single orders.** Neither `order_velocity_alerts` nor API_CONTRACT section 10 carries the
+  orders (row 80).
+- **Khang's 0.50 h in W41.** It is free, because row 74 was done in W39.
+
+Found in SYSTEM_DESIGN, not fixed here:
+- **5.2's ASCII star links `fact_session_funnel` to `dim_product`.** `warehouse/ddl.sql` gives that table no
+  `product_sk`, and the README diagram follows the DDL.
+- **Section 8, step 5 says each replayer file holds "roughly 2,000 rows".** At `--speed 60`, a 5-second file holds 5
+  minutes of events: 4,767,012 / 8,640 ≈ 552 rows on average.

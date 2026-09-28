@@ -24,24 +24,41 @@ the SessionStart hook prints it each session ([.claude/README.md](.claude/README
 
 ## Architecture
 
+```mermaid
+---
+config:
+  flowchart:
+    wrappingWidth: 260
+---
+flowchart TB
+    raw[/"2019-Nov.csv<br/>67,501,979 rows<br/>9.0 GB"/]
+    bronze[("data/bronze/<br/>4,767,012 rows")]
+    silver[("data/silver/<br/>4,754,015 rows")]
+    seed[/"seed/<br/>holidays_2019.csv"/]
+    star[("data/warehouse/<br/>the star in Parquet<br/>5 dims + 3 facts")]
+    pg[("PostgreSQL<br/>the same star,<br/>benchmark only")]
+    gold[("data/gold/ · Parquet<br/>BR2 funnel_daily<br/>BR4 rfm_segments<br/>BR7 product_affinity")]
+    land[("data/stream_landing/<br/>a JSON file every 5 s")]
+    cass[("Cassandra<br/>BR1 gmv_by_minute<br/>BR3 trending_products<br/>BR5 abandoned_carts<br/>BR8 order_velocity_alerts<br/>BR6 stockout_risk")]
+    api["FastAPI<br/>one router per BR"]
+    web["React<br/>8 screens"]
+
+    raw -->|"1 · load_bronze.py<br/>7% user sample"| bronze
+    bronze -->|"2 · batch_silver.py<br/>7 rules, UTC+7"| silver
+    silver -->|"3 · gen_catalog.py<br/>4 · gen_inventory.py<br/>5 · batch_warehouse.py"| star
+    seed --> star
+    star -->|"load_star_postgres.py"| pg
+    star -->|"6 · batch_gold.py"| gold
+    star -->|"6 · batch_gold.py<br/>BR6 only"| cass
+    bronze -->|"replayer.py --speed 60<br/>start it 2nd"| land
+    land -->|"streaming_gold.py<br/>start it 1st<br/>clean(): 7 silver rules"| cass
+    gold --> api
+    cass --> api
+    api --> web
 ```
-  2019-Nov.csv 67,501,979 rows / 9.0 GB    catalogue JSON   holidays CSV   inventory series
-  [1] load_bronze.py  7% user sample: pmod(hash(user_id),100) < 7  ->  data/bronze/
-       v                                        v  bronze rows, never the star
-  [2] batch_silver.py  7 cleaning rules,    [a] replayer.py --speed 60
-       event_time -> UTC+7 -> data/silver/       writes JSON -> data/stream_landing/
-       v                                        v
-  [3] batch_warehouse.py  STAR SCHEMA: 5    [b] streaming_gold.py  BR1 BR3 BR5 BR8
-       conformed dims + 3 facts, one per         re-applies the same 7 rules inside the
-       Kimball type; Parquet + Postgres          micro-batch: silver-shaped events, never
-       v                                    v    the star
-  [4] batch_gold.py  BR2 BR4 BR6 BR7, [c] Cassandra gmv_by_minute, trending_products,
-       reads the star                      abandoned_carts, order_velocity_alerts
-       v                 v                      |
-  [5] data/gold/    Cassandra stockout_risk     |
-       +-----------------+----------------------+
-       v   [6] FastAPI, one router per BR   ->   [7] React, 8 screens
-```
+
+Cylinders hold data and each arrow is the script that writes the next tier, numbered in the run order of Getting
+started (c). It is the finished design: Repository layout below marks which of these scripts exist today.
 
 Alongside, benchmark only and serving nothing: DuckDB on the Parquet star, Postgres on the same star, Postgres on flat
 silver. **The one load-bearing exception:** the streaming BRs (BR1, BR3, BR5, BR8) read silver-shaped events, not the
@@ -52,6 +69,96 @@ right (SYSTEM_DESIGN 1, 8).
 **Silver has exactly one writer, `batch_silver.py`** (SYSTEM_DESIGN sections 4 and 8): a Parquet stream sink would
 create `data/silver/_spark_metadata/`, after which Spark reads only the files in that log while DuckDB and the Postgres
 loader glob the whole directory, and the correctness gate is void.
+
+### The star schema
+
+```mermaid
+erDiagram
+    fact_session_funnel }o--|| dim_user : "user_sk"
+    dim_product ||--o{ fact_inventory_daily : "product_sk"
+    dim_product ||--o{ fact_event : "product_sk"
+    dim_user ||--o{ fact_event : "user_sk"
+    fact_inventory_daily }o--|| dim_warehouse : "warehouse_key"
+    fact_inventory_daily }o--|| dim_date : "date_key"
+    fact_event }o--|| dim_date : "date_key"
+    fact_event }o--|| dim_event_type : "event_type_key"
+
+    fact_session_funnel {
+        date session_start_date PK "partition key"
+        bigint session_sk PK
+        bigint user_sk FK
+        text user_session
+        timestamp first_view_at "milestone"
+        timestamp first_cart_at "milestone"
+        timestamp purchase_at "milestone"
+        smallint funnel_stage "0 to 3"
+        boolean is_abandoned
+    }
+    dim_product {
+        bigint product_sk PK
+        bigint product_id
+        numeric price "SCD2"
+        text category_l1
+        jsonb attributes "struct in Parquet"
+        date valid_from
+        date valid_to
+        boolean is_current
+    }
+    dim_user {
+        bigint user_sk PK
+        bigint user_id
+        char rfm_cell "SCD2"
+        text segment
+        date valid_from
+        date valid_to
+        boolean is_current
+    }
+    fact_inventory_daily {
+        smallint warehouse_id PK "Postgres partition"
+        date snapshot_date PK "Parquet partition"
+        bigint product_id PK
+        bigint product_sk FK
+        smallint warehouse_key FK
+        int date_key FK
+        int stock_on_hand "semi-additive"
+        real velocity_7d
+        real days_to_stockout
+    }
+    fact_event {
+        date event_date PK "partition key"
+        bigint event_sk PK
+        bigint product_sk FK
+        bigint user_sk FK
+        int date_key FK
+        smallint event_type_key FK
+        uuid user_session "degenerate dim"
+        timestamp event_time "UTC+7"
+        numeric price "measure"
+    }
+    dim_warehouse {
+        smallint warehouse_key PK
+        smallint warehouse_id
+        smallint lead_time_days
+    }
+    dim_date {
+        int date_key PK "yyyymmdd"
+        date full_date
+        boolean is_holiday
+    }
+    dim_event_type {
+        smallint event_type_key PK
+        text event_type_code
+        boolean is_conversion
+    }
+```
+
+Three facts, one per Kimball type, share five conformed dimensions: `fact_event` is a transaction fact (one row per
+event), `fact_session_funnel` an accumulating snapshot (one row per session, a timestamp per funnel milestone),
+`fact_inventory_daily` a periodic snapshot (one row per SKU, warehouse and day). `dim_product` and `dim_user` are SCD
+Type 2, and their surrogate keys are put on the event rows in the same pass that detects each change, so no fact is
+ever range-joined to a dimension (SYSTEM_DESIGN 5.4). The ninth table, `stg_rfm_snapshot`, is the staging step
+`dim_user` is built from. Only keys and the columns worth knowing are drawn; [warehouse/ddl.sql](warehouse/ddl.sql)
+has every column.
 
 Star row counts come from SYSTEM_DESIGN 5.2, 5.4 and 5.5, which labels them measured. **The Spark build reproduces
 five tables so far**: `batch_warehouse.py` builds `dim_event_type`, `dim_product`, `stg_rfm_snapshot`, `dim_user` and
@@ -194,14 +301,39 @@ python serving/load_star_postgres.py #    optional, Postgres only, until step 6 
 python processing/batch_gold.py      # 6. (not written yet — per-BR owners, W40-W41) reads the star
 # (d) run the stream — two terminals, IN THIS ORDER
 python processing/streaming_gold.py       # (not written yet — W40, Dat) start FIRST, let it wait
-python ingestion/replayer.py --speed 60   # (not written yet — W40, Tin) 1 hour of data per minute
+python ingestion/replayer.py --speed 60   # (not written yet — W40, Dat) 1 hour of data per minute
 # (e) the app
 uvicorn serving.api.main:app --reload --port 8000   # from the repo root; web/ calls :8000
 cd web && npm ci && npm run dev           # 2nd terminal; Node ^20.19 or >=22.12 (vite 8.3); :5173, CORS allows 5173-5175
 ```
 
 **The order in (d) matters.** Start the streaming job after the replayer and the files already sitting in
-`data/stream_landing/` collapse into one huge micro-batch, which looks nothing like real time during a demo.
+`data/stream_landing/` collapse into one huge micro-batch, which looks nothing like real time during a demo. Started
+in order, each new file lands in the next micro-batch:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor You
+    participant RP as replayer.py
+    participant L as data/stream_landing/
+    participant SG as streaming_gold.py
+    participant C as Cassandra
+
+    You->>SG: start FIRST
+    SG->>L: readStream JSON<br/>with EVENT_SCHEMA
+    Note over SG: waits, checkpoint in<br/>data/checkpoints/
+    You->>RP: start SECOND<br/>--speed 60
+    Note over RP: reads data/bronze/<br/>in event_time order
+    loop every 5 seconds
+        RP->>L: one JSON file<br/>= 5 min of events
+        L->>SG: next micro-batch
+        Note over SG: clean(): the 7 silver rules<br/>watermark 10 min<br/>aggregate BR1 BR3 BR5 BR8
+        SG->>C: foreachBatch<br/>+ cassandra-driver
+    end
+    Note over C: FastAPI reads it by<br/>partition key
+```
+
 `load_bronze.py` takes no `--rows` flag: the sample size is whatever the deterministic hash rule yields — 4,767,012 rows,
 258,390 users, 129,899 products (SYSTEM_DESIGN 3.1) — and a row count would break byte-identical output across the four
 machines. Never take the first 5M rows: two days of November leaves BR4's recency meaningless and BR6's `velocity_7d`
