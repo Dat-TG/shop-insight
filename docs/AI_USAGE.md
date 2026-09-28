@@ -753,3 +753,112 @@ Carried forward:
 - `serving/apply_schema.py` is still unwritten, so nothing creates the Cassandra keyspace.
 - Session 6's open item, that the Postgres loader must create 2019-12-01, is closed:
   `ddl.sql` now creates `fact_event_20191201` and `fact_session_funnel_20191201`.
+
+## Session 9 — 27 September 2026 (W39)
+
+**Tool:** Claude Code (Opus 5.5).
+**Scope:** Dat's W39 PR A (branch `w39-warehouse-skeleton`). It adds the `processing/batch_warehouse.py`
+skeleton, puts two streaming rules in `processing/schema.py`, makes the six build steps contiguous in README and
+SYSTEM_DESIGN 11, and closes the two Session 8 open items assigned to "Dat's Spark skeleton PR". Planned in plan
+mode after a read-only survey of the code, the docs and the local data, then done in the working tree. The AI
+committed nothing. The changes are staged for Dat, who re-runs the checks, then commits, pushes and merges.
+`fact_event` is PR B, after PR #11.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| `processing/batch_warehouse.py` — new. The SYSTEM_DESIGN 5.6 order with one stub per table (each returns None; the two SCD2 steps return `(dim, events)` so the surrogate keys ride on the event rows). `write_dim`/`write_fact` skip None, refuse any path not directly under `data/warehouse/`, and return the table read back. `read_silver` + `check_silver_types` use `EVENT_SCHEMA` as a type yardstick and check the row count before anything is overwritten. `load_postgres` is a stub. Prints `WAREHOUSE OK` only at 9 of 9 tables, otherwise `WAREHOUSE PARTIAL: n of 9 tables built` | Run and verified |
+| `processing/schema.py` — two rules for the W40 streaming job in the docstring (never write silver; shift to UTC+7 and recompute `event_date` through `clean()`). Code unchanged | Run and verified (imported by the skeleton) |
+| `README.md` — block (c) lists the six steps in order, with `load_star_postgres.py` marked optional until step 6 calls it; (e) is the app only; Status, layout marks, the star-count paragraph, the approvals note | AI-drafted, human review pending |
+| `SYSTEM_DESIGN.md` — 5.5 (`ddl.sql` creates the fact partitions), 5.6 step 6 and 8 step 3 (the load goes through `serving/load_star_postgres.py`), 10 (layout: `dim_product.py`, `dim_user.py`, `checks/`, two docs), 11 (the same run order as README) | AI-drafted, human review pending |
+| `warehouse/ddl.sql` — comments only: the header, the `fact_event` partition comment copied from 5.5, and a new `fact_inventory_daily` comment. The three `-- not in 5.5` markers are gone | Checked by diff (below). Not re-applied to a database, since no statement changed |
+| `serving/load_star_postgres.py` — docstring only: step 6 calls loading functions added here; the small-dim rows stay here and are imported | AI-drafted, Tín's review pending |
+| `CLAUDE.md` (Current status, Next task), `.claude/skills/spark-job/SKILL.md` (intro line), `.gitignore` (comment only), `docs/SPARK_GUIDE_VI.md` (schema.py section) | AI-drafted, human review pending |
+| `.claude/hooks/session_status.py` — counts `dim_product.py`, `dim_user.py` and `checks/scd2_integrity.py`, the files section 10 now lists | Run and verified: prints `processing 5/9` and `checks/scd2_integrity.py present` |
+
+### How it was checked
+
+Every command ran on Dat's machine (WSL2, Python 3.14.4, Spark 4.1.3, Java 21). The one write went to
+`data/warehouse/stg_rfm_snapshot/` and `data/warehouse/dim_user/`, which are gitignored and which `dim_user.py`
+rewrites with the same content.
+
+```bash
+python -m py_compile processing/schema.py processing/batch_warehouse.py serving/load_star_postgres.py
+python processing/batch_warehouse.py        # 9 x "not built yet", WAREHOUSE PARTIAL: 0 of 9 tables built, exit 0
+ls -A data/warehouse                        # .gitkeep only, before the write test below
+python tests/test_fixtures.py               # All 8 fixture bundles passed validation.
+python checks/scd2_integrity.py data/warehouse/dim_user user_id   # SCD2 OK
+python processing/dim_user.py                                     # DIM_USER OK
+```
+
+| Claim | How it was measured |
+|---|---|
+| The type guard catches a wrongly typed silver | `check_silver_types` on silver with `user_id` cast to int and `price` to double exits 1: `price: DoubleType() (expected DecimalType(10,2))`, `user_id: IntegerType() (expected LongType())` |
+| `write_fact`/`write_dim` work with a real builder, no file edited | `write_fact(build_rfm_snapshot(read_silver(s)), STG_RFM_SNAPSHOT_DIR, "snapshot_date", "user_id")` then `write_dim(build_dim_user(r), DIM_USER_DIR)`, using Khang's merged functions: `stg_rfm_snapshot` 1,291,650 (258,330 users x 5) in 5 directories, `dim_user` 319,426, of which 258,330 current. `dim_user.py`'s own run prints the same 319,426 and `DIM_USER OK`. `.gitkeep` survives |
+| `ddl.sql` is still 5.4/5.5 verbatim | The BEGIN..COMMIT body, without `PARTITION OF` statements, diffed line by line against the `sql` blocks of 5.4-5.5: the only hunk is the documented `dim_event_type` INSERT |
+| `EVENT_SCHEMA` is declared once | `grep -rn "StructType(\|StructField(" --include=*.py processing ingestion serving checks` finds only `processing/schema.py` |
+| The `.gitignore` half of task 4 was already done | `git log` shows the three negations and `.gitkeep` files arrived in `b43222e` (16 Sep). `git check-ignore -v` does not ignore `seed/holidays_2019.csv` or the three `.gitkeep`, and ignores `data/warehouse/fact_event/...parquet` through `data/*/*` |
+| Silver facts that PR B depends on | Read-only PySpark over `data/silver` during planning: 4,754,015 rows; `distinct()` gives 4,746,703, so 7,312 exact duplicates; the busiest day is 2019-11-17 with 482,049 rows; 677,255 events (14.2%) have a price different from their product's last price that day |
+| Teammates can approve PRs | `gh api repos/Dat-TG/shop-insight/collaborators`: Dat-TG admin; khangbuiquoc203, chuntinne05 and nguyennguyenthiquoc write |
+
+A review workflow (a docs-consistency reader, each finding checked by a second agent told to refute it) and a
+separate `spark-reviewer` pass ran before staging. What both found is in the last two bullets below.
+
+### What the AI got wrong, and was corrected on
+
+- **The plan's `write_fact` sorted by `sort_col` alone.** Spark sorts by the partition column before a
+  partitioned write and does not keep an order that does not start with it. The code sorts by
+  `(partition_col, sort_col)`.
+- **The plan's negative-test command set an attribute that does not exist**, and it had the type check inline
+  in `read_silver`, where it cannot be tested alone. It became `check_silver_types()`.
+- **The planning subagent proposed `WAREHOUSE OK: 0 of 9 tables built`.** An OK line for an empty warehouse
+  reads as done. It prints `WAREHOUSE PARTIAL` until all nine are built.
+- **The docs review found six defects in the first draft, all fixed.** The README called step 5 "star Parquet"
+  and dropped "until step 6 calls it", so it no longer matched SYSTEM_DESIGN 11. That is the wording Session 8
+  rejected. `schema.py` said `funnel_daily` is built from silver; it is built from the star. The docstring of
+  `load_star_postgres.py` still described the old plan. `ddl.sql` kept a comment 5.5 does not have. Section 10
+  and the README layout lacked `dim_user.py`, `checks/` and `docs/BR_SCOPE.md`. The README approvals note was
+  stale.
+- **`spark-reviewer` found that the wiring comment would crash step 4.** It told owners to import
+  `build_dim_product`/`build_dim_user` by name, but the stubs have those names, and a `def` after the import
+  rebinds them, so the stub calls itself (TypeError at step 4, RecursionError at step 2) after earlier tables are
+  overwritten. The comment now prescribes `import processing.dim_user as user_scd2` and qualified calls. It also
+  noted that `fact_inventory_daily`'s docstring invited the banned range join; the docstring now names the
+  equi-join route (one row per version per day, joined on `(product_id, snapshot_date)`).
+- **The task list said the `.gitignore` negations were missing, and it set `fact_event` at 4,681,493 rows.**
+  Both are from before W39: the negations exist since `b43222e`, and 4,681,493 is the old sample. `fact_event`
+  is 1:1 with silver, so its target is 4,754,015.
+
+### Judgement that stayed with the team
+
+Dat decided:
+- the skeleton ships with stubs only; Dat wires Khang's and Nguyen's functions in PR B, with them as reviewers;
+- `event_type_key` comes from `DIM_EVENT_TYPE_ROWS`, imported from `serving/load_star_postgres.py`;
+- README lists the six steps in order, plus `load_star_postgres.py` as an optional line after
+  `batch_warehouse`.
+
+Made by AI, flagged for review:
+- **Who loads Postgres.** `batch_warehouse` step 6 calls loading functions Tín adds to
+  `serving/load_star_postgres.py`, passing the tables read back from Parquet. It needs Tín's agreement; if he
+  disagrees, 5.6, 8, 10, 11 and the loader docstring change together.
+- `WAREHOUSE PARTIAL` exits 0, so the skeleton "runs without error" while tables are missing.
+- The approvals note now says the teammates are collaborators. The setting itself is still 0; raising it is
+  Dat's call.
+
+Open:
+- PLAN.md 212-213: the Wednesday handover trigger (skeleton not in by the W39 checkpoint, so `fact_event` goes
+  to Khang) formally fired. Dat keeps `fact_event` and says so in the team post.
+- For PR B and the PR #11 review: `dim_product` versions are one per product per day (the DDL's `valid_from
+  date` + `UNIQUE (product_id, valid_from)` forces it), so a spot-check of `fact_event.price` against
+  `dim_product.price` fails for 14.2% of events by design. `ddl.sql:161` says "AS OF event_time". PR #11's
+  `product_sk` is IntegerType where the DDL has bigint.
+- Old-sample numbers still in the docs: `fact_event` 4,681,493 (`ddl.sql:155`, SYSTEM_DESIGN 5.2 and 5.5,
+  README), `fact_inventory_daily` 1,898,850 (`gen_inventory.py` expects 12,731 products, so 1,909,650), and
+  1005115's 46,499 events (47,059 in silver). PR B fixes the first; the others belong to their owners.
+- Carried from Session 8: `fact_event.user_session` uuid against `fact_session_funnel.user_session` text;
+  `funnel_daily` has no session count for contract §4 (Dat, BR2); `rfm_cell` is in the BR4 response but not in
+  `rfm_segments` (Khang); `.claude/skills/br-slice/SKILL.md` §3 describes the old envelope; the loader's raw
+  traceback on an old schema and its missing-seed hint.
+- Closed here: who loads Postgres (pending Tín, above), the 5.5 fact partitions, `CLAUDE.md` Current status,
+  the README collaborator note.
