@@ -46,7 +46,7 @@ SCRIPTS = [
     ("serving", ["check_infra.py", "cassandra_schema.cql", "apply_schema.py",
                  "load_star_postgres.py"]),
 ]
-SINGLE_FILES = ["warehouse/ddl.sql", "seed/holidays_2019.csv", "checks/scd2_integrity.py"]
+SINGLE_FILES = ["warehouse/ddl.sql", "seed/holidays_2019.csv", "checks/scd2_integrity.py", "checks/fact_event_spot.py"]
 
 
 def week_lines(today):
