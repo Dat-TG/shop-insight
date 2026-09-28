@@ -194,7 +194,7 @@ python serving/load_star_postgres.py #    optional, Postgres only, until step 6 
 python processing/batch_gold.py      # 6. (not written yet — per-BR owners, W40-W41) reads the star
 # (d) run the stream — two terminals, IN THIS ORDER
 python processing/streaming_gold.py       # (not written yet — W40, Dat) start FIRST, let it wait
-python ingestion/replayer.py --speed 60   # (not written yet — W40, Tin) 1 hour of data per minute
+python ingestion/replayer.py --speed 60   # (not written yet — W40, Dat) 1 hour of data per minute
 # (e) the app
 uvicorn serving.api.main:app --reload --port 8000   # from the repo root; web/ calls :8000
 cd web && npm ci && npm run dev           # 2nd terminal; Node ^20.19 or >=22.12 (vite 8.3); :5173, CORS allows 5173-5175
