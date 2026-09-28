@@ -152,13 +152,19 @@ bronze: `ingestion/load_bronze.py` (4,767,012 rows, 30 date directories), and si
 cleaning rules in `clean()`, which the streaming job imports). So does the
 infrastructure: `docker-compose.yml` (cassandra:4.1.12 + postgres:16.15, pinned to the
 patch), `.env.example` and `serving/check_infra.py` (prints `INFRA OK`); the Docker
-install is `docs/SETUP_SPARK.md` step 9. The warehouse layer has started: the Postgres
-star DDL `warehouse/ddl.sql` and its small-dimension loader `serving/load_star_postgres.py`,
-`processing/dim_user.py` (`stg_rfm_snapshot` + `dim_user` SCD2, standalone until batch_warehouse imports it),
-`ingestion/gen_inventory.py`, `checks/scd2_integrity.py`, and the
-`processing/batch_warehouse.py` skeleton: the 5.6 build order with one stub per table,
-which prints `WAREHOUSE PARTIAL: 0 of 9 tables built`. The FastAPI + React skeleton
-serves fixtures. No BR reads real data yet. The
+install is `docs/SETUP_SPARK.md` step 9. The warehouse layer: the Postgres star DDL
+`warehouse/ddl.sql` and its small-dimension loader `serving/load_star_postgres.py`;
+`processing/batch_warehouse.py`, the 5.6 build order, which imports
+`processing/dim_product.py` (`dim_product` SCD2 + `product_sk`) and `processing/dim_user.py`
+(`stg_rfm_snapshot` + `dim_user` SCD2 + `user_sk`) and builds `dim_event_type`,
+`dim_product`, `stg_rfm_snapshot`, `dim_user` and `fact_event` (4,754,015 rows, 31 date
+directories), so it prints `WAREHOUSE PARTIAL: 5 of 9 tables built`. Still stubs:
+`dim_date`, `dim_warehouse` and Postgres step 6 (Tin), `fact_session_funnel` and
+`fact_inventory_daily` (W40). Inputs and checks: `ingestion/gen_catalog.py` (run before
+batch_warehouse), `ingestion/gen_inventory.py`, `checks/scd2_integrity.py`,
+`checks/fact_event_spot.py`. Cassandra: `serving/cassandra_schema.cql` +
+`serving/apply_schema.py`. The FastAPI + React skeleton serves fixtures. No BR reads
+real data yet. The
 project runs W38-W46 (14 Sep - 15 Nov). W38 is a combined week: kickoff and
 infrastructure together.
 
@@ -169,7 +175,7 @@ repo. So: write the setup down instead of explaining it, comment the reference
 implementation instead of walking someone through it, and make every gate produce
 an artefact someone can look at on their own time.
 
-Next task: each owner fills their own stub in `processing/batch_warehouse.py` — replace
-the body, keep the signature, write through `write_dim`/`write_fact`. Dat's is
-`fact_event` (target 4,754,015 rows, 1:1 with silver), after PR #11 brings
-`dim_product`. Then W40: the streaming foundation and BR1 for Gate 1.
+Next task: W40, the streaming foundation and BR1 for Gate 1. The remaining stubs in
+`processing/batch_warehouse.py` stay with their owners: `dim_date`, `dim_warehouse` and
+step 6 (Tin), `fact_session_funnel` and `fact_inventory_daily` (W40). Replace the body,
+keep the signature, write through `write_dim`/`write_fact`.

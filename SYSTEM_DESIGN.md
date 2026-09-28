@@ -90,8 +90,10 @@ INT selects a different sample (4,713,498 rows, only 18,150 users shared).
 **Counts derived from the sample elsewhere in this document were measured on an
 earlier sample**, drawn with a different hash function (4,694,166 rows / 258,088
 users / 127,693 products). That covers the star row counts in section 5, the SCD2
-version counts, the 12,659 purchased SKUs and the range-join size. Expect each to
-move slightly; they are re-measured in W39 when `batch_warehouse.py` runs.
+version counts, the 12,659 purchased SKUs and the range-join size, but not
+`fact_event`, re-measured on Spark's sample by `batch_warehouse.py` (4,754,015 rows,
+1:1 with silver). Expect the others to move slightly; each is re-measured as
+`batch_warehouse.py` builds its table.
 
 ```
 event_time      timestamp   2019-11-01 00:00:12 UTC
@@ -281,7 +283,7 @@ Three facts, one per Kimball fact type, sharing five conformed dimensions:
 |---|---|---|---|
 | Kimball type | Transaction | Accumulating snapshot | Periodic snapshot |
 | Grain | one user event | one session | one SKU × warehouse × day |
-| Rows (measured) | 4,681,493 | 954,686 | 1,898,850 |
+| Rows (measured) | 4,754,015 | 954,686 | 1,898,850 |
 | Measures | `price` | milestone lags, counts, values | stock, velocity, days to stock-out |
 | Degenerate dim | `user_session` | — | — |
 | Serves | BR1, BR3, BR8 | BR2, BR5 | BR6 |
@@ -474,14 +476,14 @@ surrogate key is already on the event row and the join never happens.
 ```sql
 -- =====================================================================
 -- fact_event. TRANSACTION fact. Grain: one cleaned user event.
--- 1:1 with silver. Measured: 4,681,493 rows.
+-- 1:1 with silver. Measured: 4,754,015 rows.
 -- Column order is 8-byte columns first: "readable" order costs ~8 bytes
 -- of alignment padding per row, about 37 MB on this table.
 -- =====================================================================
 CREATE TABLE fact_event (
   event_sk      bigint        NOT NULL,   -- surrogate, assigned in Spark
-  product_sk    bigint        NOT NULL,   -- SCD2 version AS OF event_time
-  user_sk       bigint        NOT NULL,   -- SCD2 version AS OF event_time
+  product_sk    bigint        NOT NULL,   -- SCD2 version in force on event_date
+  user_sk       bigint        NOT NULL,   -- SCD2 version in force on event_date
   event_time    timestamp     NOT NULL,   -- silver already shifted to UTC+7
   user_session  uuid          NOT NULL,   -- DEGENERATE DIMENSION (no dim table)
   price         numeric(10,2) NOT NULL,   -- the measure
@@ -959,7 +961,8 @@ shop-insight/
 ├── tests/
 │   └── test_fixtures.py        API contract check: fixtures and routers vs docs/API_CONTRACT.md
 ├── checks/
-│   └── scd2_integrity.py       SCD2 check: no overlap or gap, one current row per key
+│   ├── scd2_integrity.py       SCD2 check: no overlap or gap, one current row per key
+│   └── fact_event_spot.py      fact_event has the right price at event time, on 5 pinned events
 ├── web/                        React + TypeScript
 └── docs/
     ├── SETUP_SPARK.md          Unattended install: JDK, Python, PySpark, Docker

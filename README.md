@@ -8,14 +8,14 @@ and proven**, not asserted. HCMUT, Semester 1 2026-2027. Group 15: Dat, Khang, N
 
 ## Status
 
-> **2026-09-27 — ISO W39 of W38-W46.** Three things in this file go stale: this block, the `[x]`/`[ ]` marks under
+> **2026-09-28 — ISO W40 of W38-W46.** Three things in this file go stale: this block, the `[x]`/`[ ]` marks under
 > Repository layout, and the `(not written yet)` markers under Getting started. Fix whichever one your change makes
 > false, and the date on this line.
 
 | | |
 |---|---|
-| What exists | The Spark setup: [docs/SETUP_SPARK.md](docs/SETUP_SPARK.md) (Vietnamese, with explanations: [docs/SPARK_GUIDE_VI.md](docs/SPARK_GUIDE_VI.md)), [requirements.txt](requirements.txt), [conf/spark-defaults.conf](conf/spark-defaults.conf), [processing/schema.py](processing/schema.py), [processing/kata.py](processing/kata.py); bronze: [ingestion/load_bronze.py](ingestion/load_bronze.py); silver: [processing/batch_silver.py](processing/batch_silver.py); infrastructure: [docker-compose.yml](docker-compose.yml), [.env.example](.env.example), [serving/check_infra.py](serving/check_infra.py). Plus [CLAUDE.md](CLAUDE.md), [SYSTEM_DESIGN.md](SYSTEM_DESIGN.md), [PLAN.md](PLAN.md), [docs/AI_USAGE.md](docs/AI_USAGE.md), [docs/BR_SCOPE.md](docs/BR_SCOPE.md) (the 8 BRs: scope, owners, done criteria), [.gitignore](.gitignore), a `data/` skeleton, `.claude/`. The app skeleton: the frozen contract [docs/API_CONTRACT.md](docs/API_CONTRACT.md), its 8 fixture bundles in `web/fixtures/` and [tests/test_fixtures.py](tests/test_fixtures.py); FastAPI in `serving/api/`, 8 routers, where BR2, BR4 and BR6 return their fixture and the other five no rows, all with `meta.warehouse` `"Fixture"`; React in `web/`, 8 tabs, the BR2 screen on fixture data. The Postgres star: [warehouse/ddl.sql](warehouse/ddl.sql), [serving/load_star_postgres.py](serving/load_star_postgres.py) (`dim_date`, `dim_event_type`, `dim_warehouse`), [seed/holidays_2019.csv](seed/holidays_2019.csv), `docs/evidence/`. The warehouse layer: the skeleton [processing/batch_warehouse.py](processing/batch_warehouse.py) (the SYSTEM_DESIGN 5.6 order with one stub per table, owners fill their own; prints `WAREHOUSE PARTIAL: 0 of 9 tables built`), [processing/dim_user.py](processing/dim_user.py) (`stg_rfm_snapshot` + `dim_user` SCD2, standalone until batch_warehouse imports it), [ingestion/gen_inventory.py](ingestion/gen_inventory.py), [checks/scd2_integrity.py](checks/scd2_integrity.py). No BR reads real data yet |
-| W38-W39 tasks | Done: `docs/SETUP_SPARK.md` + `processing/kata.py`, so all four install Spark unattended — **everyone runs it and posts `KATA OK`**; `ingestion/load_bronze.py` — **in W39 everyone runs it and posts the `BRONZE OK` numbers**; `processing/batch_silver.py` — **run right after it, post the `SILVER OK` numbers**; `docker-compose.yml` + `serving/check_infra.py`, so all four install Docker unattended — **everyone runs it and posts `INFRA OK`**. W39: the `batch_warehouse.py` skeleton is in; each owner replaces the body of their own `build_*` stub, keeps its signature and writes through `write_dim`/`write_fact`. Next: `fact_event` (Dat, after PR #11 brings `dim_product`) |
+| What exists | The Spark setup: [docs/SETUP_SPARK.md](docs/SETUP_SPARK.md) (Vietnamese, with explanations: [docs/SPARK_GUIDE_VI.md](docs/SPARK_GUIDE_VI.md)), [requirements.txt](requirements.txt), [conf/spark-defaults.conf](conf/spark-defaults.conf), [processing/schema.py](processing/schema.py), [processing/kata.py](processing/kata.py); bronze: [ingestion/load_bronze.py](ingestion/load_bronze.py); silver: [processing/batch_silver.py](processing/batch_silver.py); infrastructure: [docker-compose.yml](docker-compose.yml), [.env.example](.env.example), [serving/check_infra.py](serving/check_infra.py). Plus [CLAUDE.md](CLAUDE.md), [SYSTEM_DESIGN.md](SYSTEM_DESIGN.md), [PLAN.md](PLAN.md), [docs/AI_USAGE.md](docs/AI_USAGE.md), [docs/BR_SCOPE.md](docs/BR_SCOPE.md) (the 8 BRs: scope, owners, done criteria), [.gitignore](.gitignore), a `data/` skeleton, `.claude/`. The app skeleton: the frozen contract [docs/API_CONTRACT.md](docs/API_CONTRACT.md), its 8 fixture bundles in `web/fixtures/` and [tests/test_fixtures.py](tests/test_fixtures.py); FastAPI in `serving/api/`, 8 routers, where BR2, BR4 and BR6 return their fixture and the other five no rows, all with `meta.warehouse` `"Fixture"`; React in `web/`, 8 tabs, the BR2 screen on fixture data. The Postgres star: [warehouse/ddl.sql](warehouse/ddl.sql), [serving/load_star_postgres.py](serving/load_star_postgres.py) (`dim_date`, `dim_event_type`, `dim_warehouse`), [seed/holidays_2019.csv](seed/holidays_2019.csv), `docs/evidence/`. The warehouse layer: [processing/batch_warehouse.py](processing/batch_warehouse.py) (the SYSTEM_DESIGN 5.6 order; builds `dim_event_type`, `dim_product`, `stg_rfm_snapshot`, `dim_user` and `fact_event`, the other four tables are still stubs, so it prints `WAREHOUSE PARTIAL: 5 of 9 tables built`). It imports [processing/dim_product.py](processing/dim_product.py) (`dim_product` SCD2 + `product_sk`) and [processing/dim_user.py](processing/dim_user.py) (`stg_rfm_snapshot` + `dim_user` SCD2 + `user_sk`). Also [ingestion/gen_catalog.py](ingestion/gen_catalog.py) (`data/catalog/products.json`, run before batch_warehouse), [ingestion/gen_inventory.py](ingestion/gen_inventory.py), [checks/scd2_integrity.py](checks/scd2_integrity.py), [checks/fact_event_spot.py](checks/fact_event_spot.py). Cassandra: [serving/cassandra_schema.cql](serving/cassandra_schema.cql) + [serving/apply_schema.py](serving/apply_schema.py). No BR reads real data yet |
+| W38-W39 tasks | Done: `docs/SETUP_SPARK.md` + `processing/kata.py`, so all four install Spark unattended — **everyone runs it and posts `KATA OK`**; `ingestion/load_bronze.py` — **in W39 everyone runs it and posts the `BRONZE OK` numbers**; `processing/batch_silver.py` — **run right after it, post the `SILVER OK` numbers**; `docker-compose.yml` + `serving/check_infra.py`, so all four install Docker unattended — **everyone runs it and posts `INFRA OK`**. W39: the `batch_warehouse.py` skeleton (PR #12) and `dim_product` + the catalogue + the Cassandra schema (PR #11) are in, and `batch_warehouse.py` now builds `dim_event_type`, `dim_product`, `stg_rfm_snapshot`, `dim_user` and `fact_event`: `WAREHOUSE PARTIAL: 5 of 9 tables built`. Still stubs: `dim_date`, `dim_warehouse` and Postgres step 6 (Tin), `fact_session_funnel` and `fact_inventory_daily` (W40). Each owner replaces the body of their own `build_*` stub, keeps its signature and writes through `write_dim`/`write_fact`. Next: the W40 streaming foundation + BR1 for Gate 1 |
 | Next hard gate | Gate 1, W40 (28 Sep - 4 Oct): BR1 running on Structured Streaming, evidenced by a screenshot of the micro-batch log and rows in `gmv_by_minute` |
 
 Every path in SYSTEM_DESIGN section 10 is a plan, not a fact, until Repository layout below marks it `[x]` or `[~]`.
@@ -53,14 +53,14 @@ right (SYSTEM_DESIGN 1, 8).
 create `data/silver/_spark_metadata/`, after which Spark reads only the files in that log while DuckDB and the Postgres
 loader glob the whole directory, and the correctness gate is void.
 
-Star row counts come from SYSTEM_DESIGN 5.2, 5.4 and 5.5, which labels them measured, but **no Spark warehouse build
-reproduces them yet** — `batch_warehouse.py` is a skeleton whose tables are all stubs, `processing/dim_user.py` builds
-`stg_rfm_snapshot` and `dim_user` on its own, and only the three small dims exist in Postgres, from
-`serving/load_star_postgres.py`. Confirm in W39: `fact_event` 4,681,493 ·
-`fact_session_funnel` 954,686 · `fact_inventory_daily` 1,898,850 (arithmetic: 12,659 purchased SKUs x 5 warehouses x 30
+Star row counts come from SYSTEM_DESIGN 5.2, 5.4 and 5.5, which labels them measured. **The Spark build reproduces
+five tables so far**: `batch_warehouse.py` builds `dim_event_type`, `dim_product`, `stg_rfm_snapshot`, `dim_user` and
+`fact_event`, while `dim_date`, `dim_warehouse` and the other two facts are still stubs, and only the three small dims
+exist in Postgres, from `serving/load_star_postgres.py`. Measured on Spark's sample: `fact_event` 4,754,015 (1:1 with
+silver). Still to confirm: `fact_session_funnel` 954,686 · `fact_inventory_daily` 1,898,850 (arithmetic: 12,659 purchased SKUs x 5 warehouses x 30
 days) · `dim_product` 127,693 -> 244,025 SCD2 versions · `dim_date` 92 · `dim_event_type`, `dim_warehouse` 5 each.
 These were measured on an **earlier sample drawn with a different hash** (4,694,166 rows); Spark's own sample has
-4,767,012 rows and 129,899 products (SYSTEM_DESIGN 3.1), so expect every count above to move slightly in W39.
+4,767,012 rows and 129,899 products (SYSTEM_DESIGN 3.1), so expect every count above to move slightly.
 
 ## The nine business requirements
 
@@ -177,7 +177,7 @@ wc -c data/raw/2019-Nov.csv                       # must print 9006762395; less 
 # (b) infrastructure
 docker compose up -d --wait          # Cassandra 4.1.12 + Postgres 16.15; --wait returns when both are healthy
 python serving/check_infra.py        # both drivers connect; prints INFRA OK
-python serving/apply_schema.py       # (not written yet — W38, Nguyen) Cassandra keyspace + tables
+python serving/apply_schema.py       # Cassandra keyspace + tables; prints APPLY_SCHEMA OK
 docker compose exec -T postgres psql -U shopinsight -d shopinsight -v ON_ERROR_STOP=1 < warehouse/ddl.sql
 #   Applies once, to an empty database; the header of warehouse/ddl.sql has the reset for starting again.
 #   Runs psql INSIDE the container: no client to install on the host and no password prompt. From the host
@@ -187,9 +187,9 @@ docker compose exec -T postgres psql -U shopinsight -d shopinsight -v ON_ERROR_S
 # (c) build the data — steps 1-6 in this order; steps 1-2 run once, 15-25 minutes
 python ingestion/load_bronze.py      # 1. 7% user sample, rule hard-coded; prints BRONZE OK
 python processing/batch_silver.py    # 2. bronze -> silver, 7 cleaning rules; prints SILVER OK. Batch needs this
-python ingestion/gen_catalog.py      # 3. (not written yet — W39, Nguyen, PR #11) product attributes JSON
+python ingestion/gen_catalog.py      # 3. product attributes JSON -> data/catalog/; prints CATALOG OK
 python ingestion/gen_inventory.py    # 4. daily inventory series; prints INVENTORY OK
-python processing/batch_warehouse.py # 5. silver -> star (Parquet + Postgres); W39 skeleton: prints WAREHOUSE PARTIAL
+python processing/batch_warehouse.py # 5. silver -> star (Parquet + Postgres); W39: 5 of 9 tables, prints WAREHOUSE PARTIAL
 python serving/load_star_postgres.py #    optional, Postgres only, until step 6 of batch_warehouse calls it; W39: the three small dims; prints POSTGRES STAR OK
 python processing/batch_gold.py      # 6. (not written yet — per-BR owners, W40-W41) reads the star
 # (d) run the stream — two terminals, IN THIS ORDER
@@ -254,14 +254,15 @@ lives in `seed/`, **not** under `data/` — `data/raw/holidays_2019.csv` is sile
 [x] docker-compose.yml  Cassandra 4.1.12 + Postgres 16.15   [x] .env.example  ports, db, user, password
 [~] web/  React + TypeScript: 8 tabs, BR2 screen on fixture data; fixtures/ holds the 8 contract bundles
 [x] seed/holidays_2019.csv  Committed, feeds dim_date.is_holiday
-[~] ingestion/       [x] load_bronze.py gen_inventory.py  [ ] replayer.py gen_catalog.py
-[~] processing/      [x] schema.py kata.py batch_silver.py dim_user.py  [~] batch_warehouse.py (skeleton: every table a stub)
-                     [ ] source.py dim_product.py (PR #11) streaming_gold.py batch_gold.py
+[~] ingestion/       [x] load_bronze.py gen_catalog.py gen_inventory.py  [ ] replayer.py
+[~] processing/      [x] schema.py kata.py batch_silver.py dim_product.py dim_user.py
+                     [~] batch_warehouse.py (5 of 9 tables; dim_date, dim_warehouse, 2 facts and step 6 still stubs)
+                     [ ] source.py streaming_gold.py batch_gold.py
 [x] warehouse/ddl.sql  Postgres star schema DDL   [ ] benchmark/  queries.sql run_benchmark.py results/
-[~] serving/         [x] check_infra.py  [~] api/ (fixtures only) load_star_postgres.py (3 small dims)
-                     [ ] cassandra_schema.cql apply_schema.py
+[~] serving/         [x] check_infra.py cassandra_schema.cql apply_schema.py  [~] api/ (fixtures only) load_star_postgres.py (3 small dims)
 [x] tests/test_fixtures.py  API contract check: fixtures and routers vs docs/API_CONTRACT.md
-[x] checks/scd2_integrity.py  SCD2 check: no overlap or gap, exactly one current row per key
+[x] checks/          scd2_integrity.py   SCD2 check: no overlap or gap, exactly one current row per key
+                     fact_event_spot.py  fact_event has the right price at event time, on 5 pinned events
 ```
 
 ## Four traps that bite on day one
