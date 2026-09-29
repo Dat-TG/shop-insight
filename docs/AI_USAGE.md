@@ -862,3 +862,246 @@ Open:
   traceback on an old schema and its missing-seed hint.
 - Closed here: who loads Postgres (pending Tín, above), the 5.5 fact partitions, `CLAUDE.md` Current status,
   the README collaborator note.
+
+## Session 10 — 28 September 2026 (W40)
+
+**Tool:** Claude Code (Opus 5.5).
+**Scope:** Dat's W39 PR B, `fact_event` (task 3), on branch `w39-fact-event` from main `b637b17`, after PR #11
+and #12 merged. It wires steps 1 (`dim_event_type`), 2, 3 and 4 of `processing/batch_warehouse.py` to the owners'
+modules and fills in `fact_event`. It also adds `check_fact_event()` and the standalone
+`checks/fact_event_spot.py`. The Postgres step 6 is untouched. Planned in plan mode, from a read-only research workflow and
+a read-only measurement of silver, then done in the working tree. The AI committed nothing. The changes are
+staged for Dat, who re-runs the checks, then commits, pushes and opens the PR.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| `processing/batch_warehouse.py` — **step 1:** `build_dim_event_type` = `createDataFrame(DIM_EVENT_TYPE_ROWS)`, cast to the `ddl.sql` types, in its order. **Steps 2-4:** calls into `processing.dim_product as product_scd2` and `processing.dim_user as user_scd2`, `assign_versions` on full silver; the events drop the product's `version_no`. **Step 5:** `build_fact_event`, with `event_sk = date_key * 10^7 + row_number()` per `event_date`, a broadcast join to `dim_event_type` (-1 when unmatched), and casts to bigint. **Checks:** `check_fact_event()`, 20 counts plus 2 lines of information, folded into `checks_ok` with the call first. **Other:** a catalog guard before the first write; the docstrings | Run and verified |
+| `checks/fact_event_spot.py` — new. For 5 pinned events it checks (a) fact price = own silver row = pin, (b) `product_sk` → a version of the same `product_id` in force on `event_date`, (c) that version's price = the end-of-day price = pin. Times go through `date_format` only | Run and verified, with negative tests |
+| `warehouse/ddl.sql` — comments only: `Measured: 4,754,015 rows`; `product_sk`/`user_sk` "SCD2 version in force on event_date" (was "AS OF event_time"); the header says batch_warehouse "writes" the five `dim_event_type` rows | Checked by diff against SYSTEM_DESIGN 5.5. Not re-applied, since no statement changed |
+| `SYSTEM_DESIGN.md` — 5.2 row count, 5.5 (the same three comment edits as `ddl.sql`), the old-sample paragraph (3.1, lines 90-94) now exempts `fact_event`, section 10 lists `checks/fact_event_spot.py` | AI-drafted, human review pending |
+| `README.md` — Status date and rows, the star-count paragraph, `(not written yet)` removed for `apply_schema.py` and `gen_catalog.py`, step 5 comment, layout marks | AI-drafted, human review pending |
+| `CLAUDE.md` (Current status, Next task), `.claude/agents/data-fact-checker.md` (the example row's number) | AI-drafted, human review pending |
+| `.claude/hooks/session_status.py` — `SINGLE_FILES` counts `checks/fact_event_spot.py`, as section 10 now lists it | Run and verified: prints `checks/fact_event_spot.py present` |
+
+### How it was checked
+
+Every command ran on Dat's machine (WSL2, Python 3.14.4, Spark 4.1.3, Java 21). The writes went to
+`data/catalog/` and `data/warehouse/` only, both gitignored.
+
+```bash
+python ingestion/gen_catalog.py      # products 128,972, distinct product_id 128,972, took 20 s, CATALOG OK
+python processing/batch_warehouse.py # dim_event_type 5, dim_product 210,454, stg_rfm_snapshot 1,291,650 (5 dirs),
+                                     # dim_user 319,426, fact_event 4,754,015 (31 dirs), 20 check lines at their
+                                     # expect, most events in one day 482,049, price != version price 677,255 (14.2%),
+                                     # took 71 s, WAREHOUSE PARTIAL: 5 of 9 tables built, exit 0
+python checks/scd2_integrity.py data/warehouse/dim_product product_id   # all six counts 0, SCD2 OK
+python checks/scd2_integrity.py data/warehouse/dim_user user_id         # all six counts 0, SCD2 OK
+python checks/fact_event_spot.py     # 5 rows Y Y Y, FACT_EVENT SPOT OK, exit 0
+python tests/test_fixtures.py        # All 8 fixture bundles passed validation.
+```
+
+| Claim | How it was measured |
+|---|---|
+| `event_sk` is the same on all four machines | Read-only PySpark over silver: 4,169 groups tie on `(event_date, event_time, user_session, product_id, event_type)`, and 0 of them differ in any other column. They are exactly the 4,169 exact-duplicate groups (7,312 extra rows, 11,481 rows in all). On the written fact, `event_sk ties that differ` = 0 |
+| `max_by(price, event_time)` in `dim_product.py` breaks no tie today | 315 product-days share their last `event_time`, and 0 of them with different price, brand or category. Breaking ties low or high gives the same 210,454 versions and the same 677,255 |
+| Silver numbers in the brief | 4,754,015 rows; 31 dates; busiest day 2019-11-17 with 482,049; view/cart/purchase 4,474,579 / 214,286 / 65,150; 258,330 users; 0 date mismatches, 0 `price <= 0`, 0 nulls |
+| The five pins | Each `(product_id, event_time)` matches 1 silver row and 1 `(event_time, user_session, event_type)`. Rows 1-3 have 4/4/2 prices that day, rows 4-5 have one. Rows 4-5 were picked by a rule: among that date's single-price product-days whose product has more than one version, the one with the most events, and its first event |
+| The numbers written into the docs | The `data-fact-checker` agent, read-only PySpark on `data/warehouse/`: `fact_event` 4,754,015 = silver, 31 directories, all nine types as `ddl.sql` says (`user_session` string); per key 4,474,579 / 214,286 / 65,150 / 0; `dim_product` 210,454 rows, 128,972 products, 30,654 with more than one version; `stg_rfm_snapshot` 1,291,650; `dim_user` 319,426, of which 258,330 current; 677,255 = 14.2%; max position 482,049 on 11-17; 0 duplicate `event_sk` |
+| `check_fact_event` can fail | The real function, fed a mutated copy of the written fact. `user_sk` moved to version 1: `user_sk not in force 348,640`, returns False. One price + 0.01: `fact rows not in silver 1`, returns False |
+| `fact_event_spot.py` can fail | A wrong pinned version price turns column c to N, `FACT_EVENT SPOT FAILED`, exit 1. A pin at a second with no event exits 1 with "0 silver rows, expected 1. Pin another event." |
+| `batch_warehouse.py` imports with Docker down | `import processing.batch_warehouse` pulls in psycopg2 and cassandra-driver through `serving/load_star_postgres.py`, and does not connect |
+
+Review before staging:
+- **Planning:** a read-only workflow. Three agents made a docs edit map, a code trace and the measurements. A Plan agent wrote the draft, and two critics reviewed it (`spark-reviewer` and a spec skeptic).
+- **After the first run:** a second workflow. `spark-reviewer`, an adversarial reviewer hunting for vacuous checks, and `data-fact-checker` ran, and each serious finding went to a verifier told to refute it.
+- **After the fixes:** `spark-reviewer` re-read the changed checks.
+
+### What the AI got wrong, and was corrected on
+
+- **The first `check_fact_event` checked identity on the wrong object.** "Right product" and "right user" ran only
+  on the `events` plan, recomputed from silver, not on the fact that was written. The docstring claimed that was
+  the only way. The adversarial reviewer showed two mutated facts that pass every count: `user_sk` moved to
+  version 1, and `product_sk` moved to another product whose version covers the whole month. The fix adds two checks
+  on the files:
+  - `user_sk not in force`;
+  - `fact rows not in silver`: fact → natural keys through the three dimensions, then `exceptAll` against silver.
+    With equal row counts, this is multiset equality.
+
+  Both negative tests above now fail as they should.
+- **`checks_ok = checks_ok and check(...)` would skip every later check once one failed**, and the comment told
+  owners to copy it. It is now `check(...) and checks_ok`.
+- **The spot script said "Pin another event" when the fault was in the fact.** If the pin is unique in silver but
+  the fact has 0 or 2 rows for it, it now prints `FACT_EVENT SPOT FAILED` instead.
+- **The design draft left pins 4-5 as placeholders.** Its reason was that the measurement subagent had not run:
+  plan mode was on, and that subagent read plan mode as a ban on read-only Spark. The main session then ran the same
+  script read-only, and the pins are measured values.
+- **The draft said a `max_by` tie would still pass the fact-side check "within one run".** Both critics refuted
+  that: `product_sk` is a global `row_number`, so a tie resolved differently between the dim write and the fact
+  write shifts every later key. It is moot only because the tie count is 0 (above).
+- **The `events` rows kept the product's `version_no`.** `spark-reviewer` noted that the first join to `dim_user`
+  (W40) would then fail with AMBIGUOUS_REFERENCE. The events now drop it after `build_dim_product` has used it.
+- **The docstring said `fact_event` is in `ddl.sql` order.** On disk `event_date` comes last, because it is the
+  directory name. The docstring now says so.
+- **The brief's line numbers had drifted.** 4,681,493 was at `ddl.sql:153` (not 155), and "AS OF event_time"
+  at `ddl.sql:159-160` and SYSTEM_DESIGN 483-484 (not 161-162). Section 10 already listed `dim_product.py` and
+  `dim_user.py`, which the old plan wanted to add.
+
+### Judgement that stayed with the team
+
+Dat decided:
+- **How the stubs are wired:** import the modules under an alias, and call `assign_versions` on full silver;
+- **Sources and scope:** `dim_event_type` from `DIM_EVENT_TYPE_ROWS`; Postgres step 6 stays Tín's stub;
+- **fact_event's spec:** the `event_sk` formula and order, keeping the 7,312 duplicates, the check list, and the
+  three conditions a/b/c for "the right price at event time";
+- **The pins:** the three pinned events with their expected prices;
+- **How the PR ends:** Dat keeps `fact_event`, and the PR stops at staging.
+
+Made by AI, flagged for review:
+- **Checks beyond the brief's list:**
+  - `event_date values` = 31;
+  - `date_key wrong`;
+  - `event_sk ties that differ`;
+  - `product_sk not in force`;
+  - `user_sk not in force`;
+  - `fact rows not in silver`.
+
+  All six are 0 or 31 today, and each fails the build.
+- **`events.drop("version_no")` inside Nguyen's step 2 wiring.** Khang and Nguyen review the wiring.
+- **The rule that picked pins 4-5.**
+- **The README Status date moved to 2026-09-28 / W40.**
+
+Open:
+- **For Nguyen (`dim_product.py`):**
+  - `product_sk` is int (DDL bigint), and `version_no` is bigint (DDL integer);
+  - `attributes` is a struct, not JSON text, so step 6 needs `to_json` for `jsonb`;
+  - the `_SUCCESS` guard in `read_silver_events`;
+  - `max_by` has no tie-break: 315 product-days tie on time today, harmlessly.
+- **For Tín (step 6), and his confirmation of the Session 9 loader decision:**
+  - `fact_event` reads back with `event_date` last;
+  - `user_session` is string (DDL uuid);
+  - timestamps are written as INT96 (`spark.sql.parquet.outputTimestampType`);
+  - collecting `event_time` raw shifts it +7 h.
+- **The team post:** Dat keeps `fact_event` (PLAN.md 212-213).
+- **Old-sample numbers that belong to other owners, still in the docs:**
+  - `dim_product` "127,693 → 244,025" (`ddl.sql:89`, SYSTEM_DESIGN 92/391/592, README:61), measured here as 128,972 → 210,454;
+  - `fact_inventory_daily` 1,898,850;
+  - 1005115's 46,499 events.
+- **Stale since PR #11:** `docs/SETUP_SPARK.md:351` and `docs/SPARK_GUIDE_VI.md:465`, both saying "before that file exists". Also the
+  `ai-usage-log` skill still says this file "holds two sessions".
+- **`assign_versions` is computed about five times per run:** the count inside `build_dim_product`, the two writes and the
+  checks. The run takes 71-74 s. Rule 3: no cache before the W41 numbers.
+- **Carried from Session 8:**
+  - `fact_event.user_session` uuid against `fact_session_funnel.user_session` text;
+  - `funnel_daily` has no session count (Dat, BR2);
+  - `rfm_cell` is not in `rfm_segments` (Khang);
+  - `br-slice` §3 describes the old envelope;
+  - the loader's raw traceback on an old schema and its missing-seed hint.
+
+Closed here:
+- `fact_event` 4,681,493;
+- "AS OF event_time";
+- Session 9's "spot-check fails for 14.2% by design", now definition (c) of the spot check.
+
+## Session 11 — 28-29 September 2026 (W40)
+
+**Tool:** Claude Code (Opus 5.5).
+**Scope:** the Part 1 tracker sheet (W38–W42) was checked against the repo and edited in place. `PLAN.md` and
+`README.md` were brought in line with it, and three Mermaid diagrams were added to `README.md`. No application code
+was written. At Dat's request the AI committed the repo changes on branch `w40-plan-and-readme-diagrams` and opened the
+PR. Dat reviews it and merges it.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| Part 1 tracker sheet — 89 cells in 54 rows (descriptions, gates, notes and 12 statuses). A new row 66 for Tín (W40, 0.50 h): step 6 of `batch_warehouse.py`, plus the flat silver table the benchmark needs. The hours column rewritten as numbers | Written in place through the Google Sheets connector, then read back and compared (below). Wording: human review pending |
+| `PLAN.md` — two moves, and nobody's total changes. The replayer goes to Dat: the W40 streaming-foundation row goes from 1.00 to 1.25 h, paid by the W41 Spark-memory row (0.25 → 0 h, done since W38). Step 6 and the flat table become Tín's W40 row (0.50 h), paid by the W40 benchmark-harness row (1.00 → 0.50 h). The owner table, week table and totals line follow, with a new "Sửa ngày 28/9" paragraph | AI-drafted, approved by Dat. Tín's confirmation pending |
+| `README.md` — the replayer's run line names Dat. Under Architecture, the ASCII drawing becomes a Mermaid flowchart, and a new "The star schema" subsection holds a Mermaid ER diagram. Under Getting started (d), a sequence diagram shows the stream's start order | AI-drafted, rendered and checked (below). Human review pending |
+| `docs/AI_USAGE.md` — this session | AI-drafted |
+
+### How it was checked
+
+The tracker:
+- **Audit.** A workflow compared every Part 1 row with the repo. 7 auditors and 7 adversarial verifiers, told to
+  refute the findings, left 119 findings standing.
+- **Edits.** 5 drafters wrote the cell edits, and 5 checkers plus 1 consistency critic reviewed them. A script applied
+  them to a local copy and refused any replacement that did not match exactly once: 0 errors.
+- **Writing.** The new row was inserted inside the sheet's Table, which then reaches row 100. Every untouched cell was
+  sent as null, so it was not rewritten.
+- **Reading back.** A full read of `A1:J` was compared cell by cell with the approved text: 0 mismatches in rows 2–100.
+  The header was unchanged, and row 66 is formatted like row 65.
+- **Hours and statuses.** Summed per person per week, the sheet's hours equal the `PLAN.md` week table: 64.50 h for
+  W38–W42. Statuses: Chưa bắt đầu 60, Xong 35, Đang làm 4.
+
+The week table in `PLAN.md`:
+
+```bash
+python3 -c "import re; r=[[float(x) for x in l.strip().strip('|').split('|')[-4:]] for l in open('PLAN.md') if re.match(r'\| W(3[89]|4[0-6]) \|', l)]; print([sum(c) for c in zip(*r)], [sum(h) for h in r], min(map(min, r)), max(map(max, r)))"
+# [25.0, 25.0, 25.0, 25.0] [12.5, 15.0, 15.0, 11.75, 10.25, 8.75, 9.75, 8.75, 8.25] 2.0 4.0
+```
+
+The diagrams:
+- **Which Mermaid GitHub runs.** GitHub's renderer script (`mermaidMarkdown-*.js` on
+  `viewscreen.githubusercontent.com`) calls Mermaid 11.17.2. It sets `securityLevel: "antiscript"` and flowchart
+  padding 48, and switches to the dark theme when the page is dark.
+- **Rendering.** Each `mermaid` block was cut from `README.md` and rendered with `@mermaid-js/mermaid-cli@11`, which is
+  the same 11.17.2, under those settings, light and dark. The images were then inspected. Widths: 874, 1,263 and
+  1,140 px. The blocks also parse on Mermaid 10.9.8 and 12.0.0.
+- **Content.** Every label was checked against SYSTEM_DESIGN sections 1, 4, 5.3–5.6, 6, 7 and 8, against
+  `warehouse/ddl.sql`, and against `main()` in `processing/batch_warehouse.py`.
+
+### What the AI got wrong, and was corrected on
+
+- **The first route to the sheet wiped its formatting.** The AI rebuilt the sheet as an `.xlsx`, and Dat imported it
+  with "Replace spreadsheet". The import wiped the Google Sheets Table formatting (header colour, stripes, dropdown
+  chips), which an `.xlsx` cannot carry. Dat restored the sheet from Version history, and it matched the pre-edit
+  export with 0 differences. He then connected the Google Sheets connector, and the edits were redone in place.
+- **The first diagram drafts were 1,400–2,200 px wide.** GitHub would have shrunk their text, and Mermaid 11 broke
+  long labels in mid-name. They are now 874–1,263 px. The architecture block sets `wrappingWidth: 260` so that no
+  table name breaks.
+- **The first star-schema layout drew a relation that does not exist.** The `dim_user` → `fact_event` edge ran behind
+  `fact_inventory_daily`, so it read as a link between those two tables. Writing some relationships fact-first gives
+  four rows and no crossing.
+- **A "partition key" note was true for Postgres only.** It sat on `fact_inventory_daily.warehouse_id`, but the
+  Parquet copy is partitioned by `snapshot_date` (SYSTEM_DESIGN 5.3; `write_fact` in `batch_warehouse.py`). Both
+  columns are now labelled.
+- **A fourth diagram, the build order inside `batch_warehouse.py`, rendered as a tangle.** It was dropped. The
+  script's docstring and SYSTEM_DESIGN 5.6 already give the order.
+
+### Judgement that stayed with the team
+
+Dat decided:
+- **The edits.** Apply every proposed tracker edit as drafted ("Áp luôn đề xuất"), including the hour moves above,
+  and make `PLAN.md` and `README.md` follow them.
+- **After the failed import.** Restore the sheet, then connect the Sheets connector.
+- **The PR.** One PR carries `PLAN.md`, `README.md` and this entry.
+
+Made by AI, flagged for review:
+- **Tín's new W40 row was assigned without Tín.** He confirms it or hands it back.
+- **Three rows marked Xong are back to Đang làm:**
+  - Row 38: `docs/evidence/` holds no DESCRIBE evidence for the five Cassandra tables yet.
+  - Rows 43 and 44: their Postgres half is done, but `build_dim_date()` and `build_dim_warehouse()` are still stubs.
+
+  Nguyên and Tín review them.
+- **Nguyên's row 58 now covers more for the same 0.75 h.** It adds the BRIN and partial-index plans, and it waits for
+  row 66 (step 6).
+- **The README diagrams.** Above all, the ASCII architecture drawing was replaced, and the `wrappingWidth` setting was
+  added.
+- **Hours now display as "0,25".** That comes from the sheet's vi_VN locale. Switching it to English (US) is Dat's call.
+
+Open, written in the sheet as "CẦN CHỐT":
+- **Keep or drop `fact_session_funnel`.** The row 28 flag fired. Dat decides in the Wednesday 30/9 post.
+- **BR4's source.** Either `dim_user` where `is_current`, or `stg_rfm_snapshot` by snapshot date. Khang asked in PR #10
+  on 26/9, and nobody has answered.
+- **BR2.** Either change the gold column or change the contract (row 68).
+- **BR8's drill-down to single orders.** Neither `order_velocity_alerts` nor API_CONTRACT section 10 carries the
+  orders (row 80).
+- **Khang's 0.50 h in W41.** It is free, because row 74 was done in W39.
+
+Found in SYSTEM_DESIGN, not fixed here:
+- **5.2's ASCII star links `fact_session_funnel` to `dim_product`.** `warehouse/ddl.sql` gives that table no
+  `product_sk`, and the README diagram follows the DDL.
+- **Section 8, step 5 says each replayer file holds "roughly 2,000 rows".** At `--speed 60`, a 5-second file holds 5
+  minutes of events: 4,767,012 / 8,640 ≈ 552 rows on average.

@@ -14,7 +14,7 @@
 -- Between BEGIN and COMMIT this is SYSTEM_DESIGN.md 5.4/5.5 verbatim. A change starts
 -- there and is copied here. Two differences:
 --   - no INSERT INTO dim_event_type, marked "-- not in 5.4". serving/load_star_postgres.py
---     writes the five rows; the Spark build (processing/batch_warehouse.py) will write
+--     writes the five rows; the Spark build (processing/batch_warehouse.py) writes
 --     the same rows to Parquet.
 --   - the CREATE TABLE ... PARTITION OF statements. 5.5 says in a comment which
 --     partitions exist and that this file creates them; the statements spell them out.
@@ -150,14 +150,14 @@ CREATE UNIQUE INDEX ux_dim_user_current
   ON dim_user (user_id) WHERE is_current;
 -- =====================================================================
 -- fact_event. TRANSACTION fact. Grain: one cleaned user event.
--- 1:1 with silver. Measured: 4,681,493 rows.
+-- 1:1 with silver. Measured: 4,754,015 rows.
 -- Column order is 8-byte columns first: "readable" order costs ~8 bytes
 -- of alignment padding per row, about 37 MB on this table.
 -- =====================================================================
 CREATE TABLE fact_event (
   event_sk      bigint        NOT NULL,   -- surrogate, assigned in Spark
-  product_sk    bigint        NOT NULL,   -- SCD2 version AS OF event_time
-  user_sk       bigint        NOT NULL,   -- SCD2 version AS OF event_time
+  product_sk    bigint        NOT NULL,   -- SCD2 version in force on event_date
+  user_sk       bigint        NOT NULL,   -- SCD2 version in force on event_date
   event_time    timestamp     NOT NULL,   -- silver already shifted to UTC+7
   user_session  uuid          NOT NULL,   -- DEGENERATE DIMENSION (no dim table)
   price         numeric(10,2) NOT NULL,   -- the measure

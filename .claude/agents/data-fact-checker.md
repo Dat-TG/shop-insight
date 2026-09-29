@@ -73,7 +73,7 @@ verdict column.
 ```
 | Claim | Command | Measured | Claimed | Verdict |
 |---|---|---|---|---|
-| silver row count | duckdb -c "select count(*) from read_parquet('data/silver/**/*.parquet')" | 4,681,493 | 4,681,493 | MATCH |
+| silver row count | duckdb -c "select count(*) from read_parquet('data/silver/**/*.parquet')" | 4,754,015 | 4,754,015 | MATCH |
 ```
 
 Verdicts: `MATCH`, `MISMATCH`, `CANNOT MEASURE`, `UNVERIFIED (document only)`.

@@ -143,10 +143,10 @@ màn hình. Mỗi người một BR batch và một BR streaming.
 
 | Người | BR batch | BR streaming | Phụ trách chung |
 |---|---|---|---|
-| Đắt | BR2 phễu chuyển đổi | BR1 GMV theo phút | Nền tảng: bronze, silver, schema, **driver tầng kho**, nền streaming, tài liệu hướng dẫn, đóng gói |
+| Đắt | BR2 phễu chuyển đổi | BR1 GMV theo phút | Nền tảng: bronze, silver, schema, **driver tầng kho**, nền streaming + replayer, tài liệu hướng dẫn, đóng gói |
 | Khang | BR4 RFM | BR3 top-N trending | Report 6 mục + **dim_user SCD2 + stg_rfm_snapshot** + correctness |
 | Nguyên | BR7 mua cùng nhau | BR5 giỏ hàng bỏ quên | Slide indexing + schema Cassandra + video + ground-truth + **dim_product SCD2 + catalogue JSON** |
-| Tín | BR6 nguy cơ hết hàng | BR8 bất thường đặt đơn | App + benchmark + replayer + **Postgres star + DDL + GIN** + UI |
+| Tín | BR6 nguy cơ hết hàng | BR8 bất thường đặt đơn | App + benchmark + **Postgres star + DDL + GIN + nạp star (bước 6)** + UI |
 
 ### Chia tầng kho: bốn người làm song song, không ai chờ ai
 
@@ -193,8 +193,8 @@ của Đắt là máy demo: đo hiệu năng W44, quay video W46, đóng gói W4
 |---|---|---|---|---|---|---|
 | W38 | 14-20/9 | Khởi động + hạ tầng + ai cũng tự cài Spark (JDK 21, Python, PySpark 4.1.3, Docker) | 3.75 | 2.75 | 2.75 | 3.25 |
 | W39 | 21-27/9 | Ai cũng tự sinh dữ liệu + **TẦNG KHO**: 5 dim (2 cái SCD2), 2 nguồn mới, DDL Postgres | 3.75 | 3.75 | 3.75 | 3.75 |
-| W40 | 28/9-4/10 | Nền streaming + BR1, BR6 + **2 fact còn lại** + BR4, BR7 tràn sang + nạp star vào Postgres | 3.75 | 3.75 | 3.50 | 3.75 |
-| W41 | 5-11/10 | Ba BR streaming (BR3, BR5, BR8) + **BR2 tràn sang** + benchmark | 3.00 | 3.00 | 3.00 | 3.00 |
+| W40 | 28/9-4/10 | Nền streaming + replayer + BR1, BR6 + **2 fact còn lại** + BR4, BR7 tràn sang + nạp star vào Postgres | 4.00 | 3.75 | 3.50 | 3.75 |
+| W41 | 5-11/10 | Ba BR streaming (BR3, BR5, BR8) + **BR2 tràn sang** + benchmark | 2.75 | 3.00 | 3.00 | 3.00 |
 | W42 | 12-18/10 | Đóng băng code, đo <2s (Gate 2b), hoàn thiện slide, quay video | 2.75 | 2.25 | 3.00 | 2.25 |
 | W43 | 19-25/10 | **NỘP PRESENTATION** + ghép video (Gate 3) + tập thuyết trình + dựng máy demo | 2.00 | 2.00 | 2.50 | 2.25 |
 | W44 | 26/10-1/11 | **THUYẾT TRÌNH** + 3 nhóm thí nghiệm đánh giá | 2.00 | 3.00 | 2.00 | 2.75 |
@@ -202,12 +202,20 @@ của Đắt là máy demo: đo hiệu năng W44, quay video W46, đóng gói W4
 | W46 | 9-15/11 | **NỘP PROJECT** | 2.00 | 2.00 | 2.25 | 2.00 |
 | **Tổng** | | | **25.00** | **25.00** | **25.00** | **25.00** |
 
-Tổng theo tuần: 12.50 · 15.00 · 14.75 · 12.00 · 10.25 · 8.75 · 9.75 · 8.75 · 8.25
-= 100.00h. **Cả 36 ô đều nằm trong băng 2.00–4.00h** — ô cao nhất 3.75, ô thấp nhất
-2.00. Đã kiểm từng ô.
+Tổng theo tuần: 12.50 · 15.00 · 15.00 · 11.75 · 10.25 · 8.75 · 9.75 · 8.75 · 8.25
+= 100.00h. **Cả 36 ô đều nằm trong băng 2.00–4.00h** — ô cao nhất 4.00 (Đắt W40), ô
+thấp nhất 2.00. Đã kiểm từng ô.
 
-Nhưng compliant trên giấy không có nghĩa là an toàn: **Đắt chạy 3.75 / 3.75 / 3.75
-suốt W38–W40** — ba tuần liền ở 94% trần — trong khi ôm cả hai chỗ bàn giao then
+**Sửa ngày 28/9, không đổi tổng giờ của ai.** Rà Bảng theo dõi với repo thấy hai việc W40
+chưa dòng nào trả giờ. (1) `ingestion/replayer.py` chưa có, mà nền streaming, BR1 và
+Gate 1a cần nó ngay đầu W40 → Đắt viết trong dòng nền streaming (1.00 → 1.25h), trả bằng
+dòng "đặt bộ nhớ Spark" W41 (0.25 → 0h), vì `conf/spark-defaults.conf` đã đặt
+`spark.driver.memory` từ W38. (2) Bước 6 của `batch_warehouse.py` (nạp star vào
+Postgres) và bảng phẳng từ silver cho benchmark → dòng mới của Tín ở W40, 0.50h, trả
+bằng dòng dựng bộ đo W40 (1.00 → 0.50h; tuần này bộ đo chỉ cần chạy thử một cấu hình).
+
+Nhưng compliant trên giấy không có nghĩa là an toàn: **Đắt chạy 3.75 / 3.75 / 4.00
+suốt W38–W40** — ba tuần liền ở 94–100% trần — trong khi ôm cả hai chỗ bàn giao then
 chốt (batch_silver + khung tầng kho cho W39, bản mẫu streaming cho W41). Tín cũng
 3.75/3.75 ở W39–W40. **Phương án giảm tải đã thoả thuận trước:** nếu checkpoint thứ
 Tư W39 thấy Đắt trượt, chuyển `fact_event` (0.75h) sang Khang ngay, không bàn lại.
