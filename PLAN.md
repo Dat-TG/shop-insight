@@ -385,8 +385,10 @@ bằng tài liệu, không phải phỏng đoán.
   của batch (DuckDB vẫn thấy → hai bên lệch nhau), hoặc nhân đôi dòng vì replayer phát
   lại đúng những sự kiện batch đã ghi. Chạy demo lần hai là BR2, BR4, BR7 sai số gấp đôi.
 - **PySpark 3.5.x SEGFAULT trên Python 3.14** — cloudpickle 2.x bên trong nó gọi
-  `pickle._getattribute` đã đổi ở 3.14, mà cloudpickle chính là thứ serialize mọi
-  closure `foreachBatch`. Pin `pyspark==4.1.3` + OpenJDK 21.
+  `pickle._getattribute` đã đổi ở 3.14, mà cloudpickle chính là thứ serialize mọi hàm
+  Python gửi sang worker (UDF, lambda của RDD). Sửa ở W40: `foreachBatch` ở chế độ
+  `local[*]` là callback py4j chạy trên driver, **không** qua cloudpickle. Pin
+  `pyspark==4.1.3` + OpenJDK 21.
 - **`spark.executor.memory` vô tác dụng trong `local[*]`** (driver chính là executor), và
   `.config("spark.driver.memory", ...)` trên `SparkSession.builder` chỉ có tác dụng khi
   chính builder đó khởi động JVM; JVM đã chạy sẵn (pyspark shell, notebook, session đã

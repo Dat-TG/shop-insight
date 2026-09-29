@@ -108,12 +108,16 @@ pip install -r requirements.txt    # PySpark is a 434 MB download and is built l
   functions into bytes Spark can send around.
 - That old cloudpickle calls `pickle._getattribute`, an internal Python function that
   changed in Python 3.14.
-- cloudpickle serialises every function passed to `foreachBatch`, and `foreachBatch` is
-  how this project writes to Cassandra (CLAUDE.md hard rule 2).
+- cloudpickle serialises every Python function Spark ships to a worker: UDFs, RDD
+  lambdas, and the `foreachBatch` function under Spark Connect.
 
-So a wrong version installs cleanly and runs every batch script. It only crashes in W40,
-on the streaming Cassandra writes, when it is too late to find out why. 4.1.3 does not
-have the problem.
+**Corrected in W40:** this page used to say that every function passed to `foreachBatch`
+goes through cloudpickle. Not in the classic `local[*]` mode this project uses: there
+`ForeachBatchFunction` (`pyspark/sql/utils.py`) is a py4j callback that runs in the
+driver's own Python process. The pin stands; only the reason changed.
+
+So a wrong version installs cleanly and runs many batch scripts, then crashes on the first
+UDF, when it is too late to find out why. 4.1.3 does not have the problem.
 
 ## 6. Spark configuration, and two traps
 
