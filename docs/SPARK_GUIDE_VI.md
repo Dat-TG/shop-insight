@@ -26,6 +26,7 @@ quy trình**: ai sửa một lệnh ở file này thì sửa luôn ở file kia.
 | [7](#phần-7--những-gì-đã-thay-đổi-trong-w38-và-vì-sao) | Những gì đã thay đổi trong W38, và vì sao | Khi thắc mắc một con số |
 | [8](#phần-8--khi-có-lỗi) | Bảng tra lỗi | Khi có lỗi |
 | [9](#phần-9--tiện-ích-vscode) | Tiện ích VSCode nên cài, và hai dòng cấu hình | Sau khi cài xong, tuỳ bạn |
+| [10](#phần-10--streaming-đọc-br1-từng-khối) | Streaming: đọc BR1 từng khối, đổi gì cho BR3, BR5, BR8 | Trước khi viết BR streaming ở W41 |
 
 ---
 
@@ -172,12 +173,17 @@ nhân như sau:
    biến hàm Python thành dãy byte để Spark gửi đi.
 2. cloudpickle 2.x gọi `pickle._getattribute`, một hàm nội bộ của Python, và hàm đó đã
    đổi ở Python 3.14.
-3. Mọi hàm truyền vào `foreachBatch` đều đi qua cloudpickle. Mà `foreachBatch` chính là
-   cách dự án ghi vào Cassandra (luật cứng số 2 trong `CLAUDE.md`).
+3. Mọi hàm Python mà Spark gửi sang tiến trình worker đều đi qua cloudpickle: UDF, lambda
+   của RDD, và hàm `foreachBatch` khi chạy Spark Connect.
 
-Nguy hiểm ở chỗ bản sai vẫn cài bình thường và chạy được mọi script batch. Nó chỉ sập ở
-W40, lúc ghi streaming vào Cassandra, khi đã quá muộn để tìm nguyên nhân. Bản 4.1.3
-không bị lỗi này.
+**Sửa ở W40:** bản cũ ghi "mọi hàm truyền vào `foreachBatch` đều đi qua cloudpickle". Câu
+đó sai với chế độ `local[*]` cổ điển mà dự án dùng. Ở chế độ này `foreachBatch` **không**
+bị pickle: `ForeachBatchFunction` (`pyspark/sql/utils.py`) là một callback py4j, chạy ngay
+trong tiến trình Python của driver. Pin 4.1.3 vẫn giữ nguyên, chỉ lý do là "mọi hàm gửi
+sang worker", không phải `foreachBatch`.
+
+Nguy hiểm ở chỗ bản sai vẫn cài bình thường và chạy được nhiều script batch, rồi mới sập
+ở UDF đầu tiên, khi đã quá muộn để tìm nguyên nhân. Bản 4.1.3 không bị lỗi này.
 
 ### Bước 6. Cấu hình Spark: `conf/spark-defaults.conf` và hai cái bẫy
 
@@ -1149,3 +1155,329 @@ gắn vào. Chỗ đó cứ `df.show()` và đếm số dòng.
 | Jupyter, Data Wrangler | Quy ước của nhóm cấm dùng notebook cho code chạy thật: khó review, khó chạy lại. Tiện ích Python vẫn sẽ mời bạn cài chúng |
 | Mọi tiện ích tên "Spark", "Databricks" hay "Big Data" | Chúng viết ra để điều khiển cluster từ xa. Cả dự án này chạy `local[*]` |
 | Tiện ích Cassandra | Loại còn được bảo trì thì không có. Dùng `cqlsh` bên trong container (`docker compose exec cassandra cqlsh`) |
+
+---
+
+## Phần 10 — Streaming: đọc BR1 từng khối
+
+BR1 là job streaming mẫu. Ở W41, BR3 (Khang), BR5 (Nguyên) và BR8 (Tín) chép đúng khung của
+nó. Phần này đi qua `processing/streaming_gold.py` theo đúng đường một sự kiện đi, từng khối
+một, và ở mỗi khối ghi rõ cái gì giữ nguyên, cái gì phải đổi cho BR của bạn. Mở file đó
+song song khi đọc.
+
+Bản tiếng Anh là [STREAMING_PATTERN.md](STREAMING_PATTERN.md). Hai bản mô tả **cùng một
+khung**: sửa bản này thì sửa bản kia trong cùng PR.
+
+```
+replayer.py ──JSON mỗi 5 giây──> data/stream_landing/ ──> read_events ──> clean() ──> watermark
+                                                                                          │
+       Cassandra <── write_batch (foreachBatch) <── groupBy(window, ...) <────────────────┘
+                             │
+                   data/checkpoints/<job>/
+```
+
+### Đọc trước: hai cái bẫy của W41
+
+**1. Spark không xếp hạng được trên streaming DataFrame, và ở chế độ update bạn cũng không
+nhận đủ cả cửa sổ.** BR3 cần top 20 sản phẩm cho mỗi cửa sổ 15 phút. Trên luồng chỉ gộp được:
+đếm view và cart theo `(window, product_id)`. Xếp hạng và cắt còn 20 phải làm trong
+`write_batch`, nơi micro-batch là một DataFrame tĩnh bình thường, nên `Window`,
+`row_number()`, `orderBy().limit()` đều dùng được. Nhưng như vậy vẫn chưa đủ. BR1 dùng
+`outputMode("update")`, và chế độ này chỉ đưa cho `write_batch` **những dòng vừa thay đổi**
+trong micro-batch. Xếp top 20 trên đó sẽ lặng lẽ bỏ sót mọi sản phẩm có số đếm không đổi.
+BR3 phải dùng `outputMode("append")`: mỗi cửa sổ được đưa ra đúng một lần, đầy đủ, khi
+watermark đã đóng nó lại.
+
+**2. Mỗi bảng dọn dòng cũ theo một cách riêng.** Kiểu upsert thường của BR1 đúng với BR5 và
+BR8, nhưng sai với BR3. Còn BR5 thì tuyệt đối không được thêm DELETE, dù trông gọn gàng đến
+đâu.
+
+| Bảng | Job | Khoá | `write_batch` làm gì | Vì sao |
+|---|---|---|---|---|
+| `gmv_by_minute` | BR1 | `((event_date, category_l1), window_start)` | upsert thường, không xoá | Khoá của một cửa sổ không bao giờ đổi, ghi lại thì đè đúng dòng cũ |
+| `trending_products` | BR3 | `(window_start, rank)` | `DELETE FROM trending_products WHERE window_start = ?` rồi mới insert top 20 mới | Sản phẩm hạng 3 ở lần này, hạng 5 ở lần sau sẽ để lại hai dòng, và `LIMIT 20` trả nó hai lần. Partition chính là một cửa sổ, nên xoá cả partition trước là đúng |
+| `abandoned_carts` | BR5 | `((event_date), user_session)` | upsert thường, **tuyệt đối không xoá** | Bảng tích luỹ suốt ngày. `DELETE ... WHERE event_date = ?` xoá sạch giỏ mà các micro-batch trước đã tìm ra, và màn hình tự rỗng giữa lúc demo. `cart_value` được cố ý để ngoài khoá, nên cùng một phiên luôn rơi đúng vào dòng của nó |
+| `order_velocity_alerts` | BR8 | `((event_date), window_start, user_id)` | upsert thường, không xoá | Giống BR1: khoá của một (cửa sổ, user) không bao giờ đổi |
+| `stockout_risk` | BR6, batch | `((warehouse_id), days_to_stockout, product_id)` | `DELETE ... WHERE warehouse_id = ?` rồi insert | Không phải streaming. Ghi vào đây cho đủ mọi luật ở một chỗ (SYSTEM_DESIGN 6.1) |
+
+Hook `.claude/hooks/check_python.py` cảnh báo khi insert vào `trending_products` mà không có
+DELETE đi kèm, hoặc khi có bất cứ lệnh xoá nào trên `abandoned_carts`.
+
+### Chạy
+
+Hai terminal, **đúng thứ tự này**:
+
+```bash
+python processing/streaming_gold.py            # terminal 1. Đợi hai dòng READY
+python ingestion/replayer.py --speed 60        # terminal 2, chỉ chạy sau READY
+```
+
+Điểm bắt đầu tốt cho demo: `--start "2019-11-17 08:00:00"`. Giờ UTC, tức 15:00 giờ Việt Nam,
+trong ngày có nhiều lượt mua nhất của mẫu: 13.076, trong khi một ngày bình thường có khoảng
+2.200. Như vậy mỗi file có khoảng 2.000 dòng. Mặc định bắt đầu lúc 00:00 UTC ngày 1/11, giờ
+vắng nhất trong ngày: khoảng 90 dòng mỗi file. **Tránh ngày 15/11**: bronze có 432.575 sự
+kiện hôm đó nhưng không có lượt mua nào, nên BR1 hiện GMV bằng 0 cả ngày.
+
+Terminal 1 in ra (đo thật, ngày 17/11 từ 08:00 UTC):
+
+```
+READY: 1 of 4 jobs running (br1_gmv_by_minute), watching .../data/stream_landing
+READY: now start python ingestion/replayer.py --speed 60
+[br1_gmv_by_minute] batch 1: upserted 53 rows into gmv_by_minute (11 partitions) in 431 ms
+[br1_gmv_by_minute] batch 1: 2,007 events after cleaning, watermark 2019-11-17 14:54:59, 1,028 ms
+[br1_gmv_by_minute] batch 6: no window changed (watermark moved on)
+```
+
+Mỗi micro-batch in hai dòng. Dòng đầu do `write_batch` in: những gì đã ghi vào Cassandra.
+Dòng sau lấy từ báo cáo tiến độ của Spark: bao nhiêu sự kiện còn lại sau các quy tắc lọc của
+`clean()`, watermark đang ở đâu, và batch chạy mất bao lâu. Một batch "no window changed" chạy
+vì watermark vừa dịch lên, và Spark bỏ trạng thái của những cửa sổ đã đóng.
+
+| Tình huống | Lệnh |
+|---|---|
+| Chạy lần đầu, hoặc demo phát lại một khoảng thời gian đã phát | `python processing/streaming_gold.py --fresh` |
+| Job bị dừng (Ctrl-C, sập) và cần chạy tiếp | `python processing/streaming_gold.py`, **không** có `--fresh` |
+
+`--fresh` xoá `data/checkpoints/*/` và `data/stream_landing/*.json`, không đụng gì khác. Nó
+không đụng tới Cassandra. Mọi lần ghi đều idempotent, nên phát lại cùng một khoảng chỉ ghi đè
+đúng những dòng đó bằng đúng giá trị cũ. Không có `--fresh` thì checkpoint còn nhớ watermark.
+Phát lại một khoảng thời gian cũ hơn sẽ bị coi là "đến muộn" và bị bỏ mà không báo gì: màn
+hình chỉ đứng im.
+
+Khởi động lại mà không có `--fresh` thì job chạy tiếp: file đã đọc không đọc lại, và cửa sổ
+còn mở vẫn giữ nguyên tổng của nó. Đo trên Cassandra thật: sau khi khởi động lại, batch 8
+nối tiếp đúng chỗ batch 7 dừng. Cả 3.772 dòng đang có trong `gmv_by_minute` (17/11, từ 15:00
+tới 20:54 giờ Việt Nam) đều bằng đúng các phút tương ứng tính từ silver: GMV 1.794.180,25 và
+5.618 đơn.
+
+### Khối 0: những dòng đầu file
+
+```python
+os.environ["SPARK_CONF_DIR"] = str(REPO / "conf")  # driver memory + UTC, before the JVM starts
+os.environ["TZ"] = "UTC"
+time.tzset()
+```
+
+Ba dòng đầu thì script Spark nào cũng có. Dòng `TZ` là dòng mới, và nó bảo vệ cả bốn job
+trong file. PySpark đổi timestamp của Spark thành `datetime` của Python theo múi giờ **của
+laptop**, chứ không theo session UTC của Spark (`TimestampType.fromInternal` gọi
+`datetime.fromtimestamp`). Đo trên laptop UTC+7 khi thiếu dòng này: một timestamp mà Spark
+hiện là `2019-11-17 15:00:00` ra khỏi `collect()` thành `22:00:00`. cassandra-driver lại lưu
+giá trị không có múi giờ đó là 22:00 UTC. Kết quả lệch bảy tiếng, không có lỗi nào, và mỗi
+máy lệch một kiểu.
+
+**BR của bạn:** không phải đổi gì, vì bạn viết trong cùng file.
+
+### Khối 1: đọc luồng (`processing/source.py`)
+
+```python
+spark.readStream.format("json").schema(EVENT_SCHEMA).option("mode", "FAILFAST").load(LANDING_DIR)
+```
+
+- `.schema(EVENT_SCHEMA)` là bắt buộc, vì Structured Streaming không tự đoán được schema.
+  Schema chỉ khai báo ở một chỗ là `processing/schema.py`.
+- Không có `timestampFormat`. Replayer để Spark tự viết JSON, nên `event_time` đến dưới dạng
+  `"2019-11-01T00:00:02.000Z"` và bộ đọc mặc định đọc lại được đúng như vậy. Đo thật: cả
+  4.767.012 dòng bronze đi qua bước JSON này, và `exceptAll` theo cả hai chiều đều ra 0.
+- `FAILFAST` nghĩa là một dòng không đọc được sẽ dừng query. Chế độ mặc định sẽ biến dòng đó
+  thành null, mà `clean()` thì không bỏ `event_time` null.
+- Nếu đổi sang Kafka (một lựa chọn ở W44, sau cổng chặn) thì chỉ sửa hàm này.
+
+**BR của bạn:** không phải đổi gì. `main()` dựng luồng một lần rồi truyền cho hàm
+`start_brN(events, cassandra)` của bạn.
+
+### Khối 2: làm sạch, kể cả dời sang UTC+7
+
+```python
+events = clean(read_events(spark)).withWatermark("event_time", WATERMARK)
+```
+
+`clean()` được **import** từ `processing/batch_silver.py`, không chép lại. Nhờ vậy luồng áp
+dụng đúng bảy quy tắc của silver:
+
+- `price > 0`
+- phải có `user_id`
+- tách `category_l1/l2/l3`, cấp nào thiếu thì điền `'unknown'`. `category_l1` là một nửa khoá
+  partition của `gmv_by_minute`, mà Cassandra từ chối null trong khoá, nên thiếu bước điền
+  này thì cứ ba lần insert của BR1 hỏng một.
+- `brand` thiếu thì điền `'unknown'`
+- **dời `event_time` sang UTC+7 và tính lại `event_date` từ giờ đã dời**
+- phải có `user_session`, vì đó là khoá của BR5.
+
+Quên dời giờ thì `gmv_by_minute` xếp một sự kiện lúc 17:00–24:00 UTC vào ngày UTC của nó,
+trong khi `funnel_daily` (dựng bằng batch, từ silver) xếp nó vào ngày hôm sau, và hai màn hình
+cãi nhau xem sự kiện thuộc ngày nào.
+
+Import một hàm không biến job streaming thành người ghi silver. Xem bẫy A bên dưới.
+
+**BR của bạn:** không phải đổi gì. `events` có đủ các cột của silver: `event_time` (giờ Việt
+Nam), `event_type`, `product_id`, `category_id`, `category_code`, `category_l1/l2/l3`,
+`brand`, `price`, `user_id`, `user_session`, `event_date`.
+
+### Khối 3: watermark
+
+```python
+WATERMARK = "10 minutes"
+```
+
+Watermark cho Spark biết lúc nào một cửa sổ không còn thay đổi được nữa, để bỏ trạng thái của
+nó đi. Không có watermark thì trạng thái của mọi cửa sổ từ đầu tới giờ nằm mãi trong bộ nhớ
+cho tới khi JVM chết. Watermark đặt trên `event_time` **đã dời giờ**, nên nó cũng là giờ Việt
+Nam: log in ra đúng giờ đồng hồ đó. Replayer gửi sự kiện theo đúng thứ tự thời gian, nên
+không sự kiện nào trễ tới 10 phút. Watermark ở đây quan trọng vì bộ nhớ và vì chế độ append,
+không phải vì dữ liệu đến muộn.
+
+**BR của bạn:** không phải đổi gì, vì watermark dùng chung.
+
+### Khối 4: gộp theo cửa sổ
+
+```python
+.groupBy(F.window("event_time", "1 minute"), "event_date", "category_l1")
+.agg(
+    F.sum(F.when(is_purchase, F.col("price")).otherwise(0)).alias("gmv"),
+    F.count_if(is_purchase).alias("order_count"),
+)
+```
+
+- BR1 cố ý giữ cả view và cart. Mẫu 7% chỉ có khoảng 1,5 lượt mua mỗi phút cho tất cả ngành
+  hàng cộng lại, nên nếu lọc chỉ lấy lượt mua trước, phần lớn các phút sẽ biến mất khỏi biểu
+  đồ. Giữ mọi sự kiện thì phút nào có hoạt động cũng có một dòng, với `gmv 0` nếu không bán
+  được gì (API_CONTRACT §3 cho phép điều này).
+- `event_date` nằm trong `groupBy` chỉ để mang khoá partition theo. Cửa sổ 1 phút không bao
+  giờ vắt qua nửa đêm.
+
+**BR của bạn:**
+
+| BR | Gộp theo | Tính gì |
+|---|---|---|
+| BR3 | `F.window("event_time", "15 minutes", "1 minute")`, `product_id` (thêm `brand`, `category_l1` cho đủ dòng) | `count_if` view, `count_if` cart |
+| BR5 | theo `user_session`. `F.session_window("event_time", "30 minutes")` là một cách để nói "30 phút sau khi thêm giỏ mà không có gì" | có cart không, có mua không, giá trị giỏ, số món, thời điểm sự kiện cuối |
+| BR8 | `F.window("event_time", "5 minutes")`, `user_id` | số lượt mua, tổng giá trị |
+
+Kích thước cửa sổ lấy từ SYSTEM_DESIGN §8 bước 8.
+
+### Khối 5: `foreachBatch` và ghi vào Cassandra
+
+```python
+insert = cassandra.prepare("INSERT INTO gmv_by_minute (...) VALUES (?, ?, ?, ?, ?)")
+
+def write_batch(batch, batch_id):
+    rows = batch.select(..., F.col("window.start").alias("window_start"), ...).collect()
+    # one UNLOGGED BatchStatement per partition key
+```
+
+- `write_batch` chạy **ở driver**, mỗi micro-batch một lần. `batch` là một DataFrame tĩnh
+  bình thường, nên mọi thứ bạn biết từ Spark batch đều dùng được ở đây, kể cả xếp hạng
+  (bẫy 1).
+- Ghi bằng `cassandra-driver` thuần Python. Spark-Cassandra connector bị cấm (luật cứng số 2
+  trong CLAUDE.md).
+- Chỉ có một prepared statement, Cassandra phân tích nó một lần. Các dòng được gom theo khoá
+  partition thành từng batch UNLOGGED: mọi lệnh trong một batch cùng đi vào một partition, và
+  đó là trường hợp duy nhất mà batch của Cassandra rẻ.
+- `collect()` an toàn vì micro-batch nhỏ: khoảng 50–70 dòng với BR1. Với BR3, hãy cắt còn
+  top 20 **trước** khi collect.
+- **Timestamp:** Cassandra lưu giờ đồng hồ Việt Nam, cùng quy ước với silver. `cqlsh` hiện
+  `2019-11-17 15:00:00+0000` cho 15:00 giờ Việt Nam, còn API thì gắn thêm `+07:00` khi trả
+  giá trị ra. Khối 0 giữ cho điều này đúng.
+
+**BR của bạn:** câu INSERT, luật xoá của bảng bạn (bẫy 2), và các cột bạn select.
+
+### Khối 6: `writeStream`, checkpoint và trigger
+
+```python
+gmv_by_minute.writeStream
+    .queryName("br1_gmv_by_minute")
+    .outputMode("update")
+    .foreachBatch(write_batch)
+    .option("checkpointLocation", str(CHECKPOINT_DIR / "br1_gmv_by_minute"))
+    .trigger(processingTime=TRIGGER)          # "5 seconds"
+    .start()
+```
+
+- **Mỗi query một thư mục checkpoint riêng**, đặt tên `br<N>_<bảng>`. Hai query dùng chung
+  một thư mục thì cả hai cùng hỏng.
+- `update` hợp với BR1 và BR8: mỗi micro-batch phát lại những cửa sổ nó vừa đổi, kèm tổng
+  tính tới lúc đó, nên màn hình thấy phút hiện tại lớn dần. BR3 cần `append` (bẫy 1). Với
+  BR5, `append` hợp với câu hỏi: một phiên chỉ bị coi là bỏ giỏ khi đã qua 30 phút mà không
+  mua, và chỉ watermark mới khẳng định được điều đó.
+- Trigger kiểm tra file mới mỗi 5 giây. Đó cũng là nhịp của replayer, nên mỗi micro-batch
+  xử lý khoảng một file.
+
+**BR của bạn:** `queryName`, tên checkpoint, và `outputMode`.
+
+### Khối 7: `main()`
+
+`main()` kết nối Cassandra trước (thiếu container thì báo lỗi sau một giây, chứ không phải
+sau mười giây chờ JVM khởi động). Nó dựng `events` một lần, gọi bốn hàm `start_brN`, và chạy
+mọi query khác `None`. Sau đó nó đợi tới khi mỗi query đã đọc hết những gì có sẵn, in READY,
+rồi mỗi micro-batch in một dòng tiến độ cho tới khi bạn bấm Ctrl-C.
+
+**BR của bạn:** thay thân hàm stub và trả về `StreamingQuery`. `main()` tự nhận nó, không phải
+sửa chỗ nào khác.
+
+### Những cái bẫy khó thấy trước
+
+**A. Luồng không bao giờ ghi `data/silver/`.** Silver chỉ có một người ghi là
+`batch_silver.py`. Ghi bằng file sink Parquet sẽ tạo `data/silver/_spark_metadata/`, và từ đó
+Spark chỉ đọc những file có tên trong đó, nên mọi thứ batch đã ghi trở nên vô hình với Spark
+(DuckDB vẫn thấy). Ghi qua `foreachBatch` thì nhân đôi dòng, vì replayer phát lại đúng bronze
+mà silver đã chứa sẵn. BR2, BR4 và BR7 khi đó đếm mọi thứ hai lần. Đầu ra duy nhất là các
+bảng Cassandra.
+
+**B. Số shuffle partition bị ghim trong checkpoint.** Job này đặt
+`spark.sql.shuffle.partitions` là 4, không phải 200 như mặc định của Spark. Đo thật với chỉ
+BR1 trên máy 20 nhân: ở 200, mỗi micro-batch chạy 200 task state store và mất 3,5–6,7 giây
+cho khoảng 50 sự kiện, lâu hơn cả trigger 5 giây. Ở 4, nó mất 1,0–1,7 giây cho khoảng 2.000
+sự kiện. Mỗi query ghi giá trị này vào checkpoint ở lần chạy đầu tiên và bỏ qua mọi thay đổi
+về sau, nên đổi giá trị xong thì phải chạy một lần với `--fresh`.
+
+**C. Thứ tự khởi động là quan trọng.** File dồn trong `data/stream_landing/` trước khi một
+query chạy lần đầu sẽ bị micro-batch đầu tiên của nó đọc hết một lượt, thành một batch khổng
+lồ. Job in WARNING khi gặp tình huống này. Dừng lại, chạy với `--fresh`, rồi mới bật
+replayer.
+
+**D. Luật của replayer, cho ai sửa nó:**
+
+- Nó đọc `data/bronze/` (258.390 user), không bao giờ đọc file CSV gốc (3.696.117 user). Tập
+  người dùng lớn gấp 14 lần sẽ khiến ngưỡng correctness >= 99% không thể đạt được.
+- Mỗi file được ghi dưới một tên ẩn (`.tmp-...`) rồi mới đổi tên. Spark bỏ qua file bắt đầu
+  bằng dấu chấm, và đổi tên là thao tác nguyên tử, nên micro-batch không bao giờ đọc phải
+  nửa file.
+- Tên file là duy nhất cho mỗi lần chạy: `<lúc bắt đầu>-<số thứ tự>.json`. Checkpoint nhớ mọi
+  đường dẫn đã đọc, và một tên bị lặp lại sẽ bị bỏ qua mà không báo gì.
+
+**E. "events after cleaning" không phải "số dòng trong file".** Spark đẩy các điều kiện lọc
+dòng của `clean()` xuống tận bước quét JSON, nên dòng tiến độ đếm những sự kiện còn lại sau
+các điều kiện đó. Một file replayer 1.804 dòng hiện ra là 1.791. Đo trên sáu file, file nào
+cũng khớp đúng.
+
+**F. Pin toolchain, và lý do được nói lại cho đúng.** Xem phần 2, bước 5: pin 4.1.3 giữ
+nguyên. Chỉ có câu "mọi hàm truyền vào `foreachBatch` đều đi qua cloudpickle" là sai với chế
+độ `local[*]` dự án đang dùng.
+
+### Danh sách cho Gate 1a (BR1, cuối W40)
+
+- [ ] `docker compose up -d --wait`, `python serving/check_infra.py` in INFRA OK, và
+      `python serving/apply_schema.py` in APPLY_SCHEMA OK.
+- [ ] `python processing/streaming_gold.py --fresh` in READY, *rồi mới chạy*
+      `python ingestion/replayer.py --speed 60 --start "2019-11-17 08:00:00"`.
+- [ ] Ảnh 1: terminal 1 có ít nhất năm micro-batch, mỗi batch đủ hai dòng.
+- [ ] Ảnh 2: `docker compose exec cassandra cqlsh -e "SELECT * FROM
+      shopinsight.gmv_by_minute WHERE event_date = '2019-11-17' AND category_l1 = 'electronics'
+      LIMIT 10"`. Dòng mới nhất nằm trên cùng (`window_start DESC`). Giờ trong bảng phải trùng
+      với giờ "Vietnam" in trong log của replayer. Nếu lệch bảy tiếng thì Khối 0 bị thiếu.
+- [ ] Ctrl-C job, bật lại mà không có `--fresh`, và kiểm tra nó chạy tiếp mà không có batch
+      khổng lồ nào.
+- [ ] Hai ảnh để trong `docs/evidence/` và gửi lên nhóm chat.
+
+### Mỗi BR đổi gì, gói trong một bảng
+
+| | BR1 (xong) | BR3 | BR5 | BR8 |
+|---|---|---|---|---|
+| Hàm | `start_br1` | `start_br3` | `start_br5` | `start_br8` |
+| Cửa sổ | 1 phút, nối tiếp nhau | 15 phút, trượt mỗi 1 phút | 30 phút sau khi thêm giỏ | 5 phút, nối tiếp nhau |
+| Gộp theo | window, event_date, category_l1 | window, product_id | user_session | window, user_id |
+| Output mode | update | **append** | append | update |
+| Xếp hạng trong `write_batch` | không | **có**, top 20 | không | không |
+| Xoá trước khi insert | không | **có**, `WHERE window_start = ?` | **không bao giờ** | không |
+| Checkpoint | `br1_gmv_by_minute` | `br3_trending_products` | `br5_abandoned_carts` | `br8_order_velocity_alerts` |

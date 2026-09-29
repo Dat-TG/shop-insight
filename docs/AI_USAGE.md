@@ -1105,3 +1105,108 @@ Found in SYSTEM_DESIGN, not fixed here:
   `product_sk`, and the README diagram follows the DDL.
 - **Section 8, step 5 says each replayer file holds "roughly 2,000 rows".** At `--speed 60`, a 5-second file holds 5
   minutes of events: 4,767,012 / 8,640 ≈ 552 rows on average.
+
+## Session 12 — 29 September 2026 (W40)
+
+**Tool:** Claude Code (Opus 5.5).
+**Scope:** the W40 streaming foundation: the replayer, the source reader, and the streaming job with BR1 and three W41
+stubs, plus the pattern doc and its Vietnamese twin. It also corrected existing text in eleven files. Dat asked for a
+plan first, answered two design questions and approved the plan; the AI then wrote the code and ran it. At first
+Docker Desktop was not running, so the Cassandra write path was run against a stand-in that records the CQL. Dat then
+ran the test steps, started Docker and asked for a re-test before the commit. The AI re-ran everything
+against the live Cassandra, which found two more defects (below), and then committed and opened the PR.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| `ingestion/replayer.py` — reads bronze in `event_time` order and writes one JSON file every 5 s. `--speed` and `--start` (UTC). Spark writes the JSON (`to_json`). Writes are atomic: a hidden `.tmp-` name, then a rename. File names are unique per run | Run and verified (below) |
+| `processing/source.py` — `read_events()`: JSON, explicit `EVENT_SCHEMA`, `FAILFAST` | Run and verified |
+| `processing/streaming_gold.py` — BR1 → `gmv_by_minute` (1-minute windows, update mode, one UNLOGGED batch per partition key), `TZ=UTC` in the first lines, `--fresh`, a READY line, a two-line log per micro-batch, shuffle partitions 4. `start_br3/5/8` are stubs whose docstrings carry each BR's traps | Run and verified, against a stand-in and then the live Cassandra 4.1.12 |
+| `docs/STREAMING_PATTERN.md` (new) and `docs/SPARK_GUIDE_VI.md` Phần 10 (its Vietnamese twin) | AI-drafted, human review pending |
+| The "foreachBatch is pickled" wording, corrected in 8 files: `requirements.txt` (comment only, pins unchanged), `SYSTEM_DESIGN.md` 11.1, `README.md`, `PLAN.md`, `docs/SETUP_SPARK.md`, `docs/SPARK_GUIDE_VI.md` bước 5, `.claude/skills/spark-job/SKILL.md`, `.claude/agents/spark-reviewer.md` | AI-drafted, human review pending |
+| `SYSTEM_DESIGN.md` §8 step 5 (rows per file, the demo start, 15 Nov) and §11 step 3 (`--fresh`); `README.md` run lines and status tree; `CLAUDE.md` current status and next task; `.claude/skills/streaming-job/SKILL.md` (three new traps) | AI-drafted, human review pending |
+| `docs/AI_USAGE.md` — this session | AI-drafted |
+
+### How it was checked
+
+Scratch scripts in the session's scratchpad, not committed. Each one sets `SPARK_CONF_DIR` like every repo script.
+
+| Claim | How it was measured |
+|---|---|
+| The replayer sends every bronze row exactly once | `python ingestion/replayer.py --speed 100000` printed `6 files, 4,767,012 rows in 39 s` and `REPLAY OK` |
+| The JSON hop loses nothing | `spark.read.schema(EVENT_SCHEMA).option("mode", "FAILFAST").json("data/stream_landing")` against bronze's nine columns: 4,767,012 rows on both sides, and `exceptAll` gives 0 in both directions |
+| Rows per 5-minute file at `--speed 60` | Bronze grouped by `floor(unix_seconds(event_time) / 300)`: 8,607 of 8,640 slices are non-empty. Min 1, median 511, mean 553.9, p90 861, max 3,078. By UTC hour, from 66 per file (23:00) to 882 (15:00–16:00) |
+| Which day to demo | Bronze grouped by `event_date`: 16 Nov has 453,734 rows; 17 Nov has 446,186 rows and 13,076 purchases; 15 Nov has 432,575 rows and 0 purchases |
+| `collect()` shifts timestamps by the laptop's zone | On this laptop (+07), `spark.sql("select timestamp'2019-11-17 15:00:00'")` collects as `22:00:00`, and as `15:00:00` after `TZ=UTC` plus `time.tzset()` |
+| `foreachBatch` is not pickled in classic mode | Read in pyspark 4.1.3: `pyspark/sql/utils.py:143`, `ForeachBatchFunction`, a py4j callback implementing `PythonForeachBatchFunction` |
+| BR1 equals silver | `streaming_gold.main()` ran with `connect_cassandra` replaced by a session that records the CQL rendered by cassandra-driver's own encoder. Replay: 17 Nov, 08:00–08:30 UTC, `--speed 60`. The last value per `(event_date, category_l1, window_start)`, compared with the same minutes computed from `data/silver`: 316 of 316 identical, GMV 136,338.65, 435 orders |
+| A restart resumes | The job was stopped with Ctrl-C and restarted without `--fresh`, and the replay continued from 08:30. Batch 7 followed batch 6 with no file re-read. 369 of 369 windows identical to silver, GMV 165,010.95, 505 orders |
+| `window_start` is the Vietnam wall clock | In the recorded CQL, `1572591720000` = `2019-11-01T07:02:00Z` for 07:02 in Vietnam |
+| The progress count is taken after cleaning | Six landed files, rows against rows passing `price > 0`, a present `user_id` and a present `user_session`: 1,804 → 1,791, 2,011 → 2,007, 1,878 → 1,871, 1,820 → 1,812, 2,097 → 2,087, 2,057 → 2,046. All six equal the progress lines |
+| Shuffle partitions | Dry run at Spark's default 200: `triggerExecution` 3.5–4.8 s for 48–68 events, and batch 0's write took 6.7 s. At 4: 1.0–1.7 s for 1,812–2,087 events, and 4.8 s for the first batch after start |
+| The project's trap hook | `.claude/hooks/check_python.py` on the three new files: no warning |
+| Live Cassandra equals silver | Dat's own run (21:33, 71 files from 08:00 UTC on 17 Nov), then the AI's `--fresh` re-run of 08:00–08:35 UTC. Every `gmv_by_minute` row read back with cassandra-driver and compared with the same minutes from `data/silver`: 3,772 of 3,772 identical, 0 missing, 0 extra, GMV 1,794,180.25, 5,618 orders. The row count stayed 3,772 through the re-run: the upsert is idempotent |
+| Live restart | Restart without `--fresh`, replay from 08:35 UTC: batch 8 followed batch 7, no file re-read, and the 3,772 rows were still identical |
+| Live micro-batch time | 0.9–1.7 s per batch for 1,791–2,087 events, and 4.8–5.2 s for the first batch after start |
+| `connect_cassandra()`'s three outcomes | With `read_env` patched: the right keyspace gives a session; `no_such_ks` exits with "Run python serving/apply_schema.py"; port 9999 exits with "Run docker compose up -d --wait" |
+
+### What the AI got wrong, and was corrected on
+
+- **The plan said "about 550 rows per file" as if that were typical.** 554 is the mean, but the hour decides:
+  the first dry run, from 00:00 UTC, gave 32–61 rows per file. The docs now give the spread and a busy `--start`.
+- **The first draft kept Spark's default 200 shuffle partitions.** Measured too slow: a batch took longer than the
+  5 s trigger, and batch 1 had to take two files at once. The value is now 4, set after the numbers (hard rule 3).
+- **The progress log first keyed on `batchId`.** The idle report before the first file carries id 0 with 0 rows, so
+  it hid the real batch 0. It now keys on the report's timestamp and skips empty reports.
+- **The leftover-files warning tested `any(CHECKPOINT_DIR.iterdir())`.** The tracked `.gitkeep` always satisfies that,
+  so the warning could never fire. It now looks for directories only. Caught on review, before the first run.
+- **The first log label said "events read".** Spark pushes `clean()`'s row filters into the JSON scan, so the count is
+  taken after cleaning. It is relabelled "events after cleaning".
+- **The first BR3 stub said to rank inside `write_batch` but did not say to leave update mode.** In update mode the
+  micro-batch holds only the changed rows, so the top 20 would silently miss products. The stub and both docs now
+  require append mode.
+- **The first doc draft called 17 Nov "the busiest day" after measuring that one day only.** Ranking all days shows
+  16 Nov has more events and 17 Nov the most purchases, and it turned up 15 Nov with none. The docs are reworded, and
+  they now warn about 15 Nov.
+- **The first doc draft said BR1's plain upsert "is right for two" of the other tables.** It is right for BR5 and
+  BR8 and wrong for BR3.
+- **An `rm` of the six test files in `data/stream_landing/` was blocked by `.claude/hooks/guard_data.py`.** It was
+  not worked around. The next dry run cleared them through the approved `--fresh` flag.
+- **Earlier sessions' text, corrected here:** "cloudpickle serialises every foreachBatch closure" (8 files, listed
+  above) is false in classic `local[*]` mode. The pin is unchanged.
+- **Found only by the live run: a warning in the log.** `load_balancing_policy` was passed straight to `Cluster()`,
+  and cassandra-driver printed a DeprecationWarning at the top of the micro-batch log, which is the Gate 1a
+  screenshot. It now goes through an execution profile, and no warning is printed.
+- **Found only by the live run: the wrong fix for a missing keyspace.** `connect(keyspace)` raises
+  `NoHostAvailable` for a missing keyspace, not `InvalidRequest`. The draft would have told the user to start Docker
+  when the fix is `apply_schema.py`. It now connects first and checks `cluster.metadata.keyspaces`.
+- **The Gate 1a checklist said the first `window_start` shows 15:xx.** That is true only for a short run: rows come
+  newest first. It now says to compare with the "Vietnam" times in the replayer's log.
+
+### Judgement that stayed with the team
+
+Dat decided:
+- **The plan, approved as written.** The replayer uses Spark plus `toLocalIterator`, with the `TZ` fix, `--fresh`,
+  update mode for BR1 and the 5-second trigger.
+- **The pattern doc.** English as the version of record, with a Vietnamese twin in `SPARK_GUIDE_VI.md` Phần 10.
+- **Cassandra timestamps.** They hold the Vietnam wall clock, silver's convention, and the API appends `+07:00`.
+
+Made by AI, flagged for review:
+- **`spark.sql.shuffle.partitions = 4`.** It is frozen into every checkpoint, and it was measured on 20 cores only.
+  The team's 4-core laptops are unmeasured, and the W41 benchmarks may revisit it.
+- **BR1 aggregates every event, not only purchases.** A minute with views and no sale gets a `gmv 0` row. The API
+  contract allows this.
+- **`--fresh` deletes under `data/checkpoints/` and `data/stream_landing/`.** That is the guard hook's territory,
+  kept to those two directories.
+- **Output-mode advice.** Append for BR3 and BR5, update for BR8. The owners decide.
+- **The corrected cloudpickle reason.** It was read from the pyspark source. The PySpark 3.5 segfault itself was not
+  reproduced.
+
+Dat also decided: re-test against the live Cassandra before the commit, then commit, push and open the PR.
+
+Pending:
+- **Gate 1a screenshots (Dat)**, and the group post (Dat).
+- **The three teammates' confirmation** that the pattern doc is enough to write BR3, BR5 and BR8.
+
+Carried forward from Session 11: the §8 step 5 "2,000 rows" is fixed here. Every other open item there is untouched.
