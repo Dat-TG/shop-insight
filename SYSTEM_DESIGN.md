@@ -708,9 +708,12 @@ CREATE TABLE order_velocity_alerts (
 Reasoning behind the keys, to be reused in the report:
 
 - BR1: the partition key is `(event_date, category_l1)` because the screen always
-  filters by date and category. Clustering by `window_start DESC` means "the last
-  60 minutes" reads exactly 60 adjacent rows at the head of one partition, with
-  no sort step.
+  filters by date and category. Clustering by `window_start DESC` means the
+  screen's two hours (the last 60 minutes, plus the 60 before for "vs previous")
+  are at most 120 adjacent rows at the head of one partition, with no sort step.
+  "All categories" is a partition too: the stream writes one extra row per window
+  under `category_l1 = 'all'`, summed by the same aggregation, so the default
+  filter reads one partition instead of 14.
 - BR6: `days_to_stockout` ascending puts the most urgent SKUs at the head of the
   partition.
 
@@ -905,7 +908,7 @@ Executive screen sketch:
 |  |  __/    \      \/      \____/  \___                 |  |
 |  +-----------------------------------------------------+  |
 |                                                           |
-|  Query: 43 ms · Cassandra · 1 partition · 60 rows         |
+|  Query: 43 ms · Cassandra · 1 partition · 120 rows        |
 +----------------------------------------------------------+
 ```
 
@@ -1007,7 +1010,7 @@ python serving/load_star_postgres.py #    optional, Postgres only, until step 6 
 python processing/batch_gold.py      # 6. reads the star
 
 # 3. Real-time stream (two terminals)
-python processing/streaming_gold.py       # start FIRST, wait for READY (--fresh: forget earlier runs)
+python processing/streaming_gold.py       # start FIRST, wait for READY (--fresh: start from nothing, streaming tables included)
 python ingestion/replayer.py --speed 60   # 1 hour of data per minute
 
 # 4. Application

@@ -466,6 +466,34 @@ body {
   border-bottom: 1px solid var(--border-subtle);
 }
 
+/* A chart's numbers as a table, folded away until asked for (BR1). */
+.panel__details {
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.panel__details summary {
+  padding: 0.65rem 1.5rem;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.panel__details summary:hover {
+  color: var(--text-primary);
+}
+
+.panel__details .panel__table-wrapper {
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+/* A signed change with its arrow: the arrow and sign carry direction, not the colour alone. */
+.kpi-ribbon__delta {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
 /* ── Apple-grade Data Table ──────────────────────────────────────────── */
 .panel__table-wrapper {
   overflow-x: auto;

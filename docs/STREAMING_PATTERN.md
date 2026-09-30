@@ -40,7 +40,8 @@ and BR8. For BR3 it is wrong. And BR5 must never grow a DELETE, however tidy one
 | `stockout_risk` | BR6, batch | `((warehouse_id), days_to_stockout, product_id)` | `DELETE ... WHERE warehouse_id = ?`, then insert | Not streaming. It is listed so that all the rules sit in one place (SYSTEM_DESIGN 6.1) |
 
 `.claude/hooks/check_python.py` warns when an insert into `trending_products` has no matching
-DELETE, or when anything deletes from `abandoned_carts`.
+DELETE, or when anything deletes from or truncates `abandoned_carts`. The one reset is
+`--fresh`, which names the table only through `STREAMING_TABLES` and so does not trip it.
 
 ## Run it
 
@@ -62,8 +63,8 @@ What terminal 1 prints (measured, 17 Nov from 08:00 UTC):
 ```
 READY: 1 of 4 jobs running (br1_gmv_by_minute), watching .../data/stream_landing
 READY: now start python ingestion/replayer.py --speed 60
-[br1_gmv_by_minute] batch 1: upserted 53 rows into gmv_by_minute (11 partitions) in 431 ms
-[br1_gmv_by_minute] batch 1: 2,007 events after cleaning, watermark 2019-11-17 14:54:59, 1,028 ms
+[br1_gmv_by_minute] batch 1: upserted 58 rows into gmv_by_minute (12 partitions) in 511 ms
+[br1_gmv_by_minute] batch 1: 2,007 events after cleaning, watermark 2019-11-17 14:54:59, 1,150 ms
 [br1_gmv_by_minute] batch 6: no window changed (watermark moved on)
 ```
 
@@ -71,24 +72,46 @@ Each micro-batch prints two lines. The first comes from `write_batch`: what went
 Cassandra. The second comes from Spark's progress report: how many events survived
 `clean()`'s row rules, where the watermark stands, and how long the batch took. A batch with
 "no window changed" runs because the watermark moved and Spark dropped the state of windows it
-had closed.
+had closed. The partitions are the categories with an event in the batch's 5 minutes, plus
+`all` (Block 4).
 
 | Situation | Command |
 |---|---|
-| First run, or a demo that replays a period again | `python processing/streaming_gold.py --fresh` |
+| First run, a demo that replays a period again, or after pulling a change to a query's code | `python processing/streaming_gold.py --fresh` |
 | The job stopped (Ctrl-C, crash) and should carry on | `python processing/streaming_gold.py`, **without** `--fresh` |
 
-`--fresh` deletes `data/checkpoints/*/` and `data/stream_landing/*.json` and nothing else. It
-does not touch Cassandra. Every write is idempotent, so replaying the same period again
-rewrites the same rows with the same values. Without `--fresh`, the checkpoint remembers the
-watermark. A replay of an earlier period then arrives "late" and is dropped without a word:
-the screen just freezes.
+`--fresh` deletes `data/checkpoints/*/` and `data/stream_landing/*.json`, empties the four
+tables the job writes (`gmv_by_minute`, `trending_products`, `abandoned_carts`,
+`order_velocity_alerts`), and does nothing else. It never touches `stockout_risk`, which BR6's
+batch job writes. Without `--fresh`, the checkpoint remembers the watermark. A replay of an
+earlier period then arrives "late" and is dropped without a word: the screen just freezes.
+
+Why empty the tables too: the screens show the newest rows of a partition. Replay 17 Nov up
+to 20:54, then replay it again from 15:00 without emptying, and each category's newest rows
+are still the old run's 19:55–20:54. Its chart stands still until the new replay passes them.
+Measured on 30 Sep, before `--fresh` emptied the tables: `electronics` ended at 20:54 while the
+replay was at 20:09. Everything in these tables comes back from the replay, and emptying one
+before any query starts is a reset. It is not the mid-run delete that BR5 forbids.
 
 A restart without `--fresh` resumes: the files it already read are not read again, and
 windows that were still open keep their totals. Measured on the live Cassandra: after a
 restart, batch 8 picked up where batch 7 stopped. All 3,772 rows then in `gmv_by_minute`
 (17 Nov, 15:00–20:54 Vietnam time) equal the same minutes computed from silver: GMV
 1,794,180.25 and 5,618 orders.
+
+**Ctrl-C stops between two micro-batches.** The job prints
+`Ctrl-C: stopping after the running micro-batch`, lets that batch finish its Cassandra write
+(1–2 s with BR1 alone, at most 10), stops, and prints `stopped; the checkpoints keep the progress`. Two
+`WARN ... Failed to cancel job group ... Cannot find active jobs` lines are expected: nothing
+was left running to cancel. A second Ctrl-C quits at once, and the batch it cut short runs again
+on restart.
+
+This needed one line in `main()`. Starting Spark replaces Python's Ctrl-C handler with
+pyspark's, which cancels every running Spark job first (`pyspark/core/context.py`). A batch
+caught halfway then died inside its own write and printed a Java `StackOverflowError`.
+Measured on 30 Sep, with Ctrl-C sent while a batch was running: before the fix, 1 error in 7
+tries (4 of the 7 logged other errors); after it, 0 in 8, and each running batch committed
+before the stop.
 
 ## The pipeline, block by block
 
@@ -187,8 +210,21 @@ late. The watermark matters for memory and for append mode, not for late data.
   if nothing sold (API_CONTRACT §3 allows this).
 - `event_date` is in the `groupBy` only to carry the partition key through. A 1-minute window
   never crosses midnight.
+- Before the `groupBy`, every event is doubled: once under its own `category_l1`, once under
+  `'all'`:
 
-**For your BR:**
+  ```python
+  .withColumn("category_l1", F.explode(F.array("category_l1", F.lit(ALL_CATEGORIES))))
+  ```
+
+  The screen's default filter, "All categories", then reads one partition instead of 14. The
+  `all` row comes out of the same aggregation, so it is never partial. Adding the category
+  rows up inside `write_batch` would be wrong without any error: update mode hands over only
+  the categories that changed in this micro-batch. Measured on 150 closed minutes of 17 Nov,
+  `all` equals both the sum of the 14 category rows and silver, to the cent.
+
+**For your BR:** do **not** copy the explode. It is BR1's alone; in BR5 or BR8 it would
+double every count, and in BR3 it would list every product twice.
 
 | BR | Group by | Aggregate |
 |---|---|---|
@@ -251,7 +287,8 @@ gmv_by_minute.writeStream
 `main()` connects to Cassandra first (a missing container fails in one second, not after the
 JVM's ten). It builds `events` once, calls the four `start_brN` functions, and starts every
 query that is not `None`. It then waits until each query has read whatever was already there,
-prints READY, and prints one progress line per micro-batch until Ctrl-C.
+prints READY, and prints one progress line per micro-batch until Ctrl-C. On Ctrl-C,
+`stop_between_batches()` lets each query finish its running batch before stopping it.
 
 **For your BR:** replace the stub's body and return the `StreamingQuery`. `main()` picks it up
 with no other edit.
@@ -309,9 +346,13 @@ every foreachBatch closure", was wrong about the mechanism.
       shopinsight.gmv_by_minute WHERE event_date = '2019-11-17' AND category_l1 = 'electronics'
       LIMIT 10"`. Rows come newest first (`window_start DESC`). Their times must match the
       "Vietnam" times in the replayer's log. Seven hours later means Block 0 is missing.
-- [ ] Ctrl-C the job, start it again without `--fresh`, and check it resumes with no giant
+      Run it again with `category_l1 = 'all'`: the total row for each minute.
+- [ ] Screenshot 3: the BR1 screen (`/br1`) with the API and the replayer running. The line
+      extends at every 10-second refresh; the footer reads `Cassandra · 1 partition`.
+- [ ] Ctrl-C the job: it prints `stopping after the running micro-batch`, then `stopped`, with
+      no Java error. Start it again without `--fresh`, and check it resumes with no giant
       batch.
-- [ ] Both screenshots go in `docs/evidence/` and the group chat.
+- [ ] The three screenshots go in `docs/evidence/` and the group chat.
 
 ## What each BR changes, in one table
 
@@ -323,4 +364,5 @@ every foreachBatch closure", was wrong about the mechanism.
 | Output mode | update | **append** | append | update |
 | Rank in `write_batch` | no | **yes**, top 20 | no | no |
 | Delete before insert | no | **yes**, `WHERE window_start = ?` | **never** | no |
+| Extra `all` row (explode) | yes | **no** | **no** | **no** |
 | Checkpoint | `br1_gmv_by_minute` | `br3_trending_products` | `br5_abandoned_carts` | `br8_order_velocity_alerts` |

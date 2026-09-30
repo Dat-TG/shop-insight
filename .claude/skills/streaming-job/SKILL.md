@@ -82,8 +82,8 @@ return their `StreamingQuery`; `main()` starts them with no other edit.
 the design-side source; every other file in `.claude/` carries only a one-line pointer
 here, so a revision in W40-W41 is one edit, not seven. Keep it that way.
 `.claude/hooks/check_python.py` warns (advisory, never blocks) when an insert into
-`trending_products` or `stockout_risk` has no matching DELETE, or anything deletes from
-`abandoned_carts`. A warning is a prompt to check, not proof of correctness.
+`trending_products` or `stockout_risk` has no matching DELETE, or anything deletes from or
+truncates `abandoned_carts`. A warning is a prompt to check, not proof of correctness.
 
 A table that clusters on a value which changes between runs gets a *new* row from an
 upsert instead of replacing the old one — on screen, duplicates or a self-emptying list.
@@ -92,7 +92,7 @@ upsert instead of replacing the old one — on screen, duplicates or a self-empt
 |---|---|---|
 | `stockout_risk` | batch (BR6), full rewrite of every warehouse | `DELETE FROM stockout_risk WHERE warehouse_id = ?` then insert |
 | `trending_products` | streaming (BR3), re-emits each window | `DELETE FROM trending_products WHERE window_start = ?` then insert the new top-N |
-| `abandoned_carts` | streaming (BR5), accumulates through the day | **no delete at all** |
+| `abandoned_carts` | streaming (BR5), accumulates through the day | **no delete at all** (inside `write_batch`; `--fresh` emptying all four streaming tables before a run starts is a reset, not this) |
 
 Why each differs:
 
