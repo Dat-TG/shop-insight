@@ -14,8 +14,11 @@ Adding a new BR:
     3. app.include_router(br<N>.router)
 """
 
-from fastapi import FastAPI
+from cassandra import OperationTimedOut
+from cassandra.cluster import NoHostAvailable
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from serving.api.routers import br1, br2, br3, br4, br5, br6, br7, br8
 
@@ -47,6 +50,22 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ── Cassandra down ──────────────────────────────────────────────────────────
+# A Cassandra router (BR1, BR3, BR5, BR6, BR8) can find the node gone at its
+# first connect, or mid-demo after it was up: the session in
+# serving/api/cassandra.py is cached, so the driver error then comes from
+# execute(). Either way the screen gets a 503 that says what to run, instead of
+# a bare 500 it cannot explain.
+@app.exception_handler(NoHostAvailable)
+@app.exception_handler(OperationTimedOut)
+def cassandra_down(request: Request, error: Exception) -> JSONResponse:
+    return JSONResponse(
+        status_code=503,
+        content={"detail": "Cassandra is not answering. Run docker compose up -d --wait, "
+                           "then python serving/check_infra.py."},
+    )
+
 
 # ── Routers — one per BR ────────────────────────────────────────────────────
 app.include_router(br1.router)

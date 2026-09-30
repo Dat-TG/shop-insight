@@ -300,7 +300,7 @@ python processing/batch_warehouse.py # 5. silver -> star (Parquet + Postgres); W
 python serving/load_star_postgres.py #    optional, Postgres only, until step 6 of batch_warehouse calls it; W39: the three small dims; prints POSTGRES STAR OK
 python processing/batch_gold.py      # 6. (not written yet — per-BR owners, W40-W41) reads the star
 # (d) run the stream — two terminals, IN THIS ORDER
-python processing/streaming_gold.py       # start FIRST, wait for READY; W40: BR1 only. --fresh forgets earlier runs
+python processing/streaming_gold.py       # start FIRST, wait for READY; W40: BR1 only. --fresh starts from nothing, streaming tables included
 python ingestion/replayer.py --speed 60   # 1 hour of data per minute; --start "2019-11-17 08:00:00" for a busy demo
 # (e) the app
 uvicorn serving.api.main:app --reload --port 8000   # from the repo root; web/ calls :8000

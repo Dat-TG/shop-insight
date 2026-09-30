@@ -93,8 +93,10 @@ migration is completed.
 ## 3. BR1 — Real-time GMV
 
 **Business purpose:** Executive screen showing gross merchandise value per
-one-minute window for the last 60 minutes, broken down by top-level product
-category. Refreshes every 10 seconds.
+one-minute window, for all categories or one top-level product category. The
+endpoint returns up to the last 120 one-minute windows of one partition; the
+screen charts the newest 60 and compares them with the 60 before ("vs previous
+60 min"). Refreshes every 10 seconds.
 
 **Endpoint:** `GET /api/br1/realtime`
 
@@ -105,9 +107,17 @@ category. Refreshes every 10 seconds.
 | `event_date` | `string` | No | Today's date | Filter date `YYYY-MM-DD` |
 | `category_l1` | `string` | No | `"all"` | Category filter or `"all"` |
 
+"Today" is the date in Vietnam time. On the November 2019 data that returns an
+empty 200, so the screen always sends a date: `2019-11-17`, the demo replay day.
+
 **Storage engine:** Cassandra
 
 **Gold table:** `gmv_by_minute`
+
+**`category_l1 = "all"` is a stored partition, not a sum made by the API.** The
+stream (`start_br1` in `processing/streaming_gold.py`) writes one extra row per
+window under `"all"`, summed over every category by the same aggregation. The
+default filter therefore reads one partition, not 14.
 
 **Cassandra DDL:**
 ```cql
@@ -126,15 +136,19 @@ CREATE TABLE gmv_by_minute (
 | Field | Type | Nullable | Units | Notes |
 |---|---|---|---|---|
 | `event_date` | `string` | No | — | `YYYY-MM-DD` |
-| `category_l1` | `string` | No | — | `"unknown"` for ~32.4% of events (no source `category_code`) |
+| `category_l1` | `string` | No | — | The requested partition: a category, `"unknown"` for ~32.4% of events (no source `category_code`), or `"all"` |
 | `window_start` | `string` | No | — | ISO 8601 with `+07:00` |
 | `gmv` | `number` | No | Currency | Gross merchandise value |
 | `order_count` | `integer` | No | Events | Purchase events in the window |
 
 **Sorting:** `window_start DESC` (Cassandra cluster order).
 
+**Rows:** at most 120 (`LIMIT 120`), and only those within 120 minutes of the
+partition's newest window, so a sparse category never reaches back to the morning.
+
 **Edge cases:** `category_l1 = "unknown"` is mandatory — it carries ~32.4% of all
 revenue and must not be hidden. `gmv = 0` and `order_count = 0` rows may appear.
+A minute with no row had no event at all; the screen draws it as 0.
 
 **Empty result:** HTTP 200, `data: []`.
 
@@ -142,10 +156,10 @@ revenue and must not be hidden. `gmv = 0` and `order_count = 0` rows may appear.
 ```json
 {
   "data": [
-    { "event_date": "2019-11-29", "category_l1": "electronics", "window_start": "2019-11-29T14:01:00+07:00", "gmv": 51780.00, "order_count": 338 },
-    { "event_date": "2019-11-29", "category_l1": "unknown",     "window_start": "2019-11-29T14:01:00+07:00", "gmv": 16890.50, "order_count": 219 }
+    { "event_date": "2019-11-17", "category_l1": "all", "window_start": "2019-11-17T20:29:00+07:00", "gmv": 5196.94, "order_count": 17 },
+    { "event_date": "2019-11-17", "category_l1": "all", "window_start": "2019-11-17T20:28:00+07:00", "gmv": 4338.14, "order_count": 18 }
   ],
-  "meta": { "ms": 12.5, "warehouse": "Cassandra", "partitions": 2, "rows": 2 }
+  "meta": { "ms": 6.5, "warehouse": "Cassandra", "partitions": 1, "rows": 2 }
 }
 ```
 

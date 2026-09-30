@@ -3,7 +3,7 @@
     python processing/streaming_gold.py             # terminal 1, FIRST. Wait for READY
     python ingestion/replayer.py --speed 60         # terminal 2, only after READY
 
-    python processing/streaming_gold.py --fresh     # before a demo: forget earlier runs
+    python processing/streaming_gold.py --fresh     # before a demo: start from nothing
 
 Every job reads the replayer's JSON files through processing/source.py, cleans
 them with the SAME seven rules as silver (clean() is imported from
@@ -30,26 +30,35 @@ read by its first micro-batch, one giant batch that looks nothing like real
 time. Restarting WITHOUT --fresh resumes from data/checkpoints/<job>/: the
 files read before are not read again and open windows keep their totals.
 
-When to use --fresh: before replaying a period again. The checkpoint remembers
-the watermark, so events older than it count as late and are dropped without a
-word - the screen would just freeze. --fresh deletes data/checkpoints/*/ and
-data/stream_landing/*.json and nothing else. The Cassandra tables keep their
-rows; every write below is an idempotent upsert (or, for trending_products, a
-delete-then-insert of one window), so a second replay overwrites the same rows
-with the same values.
+When to use --fresh: before replaying a period again, and after pulling a
+change to a query's code (a checkpoint of the old query resumes without a
+word). The checkpoint remembers the watermark, so events older than it count
+as late and are dropped without a word - the screen would just freeze.
+--fresh deletes data/checkpoints/*/ and data/stream_landing/*.json and empties
+the four tables this job writes (STREAMING_TABLES), and nothing else. Emptying
+them matters as much as the checkpoints: rows an earlier, longer replay wrote
+would otherwise stay the newest in their partition, and a chart of "the last
+60 minutes" would stand still on them. Everything in those tables comes back
+from the replay.
+
+Ctrl-C waits up to 10 s for the running micro-batch to finish, then stops
+(see main()). A second Ctrl-C quits at once.
 
 Done when the log prints READY, then two lines per micro-batch once the
 replayer runs - the rows upserted into Cassandra, then the events read and the
 watermark:
 
-    [br1_gmv_by_minute] batch 4: upserted 54 rows into gmv_by_minute (11 partitions) in 449 ms
-    [br1_gmv_by_minute] batch 4: 2,087 events after cleaning, watermark 2019-11-17 15:09:59, 1,109 ms
+    [br1_gmv_by_minute] batch 4: upserted 59 rows into gmv_by_minute (12 partitions) in 569 ms
+    [br1_gmv_by_minute] batch 4: 2,087 events after cleaning, watermark 2019-11-17 15:09:59, 1,304 ms
+
+(12 partitions: the categories with an event in those 5 minutes, plus 'all'.)
 """
 
 import argparse
 import itertools
 import os
 import shutil
+import signal
 import sys
 import time
 from pathlib import Path
@@ -96,6 +105,26 @@ TRIGGER = "5 seconds"
 # Partitions of every shuffle, and so of every query's state store. See main().
 STATE_PARTITIONS = "4"
 
+# The Cassandra tables this job writes, and the only ones --fresh empties. Not
+# stockout_risk: BR6's batch job writes that one. Emptying all four here, before
+# any query starts, is a reset. It is not the write_batch delete that the BR5
+# stub forbids, which would erase carts found earlier in the same run.
+STREAMING_TABLES = ("gmv_by_minute", "trending_products", "abandoned_carts", "order_velocity_alerts")
+
+# How long Ctrl-C waits for a running micro-batch to finish before stopping
+# anyway, shared by all queries. Measured with BR1 alone, a batch takes 1-2 s.
+# Once BR3, BR5 and BR8 share the JVM a batch may outlast the 5 s trigger;
+# batches then run back to back and the wait can run out, which cuts a batch
+# (it re-runs on restart, so nothing is lost). Re-measure in W41.
+STOP_WAIT_SECONDS = 10
+
+# BR1 only: the category_l1 of the extra row each window gets, summed over every
+# category. The screen's default filter, "All categories", then reads this one
+# partition instead of reading 14 and adding them up in the API. Silver's
+# category_l1 has 13 categories plus 'unknown' (measured 2026-09-30), so 'all'
+# names no real one.
+ALL_CATEGORIES = "all"
+
 
 # ---------------------------------------------------------------------------
 # BR1 (Dat) - GMV and order count per minute, per category -> gmv_by_minute
@@ -104,6 +133,9 @@ STATE_PARTITIONS = "4"
 
 def start_br1(events, cassandra):
     """GMV and purchase count per 1-minute window and top-level category.
+
+    Each window also gets a row with category_l1 = 'all', the total over every
+    category, for the screen's default filter.
 
     events: the cleaned, watermarked stream built in main(). Returns the
     running StreamingQuery.
@@ -121,8 +153,9 @@ def start_br1(events, cassandra):
     def write_batch(batch, batch_id):
         """Runs once per micro-batch, on the driver. batch is a plain static DataFrame."""
         started = time.monotonic()
-        # Update mode hands over only the windows this micro-batch changed:
-        # about 5 minutes x 13 categories at --speed 60, so collect() is safe.
+        # Update mode hands over only the windows this micro-batch changed: about
+        # 5 minutes x 15 keys (14 categories plus 'all') at --speed 60, so
+        # collect() is safe.
         rows = batch.select(
             "event_date", "category_l1", F.col("window.start").alias("window_start"),
             "gmv", "order_count",
@@ -149,6 +182,14 @@ def start_br1(events, cassandra):
     is_purchase = F.col("event_type") == "purchase"
     gmv_by_minute = (
         events
+        # Each event counts twice: once under its own category and once under
+        # 'all'. So the 'all' row is summed by the same aggregation, from the same
+        # state, and is never partial. Summing the category rows inside
+        # write_batch instead would be wrong without any error: update mode
+        # hands over only the categories that changed in this micro-batch, so
+        # 'all' would drop every category that did not. BR1 only: an explode in
+        # BR5 or BR8 would double their counts, and in BR3 list every product twice.
+        .withColumn("category_l1", F.explode(F.array("category_l1", F.lit(ALL_CATEGORIES))))
         # event_date is constant inside a 1-minute window (midnight is a minute
         # boundary), so grouping by it splits nothing; it just carries the
         # partition key through. Views and carts are kept on purpose: a minute
@@ -176,7 +217,8 @@ def start_br1(events, cassandra):
 
 # ---------------------------------------------------------------------------
 # W41 stubs. Replace the body, keep the signature, return the StreamingQuery.
-# Copy start_br1: same events, own checkpoint directory, own queryName.
+# Copy start_br1, except its explode: same events, own checkpoint directory,
+# own queryName.
 # ---------------------------------------------------------------------------
 
 def start_br3(events, cassandra):
@@ -204,10 +246,12 @@ def start_br5(events, cassandra):
     """BR5 (Nguyen, W41): sessions with a cart and no purchase 30 minutes later.
 
     Sink: abandoned_carts, key ((event_date), user_session).
-    Trap: NEVER delete from this table. It accumulates all day; deleting the
-    event_date partition erases every cart found by earlier micro-batches and the
-    screen empties itself mid-demo. The key has no cart_value in it, so a plain
-    INSERT of the same session overwrites its own row: already idempotent.
+    Trap: NEVER delete from this table inside write_batch. (The only exception
+    is --fresh emptying it before any query starts.) It accumulates all day;
+    deleting the event_date partition erases every cart found by earlier
+    micro-batches and the screen empties itself mid-demo. The key has no
+    cart_value in it, so a plain INSERT of the same session overwrites its own
+    row: already idempotent.
     Checkpoint: data/checkpoints/br5_abandoned_carts/.
     """
     return None
@@ -249,15 +293,20 @@ def connect_cassandra():
     return cluster, session
 
 
-def forget_earlier_runs():
-    """--fresh: delete every checkpoint and every replayed file. Nothing else."""
+def forget_earlier_runs(cassandra):
+    """--fresh: remove every checkpoint and replayed file, and empty STREAMING_TABLES. Nothing else."""
     checkpoints = [path for path in CHECKPOINT_DIR.iterdir() if path.is_dir()]
     for path in checkpoints:
         shutil.rmtree(path)
     landed = list(LANDING_DIR.glob("*.json"))
     for path in landed:
         path.unlink()
-    print(f"--fresh: removed {len(checkpoints)} checkpoint directories and {len(landed):,} landed files")
+    for table in STREAMING_TABLES:
+        # TRUNCATE snapshots the table first (auto_snapshot), which can outlast the
+        # driver's default 10 s timeout on a slow laptop; the server allows 60 s.
+        cassandra.execute(f"TRUNCATE {table}", timeout=60)
+    print(f"--fresh: removed {len(checkpoints)} checkpoint directories and {len(landed):,} landed files, "
+          f"emptied {', '.join(STREAMING_TABLES)}")
 
 
 def wait_until_ready(queries):
@@ -270,6 +319,21 @@ def wait_until_ready(queries):
                for query in queries):
             return
         time.sleep(0.5)
+
+
+def stop_between_batches(queries):
+    """Stop each query once the micro-batch it is running has finished.
+
+    Stopping in the middle of a batch interrupts it on the way to Cassandra.
+    Nothing is lost - the batch has offsets but no commit, so the restart runs
+    it again - but the log fills with Java errors, a StackOverflowError among
+    them, right where the Gate 1a screenshot of a restart is taken.
+    """
+    deadline = time.monotonic() + STOP_WAIT_SECONDS
+    for query in queries:
+        while query.isActive and query.status["isTriggerActive"] and time.monotonic() < deadline:
+            time.sleep(0.1)
+        query.stop()
 
 
 def print_progress(queries):
@@ -303,14 +367,15 @@ def print_progress(queries):
 def main():
     parser = argparse.ArgumentParser(description="Run the streaming jobs (BR1, BR3, BR5, BR8).")
     parser.add_argument("--fresh", action="store_true",
-                        help="delete data/checkpoints/*/ and data/stream_landing/*.json first")
+                        help="delete data/checkpoints/*/ and data/stream_landing/*.json and empty "
+                             "the four streaming tables first")
     args = parser.parse_args()
 
     # Cassandra first: a missing container should fail in one second, not after
     # the JVM has taken ten to start.
     cluster, cassandra = connect_cassandra()
     if args.fresh:
-        forget_earlier_runs()
+        forget_earlier_runs(cassandra)
     waiting = len(list(LANDING_DIR.glob("*.json")))
     if waiting and not any(path.is_dir() for path in CHECKPOINT_DIR.iterdir()):
         print(f"WARNING: {waiting:,} files already in {LANDING_DIR} and no checkpoint: the first "
@@ -329,6 +394,14 @@ def main():
         .config("spark.sql.shuffle.partitions", STATE_PARTITIONS)
         .getOrCreate()
     )
+    # Starting Spark replaced Python's Ctrl-C handler with pyspark's, which
+    # cancels every running Spark job before raising KeyboardInterrupt
+    # (pyspark/core/context.py). A micro-batch caught halfway then dies inside
+    # its own write. Measured on 30 Sep, Ctrl-C sent while a batch ran: a Java
+    # StackOverflowError in 1 of 7 tries, other errors in 4 of 7; with this line,
+    # none in 8. Python's own handler only raises KeyboardInterrupt, and
+    # stop_between_batches() below does the rest.
+    signal.signal(signal.SIGINT, signal.default_int_handler)
 
     # The stream every job starts from, in three steps:
     #   read_events  the replayer's JSON, with EVENT_SCHEMA (processing/source.py)
@@ -338,19 +411,21 @@ def main():
     # Each writeStream below still gets its own source, state and checkpoint.
     events = clean(read_events(spark)).withWatermark("event_time", WATERMARK)
 
-    started = [start(events, cassandra) for start in (start_br1, start_br3, start_br5, start_br8)]
-    queries = [query for query in started if query is not None]
     try:
+        # Inside the try: if a W41 start_brN raises at .start(), BR1 is already
+        # running, and the finally below still stops it cleanly.
+        started = [start(events, cassandra) for start in (start_br1, start_br3, start_br5, start_br8)]
+        queries = [query for query in started if query is not None]
         wait_until_ready(queries)
         names = ", ".join(query.name for query in queries)
         print(f"READY: {len(queries)} of 4 jobs running ({names}), watching {LANDING_DIR}")
         print("READY: now start python ingestion/replayer.py --speed 60", flush=True)
         print_progress(queries)
     except KeyboardInterrupt:
-        print("stopped by Ctrl-C; the checkpoints keep the progress")
+        print("Ctrl-C: stopping after the running micro-batch (Ctrl-C again to quit now)", flush=True)
     finally:
-        for query in spark.streams.active:
-            query.stop()
+        stop_between_batches(spark.streams.active)
+        print("stopped; the checkpoints keep the progress", flush=True)
         spark.stop()
         cluster.shutdown()
 

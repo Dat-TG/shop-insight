@@ -138,8 +138,11 @@ def find_warnings(path, source):
     if has(r"insert\s+into\s+(\w+\.)?stockout_risk") and not has(r"delete[^;\n]*stockout_risk"):
         found.append("stockout_risk rewrites every warehouse in full: DELETE WHERE warehouse_id = ? before inserting, or the BR6 screen shows duplicate SKUs.")
 
-    if has(r"delete[^;\n]*abandoned_carts"):
-        found.append("abandoned_carts must never be deleted from: it accumulates through the day, so a delete erases every cart found in earlier micro-batches and the BR5 screen empties itself mid-demo.")
+    # TRUNCATE too: inside write_batch it is worse than a DELETE, erasing every day, not one.
+    # streaming_gold.py --fresh empties the table legitimately, but through STREAMING_TABLES,
+    # so the name never stands on the same line as the word and this does not fire on it.
+    if has(r"(delete|truncate)[^;\n]*abandoned_carts"):
+        found.append("abandoned_carts must never be deleted from or truncated: it accumulates through the day, so a DELETE erases every cart found in earlier micro-batches (a TRUNCATE, every day's) and the BR5 screen empties itself mid-demo. The one reset is streaming_gold.py --fresh, before any query starts.")
 
     if has(r"stock_on_hand\s*/\s*velocity_7d") and "9999" not in code:
         found.append("days_to_stockout is a Cassandra clustering column and cannot be null: use when(velocity_7d > 0, ...).otherwise(9999.0) - velocity_7d is 0 for ~90% of SKUs, so nine inserts in ten would fail.")

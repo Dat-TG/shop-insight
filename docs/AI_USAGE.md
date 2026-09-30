@@ -1210,3 +1210,208 @@ Pending:
 - **The three teammates' confirmation** that the pattern doc is enough to write BR3, BR5 and BR8.
 
 Carried forward from Session 11: the §8 step 5 "2,000 rows" is fixed here. Every other open item there is untouched.
+
+## Session 13 — 30 September 2026 (W40)
+
+**Tool:** Claude Code (Opus 5.5).
+**Scope:** BR1 end to end: the `category_l1 = 'all'` total row in the stream, `GET /api/br1/realtime` on
+Cassandra, the BR1 screen, and the docs that move with them. Dat asked for a plan first, answered two design
+questions and approved it; the AI wrote the code and ran all of it against the live stack. Nothing is committed
+yet: the work sits uncommitted on branch `w40-br1-slice`.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| `processing/streaming_gold.py` — `ALL_CATEGORIES`; in `start_br1`, `explode(array(category_l1, 'all'))` before the `groupBy`, so every window also gets an `all` total row; comments and docstring numbers updated | Run and verified (below) |
+| `serving/api/cassandra.py` (new) — `session()`, cached, connected on the first request; the one session every Cassandra router imports | Run and verified |
+| `serving/api/main.py` — an exception handler: `NoHostAvailable` / `OperationTimedOut` become HTTP 503 with the command to run | Run and verified |
+| `serving/api/routers/br1.py` — replaces the placeholder: one prepared `SELECT ... LIMIT 120` on `(event_date, category_l1)`, rows trimmed to 120 minutes before the newest, `+07:00` appended, `meta` `Cassandra / 1 partition` | Run and verified |
+| `web/src/pages/BR1Page.tsx` — date (default 2019-11-17) and category filters, four cards (GMV, orders, AOV over the last 60 min; vs previous 60 min), GMV line for 60 minutes with empty minutes drawn as 0, 10 s refresh, a table view, the QueryMeta footer; `web/src/index.css` — two small classes | Run and verified (headless screenshots) |
+| `serving/api/models.py`, `web/src/types/api.ts` — the `category_l1` description mentions `"all"`; no field change | AI-drafted, human review pending |
+| `docs/API_CONTRACT.md` §3 — the `all` partition, up to 120 rows, the default-date note, a measured example | AI-drafted, human review pending |
+| `docs/STREAMING_PATTERN.md` and `docs/SPARK_GUIDE_VI.md` Phần 10 — Block 4 (the explode, BR1 only), the per-BR table, the Gate 1a checklist (the `all` SELECT, a third screenshot), `--fresh` after a code change, and the stale-tail warning with `TRUNCATE` | AI-drafted, human review pending |
+| `SYSTEM_DESIGN.md` §6 (BR1 key reasoning) and §9 (sketch footer 120 rows); `CLAUDE.md` current status and next task | AI-drafted, human review pending |
+| `docs/evidence/gate1a_br1_run.txt` (new) — text copy of the run below | Captured from the run |
+| `docs/AI_USAGE.md` — this session | AI-drafted |
+
+### How it was checked
+
+Scratch scripts in the session's scratchpad, not committed. Stack: `docker compose up -d --wait`,
+`check_infra.py` INFRA OK, `apply_schema.py` APPLY_SCHEMA OK, `streaming_gold.py --fresh`, then
+`replayer.py --speed 60 --start "2019-11-17 08:00:00"`.
+
+| Claim | How it was measured |
+|---|---|
+| `'all'` cannot collide with a real category | Spark over `data/silver`, `groupBy("category_l1").count()`: 14 values, 13 categories plus `unknown` (1,534,249 rows) |
+| 2019-11-17 has the most purchases by Vietnam date | Same read, purchases by `event_date`: 17 Nov 11,736, 16 Nov 4,853, 18 Nov 3,115 |
+| `all` = the sum of the 14 category rows = silver | For each closed minute of 17 Nov 15:00–16:40, all 15 partitions read with cassandra-driver, and silver aggregated by `date_trunc('minute', event_time)`: 100 of 100 minutes identical on both comparisons, GMV 443,809.62, 1,397 orders |
+| The same holds across a crash | Ctrl-C during batch 69 (offsets written, commit not), restart without `--fresh`: batch 69 re-ran, and batch 70 caught up about 7 files (19,598 events), not the 73 in the landing directory. Minutes 20:20–21:10: 50 of 50 identical on both comparisons, GMV 256,441.32, 840 orders |
+| Micro-batch time with the extra row | 0.7–1.7 s per batch for 1,700–3,011 events; each batch writes 12–15 partitions |
+| The endpoint reads one partition, fast | `curl 'localhost:8000/api/br1/realtime?event_date=2019-11-17'`: `ms` 4.6–15.8, `partitions` 1, `rows` 115 (the replay at 16:54), then 120 |
+| Its edge cases | `event_date=2019-13-40` gives 422; no `event_date` gives 200 and `data: []`. With `docker compose stop cassandra`: 503 on first connect, 503 with a cached session, and 200 again 12 s after `docker compose up -d --wait` |
+| The screen moves | `chrome-headless-shell --screenshot` of `/br1`, two page loads at least 15 s apart: the window went from 17:50–18:49 to 18:20–19:19, GMV 321.1K to 348.8K. One page kept open 25 s of virtual time called the API 4 times (StrictMode's double first call in dev, then at 10 s and 20 s) |
+| Build and contract | `npm run build`, `npx oxlint` exit 0, `python tests/test_fixtures.py` "All 8 fixture bundles passed validation" |
+| Spark review | The `spark-reviewer` agent on the `streaming_gold.py` diff: no defect in the explode (watermark kept, state key schema unchanged, update mode sound). Three wording findings, all applied (below) |
+
+### What the AI got wrong, and was corrected on
+
+- **The planned API answered a Cassandra outage with 503 only at first connect.** `session()` is cached, so after one
+  good request a stopped Cassandra raised `NoHostAvailable` from `execute()`: a bare HTTP 500 the screen cannot
+  explain. Found by stopping the container. One exception handler in `serving/api/main.py` now covers connect,
+  prepare and execute for every Cassandra router.
+- **The "updated" indicator inherited the toolbar label style.** It read "UPDATED 5S AGO", then, in monospace,
+  "5  s  ago". Seen in the screenshots; it is now a label plus plain text.
+- **Three findings from the spark-reviewer, all applied.** `--fresh` was not listed as needed after pulling a change
+  to a query's code. "The explode would double their counts" is wrong for BR3, where it would list every product
+  twice instead. One comment line was ungrammatical.
+- **The first evidence draft said the two screenshots were "about 30 s apart".** That was never measured. It now
+  says "at least 15 s apart", which the command guarantees.
+- **Found by the run, not fixed: stale tails from earlier replays.** `--fresh` keeps Cassandra rows by design. The
+  #15 dry run had replayed 17 Nov up to 20:54, so while this replay was at 20:09, `electronics`' newest row was still
+  20:54. A category's chart would stand still until the replay passed it. `all` was unaffected because it is new.
+  The docs now say to `TRUNCATE shopinsight.gmv_by_minute` before a demo of a day already replayed. See the open
+  question below.
+- **Seen once, not diagnosed: a `StackOverflowError` in a Java regex on Ctrl-C.** It came from the stream thread
+  while `query.stop()` cancelled a running micro-batch. The job still printed "stopped by Ctrl-C", the restart
+  resumed, and the 50-minute check above matched. A second Ctrl-C, while the job was idle, printed nothing.
+
+### Judgement that stayed with the team
+
+Dat decided:
+- **"vs previous period" means the last 60 minutes against the 60 before.** So the API returns up to 120 rows from
+  one partition, and the text of API_CONTRACT §3 changes (not its fields or parameters).
+- **The screen starts on 2019-11-17, and the API default stays as the contract says**: today in Vietnam time, an
+  empty 200 on 2019 data.
+- **The plan, approved as written.**
+
+Made by AI, flagged for review:
+- **The `all` row is made by exploding each event before the aggregation.** It was not a sum in `write_batch`,
+  which update mode would make partial, and it was not a second query.
+- **Where the shared pieces live.** `serving/api/cassandra.py` and the 503 handler in `main.py` are shared files
+  that BR3, BR5, BR6 and BR8 will use.
+- **Screen rules.** Empty minutes are drawn as 0. "vs previous" shows "—" until the response spans 110 minutes.
+  The category list is hard-coded from the silver measurement above.
+- **The `TRUNCATE` advice in the docs**, rather than making `--fresh` truncate the table.
+
+Open questions for the team:
+- **Should `--fresh` also empty the Cassandra tables** it feeds (at least `gmv_by_minute`)? This changes the
+  behaviour documented for all four streaming BRs.
+- **Is the Ctrl-C `StackOverflowError` worth chasing before W41**, or should it be a note in the pattern doc?
+- **`web/fixtures/br1-gmv-by-minute.json` (Tin's) mixes four categories in one response.** The live endpoint never
+  does. It was left unchanged.
+
+Pending:
+- **The Gate 1a screenshots, and the group post (Dat).** Now three shots: log, cqlsh, screen.
+- **Review of the docs above, then the commit and the PR (Dat).**
+- **Tell the team about the text change to API_CONTRACT §3**, in the PR body.
+
+Carried forward from Session 12: the three teammates' confirmation that the pattern doc is enough to write BR3,
+BR5 and BR8; the `spark.sql.shuffle.partitions = 4` measurement on a 4-core laptop.
+
+## Session 14 — 30 September 2026 (W40)
+
+**Tool:** Claude Code (Opus 5.5).
+**Scope:** the two open questions from Session 13. Dat asked for a recommendation on each and accepted both:
+`--fresh` now empties the four streaming tables, and Ctrl-C stops between micro-batches. The work is on
+branch `w40-br1-slice`, still uncommitted.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| `processing/streaming_gold.py` — `STREAMING_TABLES`; `forget_earlier_runs(cassandra)` also runs `TRUNCATE` on the four tables (never `stockout_risk`); `signal.signal(SIGINT, default_int_handler)` after Spark starts; `stop_between_batches()` waits up to `STOP_WAIT_SECONDS` (10) for a running batch before `stop()`; new Ctrl-C messages; docstring | Run and verified (below) |
+| `docs/STREAMING_PATTERN.md` and `docs/SPARK_GUIDE_VI.md` Phần 10 — what `--fresh` does and why, the manual `TRUNCATE` advice from Session 13 removed, Ctrl-C behaviour, Block 7, Gate 1a checklist | AI-drafted, human review pending |
+| `SYSTEM_DESIGN.md` §11 and `README.md` run lines; `.claude/skills/streaming-job/SKILL.md` §4 (the `--fresh` reset is not BR5's forbidden delete) | AI-drafted, human review pending |
+| `docs/AI_USAGE.md` — this session | AI-drafted |
+
+### How it was checked
+
+Scratch harnesses in the session's scratchpad, not committed. `ctrlc_trials.py` starts the job, starts the replayer
+(17 Nov from 08:00 UTC, `--speed 60`) after the first READY, and sends SIGINT when a batch is running, meaning its
+`offsets` file exists and its `commits` file does not, after a set delay.
+
+| Claim | How it was measured |
+|---|---|
+| pyspark cancels jobs on Ctrl-C | Read in pyspark 4.1.3: `pyspark/core/context.py:406-415`, a SIGINT handler that calls `cancelAllJobs()` and then raises `KeyboardInterrupt`. The JVM itself ignores SIGINT (`java_gateway.py:97-98`) |
+| The error before the fix | 7 trials on the old stop code, SIGINT 0–0.9 s into a batch: 1 `StackOverflowError` (0.5 s in, with a `SPARK_JOB_CANCELLED` line); 4 of 7 logs had ERROR or Exception lines (for example `TorrentBroadcast` when SIGINT came at 0 s) |
+| The fix | 6 trials, SIGINT 0.3–0.6 s into a batch (5 of them caught it still running): 0 `StackOverflowError`, 0 cancelled jobs, 0 ERROR or Exception lines. Every batch committed before the stop (offsets = commits). The stop took 0.6–1.6 s, and 6.0 s once when a catch-up batch and the next one both ran. 2 more trials after the review fixes, 0.4 and 0.5 s into a running batch: the same result. 8 of 8 in total |
+| A second Ctrl-C quits | `double_ctrlc.py`: two SIGINTs 0.1 s apart, 0.3 s into a batch. Exit after 0.2 s, a Python `KeyboardInterrupt` traceback, no Java error. The cut batch had offsets 31 and commit 30, so it re-runs on restart. `pgrep -af java` found no JVM besides Cassandra's |
+| `--fresh` empties the tables | Trial 1 printed `--fresh: removed 1 checkpoint directories and 22 landed files, emptied gmv_by_minute, trending_products, abandoned_carts, order_velocity_alerts` |
+| The numbers survive all of it | After the truncate, 6 interrupted restarts and the double Ctrl-C: 17 Nov 15:00–17:00, 120 of 120 minutes where `all` = the sum of the 14 categories = silver. GMV 533,156.27, 1,680 orders |
+| `TRUNCATE` cost | About 0.8 s through cqlsh. `nodetool listsnapshots`: 6 `truncated-*` snapshots, 167.35 KiB in total (`auto_snapshot: true`) |
+| Hook | `.claude/hooks/check_python.py` on the file: silent. `grep -i "delete[^;]*abandoned_carts"`: no match |
+| Spark review | The `spark-reviewer` agent: nothing that breaks the demo or gives wrong numbers; 4 style findings (below) |
+
+### What the AI got wrong, and was corrected on
+
+- **Session 13's first answer to the stale tail was a manual `TRUNCATE` in the docs.** It depended on someone
+  remembering, before the rehearsal and the talk. Dat accepted the recommendation to make `--fresh` do it, and the
+  manual step is gone from both guides.
+- **The first reproduction attempt showed nothing.** SIGINT at the very start of a batch comes before any Spark job
+  runs, so there was nothing to cancel: 0 errors in 3 tries (only a `TorrentBroadcast` ERROR). Delaying it 0.3–0.9 s
+  into the batch reproduced the `StackOverflowError`. The fix was judged against that timing, not the first one.
+- **Four findings from the spark-reviewer, all applied in code.**
+  - The query starts sat outside the `try`: a W41 `start_brN` that raises would skip the clean stop.
+  - "Ctrl-C stops between two micro-batches" overstated it. The wait is bounded at 10 s, and "1–2 s per batch" was
+    measured with BR1 alone.
+  - The BR5 stub's "NEVER delete" did not say "inside `write_batch`", while the new comment relied on that.
+  - The comment made the error sound constant; it now gives 1 of 7.
+- **The reviewer also proposed matching `truncate` in `.claude/hooks/check_python.py`.** It was not applied: a
+  hook is harness configuration, and that is Dat's call (below).
+
+### Judgement that stayed with the team
+
+Dat decided:
+- **`--fresh` empties the four streaming tables** (not `stockout_risk`). This changes behaviour documented for BR3,
+  BR5 and BR8, so the team should hear about it in the PR body.
+- **Fix the Ctrl-C error, with a 30-minute budget.** It took one line to restore Python's Ctrl-C handler plus a wait
+  before `stop()`, so the fallback (a note in the docs) was not needed.
+
+Made by AI, flagged for review:
+- **`STOP_WAIT_SECONDS = 10`, shared by all queries.** With four queries in one JVM a batch may outlast the 5 s
+  trigger and the wait can run out. The cut batch then re-runs on restart. Re-measure in W41.
+- **Restoring `signal.default_int_handler` overrides pyspark's handler.** A Ctrl-C no longer cancels a long Spark
+  job at once; the wait covers that, and a second Ctrl-C quits immediately.
+
+Open for Dat:
+- **Should `.claude/hooks/check_python.py:141` also warn on `truncate ... abandoned_carts`?** A `TRUNCATE` inside
+  `write_batch` would erase every day, not just today, and the hook would stay silent.
+
+Pending, carried forward from Session 13: the Gate 1a screenshots and group post (Dat); review, commit and PR (Dat),
+with the API_CONTRACT §3 text change and the `--fresh` change named in the PR body; the three teammates'
+confirmation of the pattern doc; the 4-core measurement of `spark.sql.shuffle.partitions = 4`. Session 13's two open
+questions about `--fresh` and the `StackOverflowError` are closed here. Its fixture question is unchanged.
+
+## Session 15 — 30 September 2026 (W40)
+
+**Tool:** Claude Code (Opus 5.5).
+**Scope:** closes Session 14's open question. Dat asked for the hook to warn on a `TRUNCATE` of `abandoned_carts`
+as well as a `DELETE`. Uncommitted, on branch `w40-br1-slice`.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| `.claude/hooks/check_python.py` — the `abandoned_carts` check now matches `(delete\|truncate)[^;\n]*abandoned_carts`; the message names the one legitimate reset (`--fresh`) | Run and verified |
+| `.claude/README.md`, `.claude/skills/streaming-job/SKILL.md` §4, `docs/STREAMING_PATTERN.md`, `docs/SPARK_GUIDE_VI.md` — the one-line descriptions of that check | AI-drafted, human review pending |
+
+### How it was checked
+
+| Claim | How it was measured |
+|---|---|
+| It fires on the new case and still on the old | The hook fed a PostToolUse payload, with `CLAUDE_PROJECT_DIR` pointed at a scratch copy. It warns on `"TRUNCATE abandoned_carts"`, `"truncate table shopinsight.abandoned_carts"` and `"DELETE FROM abandoned_carts WHERE event_date = ?"` |
+| It does not fire on correct code | Silent on a file that says "never truncate abandoned_carts" only in a docstring and a comment, and silent on the real `processing/streaming_gold.py` (the `--fresh` `TRUNCATE` names tables through `STREAMING_TABLES`) |
+| No other file starts warning | `grep -rn -i -E "truncate[^;]*abandoned_carts" --include=*.py` over the repo, hooks excluded: no match |
+
+### What the AI got wrong, and was corrected on
+
+No defect was found in this change. What could have found one: the five payload tests above, including the real
+job file that legitimately empties the table. When the edit was saved, the hook also ran on its own file and
+printed four warnings: `spark.executor.memory`, silver, the Cassandra connector and banned imports. That comes
+from the hook's own string literals, which contain the patterns. The hook's docstring already names this edge.
+The warnings predate this change and do not involve the `abandoned_carts` check.
+
+### Judgement that stayed with the team
+
+Dat decided: extend the hook (Session 14's open question, now closed).

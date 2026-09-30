@@ -119,11 +119,14 @@ class GmvRow(BaseModel):
 
     Note: category_l1 = "unknown" is valid and expected for ~32.4% of events
     because source category_code is null in that fraction of rows.
+    category_l1 = "all" is the stored total over every category, one row per
+    window, written by the stream (start_br1), not summed by the API.
     """
 
     event_date: str = Field(..., description="Date YYYY-MM-DD")
     category_l1: str = Field(
-        ..., description='Top-level category, "unknown" when source is null'
+        ...,
+        description='Top-level category, "unknown" when source is null, "all" for the total row',
     )
     window_start: str = Field(..., description="ISO 8601 timestamp with timezone")
     gmv: float = Field(..., description="Gross merchandise value in the window")

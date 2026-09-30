@@ -1201,7 +1201,8 @@ BR8, nhưng sai với BR3. Còn BR5 thì tuyệt đối không được thêm DE
 | `stockout_risk` | BR6, batch | `((warehouse_id), days_to_stockout, product_id)` | `DELETE ... WHERE warehouse_id = ?` rồi insert | Không phải streaming. Ghi vào đây cho đủ mọi luật ở một chỗ (SYSTEM_DESIGN 6.1) |
 
 Hook `.claude/hooks/check_python.py` cảnh báo khi insert vào `trending_products` mà không có
-DELETE đi kèm, hoặc khi có bất cứ lệnh xoá nào trên `abandoned_carts`.
+DELETE đi kèm, hoặc khi có bất cứ lệnh DELETE hay TRUNCATE nào trên `abandoned_carts`. Lần đặt
+lại duy nhất là `--fresh`, vốn chỉ gọi tên bảng qua `STREAMING_TABLES` nên không làm hook báo.
 
 ### Chạy
 
@@ -1223,32 +1224,55 @@ Terminal 1 in ra (đo thật, ngày 17/11 từ 08:00 UTC):
 ```
 READY: 1 of 4 jobs running (br1_gmv_by_minute), watching .../data/stream_landing
 READY: now start python ingestion/replayer.py --speed 60
-[br1_gmv_by_minute] batch 1: upserted 53 rows into gmv_by_minute (11 partitions) in 431 ms
-[br1_gmv_by_minute] batch 1: 2,007 events after cleaning, watermark 2019-11-17 14:54:59, 1,028 ms
+[br1_gmv_by_minute] batch 1: upserted 58 rows into gmv_by_minute (12 partitions) in 511 ms
+[br1_gmv_by_minute] batch 1: 2,007 events after cleaning, watermark 2019-11-17 14:54:59, 1,150 ms
 [br1_gmv_by_minute] batch 6: no window changed (watermark moved on)
 ```
 
 Mỗi micro-batch in hai dòng. Dòng đầu do `write_batch` in: những gì đã ghi vào Cassandra.
 Dòng sau lấy từ báo cáo tiến độ của Spark: bao nhiêu sự kiện còn lại sau các quy tắc lọc của
 `clean()`, watermark đang ở đâu, và batch chạy mất bao lâu. Một batch "no window changed" chạy
-vì watermark vừa dịch lên, và Spark bỏ trạng thái của những cửa sổ đã đóng.
+vì watermark vừa dịch lên, và Spark bỏ trạng thái của những cửa sổ đã đóng. Số partition là
+các ngành hàng có sự kiện trong 5 phút của batch, cộng thêm `all` (Khối 4).
 
 | Tình huống | Lệnh |
 |---|---|
-| Chạy lần đầu, hoặc demo phát lại một khoảng thời gian đã phát | `python processing/streaming_gold.py --fresh` |
+| Chạy lần đầu, demo phát lại một khoảng thời gian đã phát, hoặc sau khi pull một thay đổi trong code của query | `python processing/streaming_gold.py --fresh` |
 | Job bị dừng (Ctrl-C, sập) và cần chạy tiếp | `python processing/streaming_gold.py`, **không** có `--fresh` |
 
-`--fresh` xoá `data/checkpoints/*/` và `data/stream_landing/*.json`, không đụng gì khác. Nó
-không đụng tới Cassandra. Mọi lần ghi đều idempotent, nên phát lại cùng một khoảng chỉ ghi đè
-đúng những dòng đó bằng đúng giá trị cũ. Không có `--fresh` thì checkpoint còn nhớ watermark.
-Phát lại một khoảng thời gian cũ hơn sẽ bị coi là "đến muộn" và bị bỏ mà không báo gì: màn
-hình chỉ đứng im.
+`--fresh` xoá `data/checkpoints/*/` và `data/stream_landing/*.json`, làm trống bốn bảng mà job
+ghi (`gmv_by_minute`, `trending_products`, `abandoned_carts`, `order_velocity_alerts`), và
+không đụng gì khác. Nó không bao giờ đụng tới `stockout_risk`, bảng do job batch của BR6 ghi.
+Không có `--fresh` thì checkpoint còn nhớ watermark. Phát lại một khoảng thời gian cũ hơn sẽ bị
+coi là "đến muộn" và bị bỏ mà không báo gì: màn hình chỉ đứng im.
+
+Vì sao phải làm trống cả các bảng: màn hình hiện những dòng mới nhất của một partition. Phát
+ngày 17/11 tới 20:54, rồi phát lại từ 15:00 mà không làm trống, thì các dòng mới nhất của mỗi
+ngành hàng vẫn là 19:55–20:54 của lần cũ. Biểu đồ đứng im cho tới khi lần phát mới vượt qua
+chúng. Đo ngày 30/9, khi `--fresh` chưa làm trống bảng: `electronics` dừng ở 20:54 trong khi
+replayer mới tới 20:09. Mọi dòng trong các bảng này đều quay lại theo lần phát, và làm trống
+một bảng trước khi query nào chạy là đặt lại từ đầu. Đó không phải kiểu xoá giữa chừng mà BR5
+cấm.
 
 Khởi động lại mà không có `--fresh` thì job chạy tiếp: file đã đọc không đọc lại, và cửa sổ
 còn mở vẫn giữ nguyên tổng của nó. Đo trên Cassandra thật: sau khi khởi động lại, batch 8
 nối tiếp đúng chỗ batch 7 dừng. Cả 3.772 dòng đang có trong `gmv_by_minute` (17/11, từ 15:00
 tới 20:54 giờ Việt Nam) đều bằng đúng các phút tương ứng tính từ silver: GMV 1.794.180,25 và
 5.618 đơn.
+
+**Ctrl-C dừng giữa hai micro-batch.** Job in `Ctrl-C: stopping after the running micro-batch`,
+để batch đang chạy ghi xong vào Cassandra (1–2 giây khi chỉ có BR1, tối đa 10), dừng lại, rồi in
+`stopped; the checkpoints keep the progress`. Hai dòng
+`WARN ... Failed to cancel job group ... Cannot find active jobs` là bình thường: không còn gì
+đang chạy để huỷ. Bấm Ctrl-C lần nữa thì thoát ngay, và batch bị cắt ngang sẽ chạy lại khi
+khởi động lại.
+
+Việc này cần một dòng trong `main()`. Khởi động Spark sẽ thay trình xử lý Ctrl-C của Python
+bằng trình của pyspark, vốn huỷ mọi job Spark đang chạy trước (`pyspark/core/context.py`).
+Một batch bị bắt giữa chừng sẽ chết ngay trong lúc ghi và in ra một `StackOverflowError` của
+Java. Đo ngày 30/9, gửi Ctrl-C lúc có batch đang chạy: trước khi sửa, 1 lỗi trong 7 lần thử
+(4 trong 7 lần ghi ra lỗi khác); sau khi sửa, 0 trong 8, và batch nào đang chạy cũng commit
+xong trước khi dừng.
 
 ### Khối 0: những dòng đầu file
 
@@ -1345,8 +1369,21 @@ không phải vì dữ liệu đến muộn.
   được gì (API_CONTRACT §3 cho phép điều này).
 - `event_date` nằm trong `groupBy` chỉ để mang khoá partition theo. Cửa sổ 1 phút không bao
   giờ vắt qua nửa đêm.
+- Trước `groupBy`, mỗi sự kiện được nhân đôi: một lần dưới `category_l1` của nó, một lần dưới
+  `'all'`:
 
-**BR của bạn:**
+  ```python
+  .withColumn("category_l1", F.explode(F.array("category_l1", F.lit(ALL_CATEGORIES))))
+  ```
+
+  Nhờ vậy bộ lọc mặc định "Tất cả ngành hàng" chỉ đọc một partition thay vì 14. Dòng `all` ra
+  từ chính phép gộp đó, nên không bao giờ thiếu. Cộng các dòng ngành hàng lại trong
+  `write_batch` thì sai mà không báo lỗi gì: chế độ update chỉ đưa những ngành hàng thay đổi
+  trong micro-batch này. Đo trên 150 phút đã đóng của ngày 17/11: `all` bằng đúng tổng 14 dòng
+  ngành hàng, và bằng đúng silver, tới từng xu.
+
+**BR của bạn:** **đừng** chép phép explode này. Nó chỉ dành cho BR1; ở BR5 hay BR8 nó sẽ
+nhân đôi mọi con số, còn ở BR3 mỗi sản phẩm sẽ hiện hai lần.
 
 | BR | Gộp theo | Tính gì |
 |---|---|---|
@@ -1410,7 +1447,8 @@ gmv_by_minute.writeStream
 `main()` kết nối Cassandra trước (thiếu container thì báo lỗi sau một giây, chứ không phải
 sau mười giây chờ JVM khởi động). Nó dựng `events` một lần, gọi bốn hàm `start_brN`, và chạy
 mọi query khác `None`. Sau đó nó đợi tới khi mỗi query đã đọc hết những gì có sẵn, in READY,
-rồi mỗi micro-batch in một dòng tiến độ cho tới khi bạn bấm Ctrl-C.
+rồi mỗi micro-batch in một dòng tiến độ cho tới khi bạn bấm Ctrl-C. Khi bấm Ctrl-C,
+`stop_between_batches()` để mỗi query chạy xong batch đang dở rồi mới dừng nó.
 
 **BR của bạn:** thay thân hàm stub và trả về `StreamingQuery`. `main()` tự nhận nó, không phải
 sửa chỗ nào khác.
@@ -1466,9 +1504,13 @@ nguyên. Chỉ có câu "mọi hàm truyền vào `foreachBatch` đều đi qua 
       shopinsight.gmv_by_minute WHERE event_date = '2019-11-17' AND category_l1 = 'electronics'
       LIMIT 10"`. Dòng mới nhất nằm trên cùng (`window_start DESC`). Giờ trong bảng phải trùng
       với giờ "Vietnam" in trong log của replayer. Nếu lệch bảy tiếng thì Khối 0 bị thiếu.
-- [ ] Ctrl-C job, bật lại mà không có `--fresh`, và kiểm tra nó chạy tiếp mà không có batch
+      Chạy lại với `category_l1 = 'all'`: dòng tổng của từng phút.
+- [ ] Ảnh 3: màn hình BR1 (`/br1`) khi API và replayer đang chạy. Đường biểu đồ dài thêm sau
+      mỗi lần làm mới 10 giây; footer ghi `Cassandra · 1 partition`.
+- [ ] Ctrl-C job: nó in `stopping after the running micro-batch`, rồi `stopped`, không có lỗi
+      Java nào. Bật lại mà không có `--fresh`, và kiểm tra nó chạy tiếp mà không có batch
       khổng lồ nào.
-- [ ] Hai ảnh để trong `docs/evidence/` và gửi lên nhóm chat.
+- [ ] Ba ảnh để trong `docs/evidence/` và gửi lên nhóm chat.
 
 ### Mỗi BR đổi gì, gói trong một bảng
 
@@ -1480,4 +1522,5 @@ nguyên. Chỉ có câu "mọi hàm truyền vào `foreachBatch` đều đi qua 
 | Output mode | update | **append** | append | update |
 | Xếp hạng trong `write_batch` | không | **có**, top 20 | không | không |
 | Xoá trước khi insert | không | **có**, `WHERE window_start = ?` | **không bao giờ** | không |
+| Thêm dòng `all` (explode) | có | **không** | **không** | **không** |
 | Checkpoint | `br1_gmv_by_minute` | `br3_trending_products` | `br5_abandoned_carts` | `br8_order_velocity_alerts` |
