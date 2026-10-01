@@ -90,9 +90,10 @@ INT selects a different sample (4,713,498 rows, only 18,150 users shared).
 **Counts derived from the sample elsewhere in this document were measured on an
 earlier sample**, drawn with a different hash function (4,694,166 rows / 258,088
 users / 127,693 products). That covers the star row counts in section 5, the SCD2
-version counts, the 12,659 purchased SKUs and the range-join size, but not
-`fact_event`, re-measured on Spark's sample by `batch_warehouse.py` (4,754,015 rows,
-1:1 with silver). Expect the others to move slightly; each is re-measured as
+version counts and the range-join size, but not `fact_event`, re-measured on
+Spark's sample by `batch_warehouse.py` (4,754,015 rows, 1:1 with silver), nor the
+inventory universe in 5.5, re-measured by `gen_inventory.py` (12,731 purchased
+SKUs, 1,909,650 rows). Expect the others to move slightly; each is re-measured as
 `batch_warehouse.py` builds its table.
 
 ```
@@ -283,7 +284,7 @@ Three facts, one per Kimball fact type, sharing five conformed dimensions:
 |---|---|---|---|
 | Kimball type | Transaction | Accumulating snapshot | Periodic snapshot |
 | Grain | one user event | one session | one SKU × warehouse × day |
-| Rows (measured) | 4,754,015 | 954,686 | 1,898,850 |
+| Rows (measured) | 4,754,015 | 954,686 | 1,909,650 |
 | Measures | `price` | milestone lags, counts, values | stock, velocity, days to stock-out |
 | Degenerate dim | `user_session` | — | — |
 | Serves | BR1, BR3, BR8 | BR2, BR5 | BR6 |
@@ -591,13 +592,13 @@ across days is nonsense. The BR6 screen must therefore aggregate across
 warehouses and *filter* to one day, never sum a date range. This is the standard
 periodic-snapshot trap and it belongs in the report.
 
-**The SKU universe is narrowed, deliberately.** All 127,693 sampled products ×
-5 warehouses × 30 days would be 19,153,950 rows — four times `fact_event`, and
-past the 5-million-row cap in CLAUDE.md, to serve one BR. It is also 99.8% dead
-weight: only 12,659 products are ever purchased in the sample, so the other
-115,034 have zero velocity, infinite days-to-stock-out, and can never appear on
+**The SKU universe is narrowed, deliberately.** All 128,972 products in silver ×
+5 warehouses × 30 days would be 19,345,800 rows — four times `fact_event`, and
+past the 5-million-row cap in CLAUDE.md, to serve one BR. It is also 90% dead
+weight: only 12,731 products are ever purchased in the sample, so the other
+116,241 have zero velocity, infinite days-to-stock-out, and can never appear on
 the BR6 screen. The inventory universe is therefore **SKUs with at least one
-purchase in the window**: 12,659 × 5 × 30 = 1,898,850 rows. The grain is
+purchase in the window**: 12,731 × 5 × 30 = 1,909,650 rows. The grain is
 unchanged and the fact is still a dense periodic snapshot; only the SKU universe
 is scoped, and the report says so.
 
