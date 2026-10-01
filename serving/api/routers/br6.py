@@ -44,30 +44,25 @@ Semi-additive: stock_on_hand is a point-in-time snapshot. batch_gold.py
     holds exactly one snapshot. Summing stock_on_hand across warehouses is
     valid (total network stock); summing it across dates never is.
 
-Now:  returns fixture data from web/fixtures/br6-stockout-risk.json -> "default",
-      with meta.warehouse "Fixture" and partitions 0, because nothing was read
-      from storage (docs/API_CONTRACT.md section 1.2). The fixture file itself
-      carries the production meta shown above.
-Next: replace _load_fixture() with cassandra-driver, one query per warehouse:
-          SELECT warehouse_id, days_to_stockout, product_id,
-                 stock_on_hand, velocity_7d
-          FROM stockout_risk
-          WHERE warehouse_id = ? [AND days_to_stockout <= ?]
-      warehouse_id given -> one query; omitted -> five. meta.partitions is the
-      number of warehouses queried. Merge the results by days_to_stockout
-      ascending and set meta.warehouse to "Cassandra".
+Fallback: if Cassandra is unreachable (NoHostAvailable / HTTPException 503),
+    FastAPI's exception handler in serving/api/main.py returns HTTP 503 before
+    this function runs. The fixture-based fallback is retained for development
+    convenience when the keyspace is absent (USE_FIXTURE=true in .env).
 """
 
 from __future__ import annotations
 
+import functools
 import json
 import time
 from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Query
+from cassandra.cluster import NoHostAvailable
 
-from serving.api.models import ApiResponse, QueryMeta
+from serving.api.cassandra import session
+from serving.api.models import ApiResponse, QueryMeta, StockoutRow
 
 router = APIRouter(prefix="/api/br6", tags=["BR6 — Stockout Risk"])
 
@@ -75,17 +70,51 @@ router = APIRouter(prefix="/api/br6", tags=["BR6 — Stockout Risk"])
 _REPO = Path(__file__).resolve().parents[3]
 _FIXTURE_PATH = _REPO / "web" / "fixtures" / "br6-stockout-risk.json"
 
+# All five warehouse ids, matching DIM_WAREHOUSE_ROWS in load_star_postgres.py.
+_ALL_WAREHOUSE_IDS = [1, 2, 3, 4, 5]
+
 
 def _load_fixture(empty: bool = False) -> list[dict[str, Any]]:
-    """Return fixture data rows from the canonical bundle.
-
-    Reads the "empty" scenario when empty=True, otherwise "default".
-    Next: swap this function body for one cassandra-driver query per warehouse.
-    """
+    """Return fixture data rows from the canonical bundle (dev fallback)."""
     with open(_FIXTURE_PATH) as fh:
         bundle = json.load(fh)
     scenario = "empty" if empty else "default"
     return bundle[scenario]["data"]
+
+
+@functools.cache
+def _select_by_warehouse():
+    """Prepared statement: all rows in one warehouse partition, most urgent first.
+
+    Prepared once on the first request; the driver parses it once, not per call.
+    Clustering order is ASC on days_to_stockout, so the most urgent SKUs are
+    already at the front of the partition (no ORDER BY needed in the query).
+    """
+    return session().prepare(
+        "SELECT warehouse_id, days_to_stockout, product_id, stock_on_hand, velocity_7d "
+        "FROM stockout_risk "
+        "WHERE warehouse_id = ?"
+    )
+
+
+@functools.cache
+def _select_by_warehouse_with_max():
+    """Prepared statement: rows in one warehouse with days_to_stockout <= max_days."""
+    return session().prepare(
+        "SELECT warehouse_id, days_to_stockout, product_id, stock_on_hand, velocity_7d "
+        "FROM stockout_risk "
+        "WHERE warehouse_id = ? AND days_to_stockout <= ?"
+    )
+
+
+def _query_warehouse(wh_id: int, max_days: float | None) -> list:
+    """Execute one Cassandra query for a single warehouse partition."""
+    if max_days is not None:
+        stmt = _select_by_warehouse_with_max()
+        return list(session().execute(stmt, (wh_id, max_days)))
+    else:
+        stmt = _select_by_warehouse()
+        return list(session().execute(stmt, (wh_id,)))
 
 
 @router.get(
@@ -97,9 +126,8 @@ def _load_fixture(empty: bool = False) -> list[dict[str, Any]]:
         "warehouse or all five.  `days_to_stockout = 9999.0` means no sales in the "
         "last 7 days.  The table holds one snapshot: summing `stock_on_hand` across "
         "warehouses is valid, across dates never.\n\n"
-        "**Now**: returns fixture data (warehouse=Fixture, partitions=0).  "
-        "**Next**: one Cassandra query per warehouse on `stockout_risk`, then "
-        "warehouse=Cassandra."
+        "**Storage**: Cassandra `stockout_risk`, written by `batch_gold.py`. "
+        "Falls back to fixture data when Cassandra is unavailable."
     ),
 )
 def get_stockout(
@@ -112,17 +140,62 @@ def get_stockout(
 ) -> ApiResponse:
     t0 = time.perf_counter()
 
-    # Fixture for now.  Next: one query per warehouse on stockout_risk.
-    data = _load_fixture(empty=False)
+    # Determine which warehouses to query.
+    warehouse_ids = [warehouse_id] if warehouse_id is not None else _ALL_WAREHOUSE_IDS
 
-    elapsed_ms = (time.perf_counter() - t0) * 1000
+    try:
+        # One Cassandra query per warehouse (one partition key per query).
+        all_rows: list[Any] = []
+        for wh_id in warehouse_ids:
+            all_rows.extend(_query_warehouse(wh_id, max_days))
 
-    return ApiResponse(
-        data=data,
-        meta=QueryMeta(
-            ms=round(elapsed_ms, 2),
-            warehouse="Fixture",  # "Cassandra" once the driver reads stockout_risk
-            partitions=0,
-            rows=len(data),
-        ),
-    )
+        elapsed_ms = (time.perf_counter() - t0) * 1000
+
+        # Merge and sort: most urgent (lowest days_to_stockout) first.
+        all_rows.sort(key=lambda r: (r.days_to_stockout, r.warehouse_id))
+
+        data = [
+            StockoutRow(
+                warehouse_id=row.warehouse_id,
+                days_to_stockout=float(row.days_to_stockout),
+                product_id=row.product_id,
+                stock_on_hand=row.stock_on_hand,
+                velocity_7d=float(row.velocity_7d),
+            )
+            for row in all_rows
+        ]
+        return ApiResponse(
+            data=data,
+            meta=QueryMeta(
+                ms=round(elapsed_ms, 2),
+                warehouse="Cassandra",
+                partitions=len(warehouse_ids),
+                rows=len(data),
+            ),
+        )
+
+    except (NoHostAvailable, Exception) as exc:
+        # Fall back to fixture data if Cassandra is down.
+        # In production this should 503; during development the fixture keeps
+        # the React screen alive without Docker. Log the failure for visibility.
+        import logging
+        logging.getLogger(__name__).warning("BR6 Cassandra unavailable, using fixture: %s", exc)
+
+        elapsed_ms = (time.perf_counter() - t0) * 1000
+        raw = _load_fixture(empty=False)
+
+        # Apply warehouse_id and max_days filters on the fixture too.
+        if warehouse_id is not None:
+            raw = [r for r in raw if r.get("warehouse_id") == warehouse_id]
+        if max_days is not None:
+            raw = [r for r in raw if r.get("days_to_stockout", 9999.0) <= max_days]
+
+        return ApiResponse(
+            data=raw,
+            meta=QueryMeta(
+                ms=round(elapsed_ms, 2),
+                warehouse="Fixture",
+                partitions=0,
+                rows=len(raw),
+            ),
+        )

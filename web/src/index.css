@@ -718,7 +718,63 @@ body {
   background: rgba(255, 69, 58, 0.08);
 }
 
+
+/* ── Badge ─────────────────────────────────────────────────────────────── */
+/* Small inline label with urgency colouring, used by BR6 stockout table.   */
+.badge {
+  display: inline-block;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  font-family: var(--font-mono);
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+.badge--danger  { background: rgba(255, 69, 58, 0.18); color: #ff6b6b; }
+.badge--warning { background: rgba(245, 166, 35, 0.18); color: #f5a623; }
+.badge--success { background: rgba(48, 209, 88, 0.18);  color: var(--success-subtle); }
+.badge--neutral { background: rgba(255, 255, 255, 0.06); color: var(--text-secondary); }
+
+/* ── Toolbar button ─────────────────────────────────────────────────────── */
+/* Small action button inside the filter toolbar, used by BR6.               */
+.toolbar__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.6rem;
+  border-radius: 5px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-size: 0.75rem;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+.toolbar__btn:hover:not(:disabled) {
+  background: var(--bg-glass);
+  border-color: var(--border-default);
+}
+.toolbar__btn:disabled { opacity: 0.4; cursor: default; }
+.toolbar__btn--ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-secondary);
+}
+.toolbar__btn--ghost:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: transparent;
+  color: var(--text-primary);
+}
+
+/* ── Coloured table rows (urgency bands, BR6) ────────────────────────────── */
+.data-table__row--danger td   { background: rgba(255, 69, 58, 0.08); }
+.data-table__row--warning td  { background: rgba(245, 166, 35, 0.07); }
+
 /* ── Animation Utilities ──────────────────────────────────────────────── */
+
 @keyframes spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
