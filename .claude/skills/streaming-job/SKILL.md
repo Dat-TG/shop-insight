@@ -6,8 +6,10 @@ when_to_use: Triggers on readStream, writeStream, foreachBatch, micro-batch, wat
 
 # Structured Streaming — the densest trap list in the project
 
-BR1 (Dat, W40) is the reference. BR3, BR5 and BR8 (W41) copy its frame. No streaming code
-exists yet in W38; the first job sets the pattern the other three inherit.
+BR1 (Dat, W40) is the reference: `start_br1` in `processing/streaming_gold.py`, walked
+through block by block in `docs/STREAMING_PATTERN.md` (Vietnamese twin: `docs/SPARK_GUIDE_VI.md`
+Phần 10). BR3, BR5 and BR8 (W41) fill the stubs `start_br3/5/8` in the same file and
+return their `StreamingQuery`; `main()` starts them with no other edit.
 
 ## 1. Starting the stream
 
@@ -45,6 +47,15 @@ exists yet in W38; the first job sets the pattern the other three inherit.
 - [ ] **Structured Streaming cannot rank a streaming DataFrame.** BR3's ordering and
       top-N cut happen inside `foreachBatch`, where the micro-batch is an ordinary static
       DataFrame — not with a window function on the stream.
+- [ ] **Output mode decides what `foreachBatch` sees.** `update` (BR1, BR8) hands over only
+      the groups that changed in this micro-batch, with running totals. A top 20 ranked
+      from that silently misses every product that did not change, so BR3 uses `append`,
+      which hands over each window once and complete when the watermark closes it. BR5's
+      "no purchase 30 minutes later" is also an `append` question.
+- [ ] `spark.sql.shuffle.partitions` is 4 in `streaming_gold.py`, not 200. Measured: at 200
+      a micro-batch ran 200 state-store tasks and took 3.5-6.7 s for about 50 events, longer
+      than the 5 s trigger; at 4 it takes 1.0-1.7 s for about 2,000. Each checkpoint
+      freezes the value on its first run, so after changing it, run once with `--fresh`.
 
 ## 3. Writing to Cassandra
 
@@ -53,6 +64,12 @@ exists yet in W38; the first job sets the pattern the other three inherit.
       version matching this project exists to sidestep.
 - [ ] Use prepared statements and a batch per partition key. Every write names the full
       partition key, because that is the only thing Cassandra can filter on.
+- [ ] Timestamps: `collect()` turns a Spark timestamp into a Python `datetime` in the
+      LAPTOP's zone, not Spark's UTC session. Measured on a UTC+7 laptop: 15:00 comes back
+      as 22:00, and cassandra-driver stores it as 22:00 UTC, silently. `streaming_gold.py`
+      sets `os.environ["TZ"] = "UTC"; time.tzset()` in its first lines, which covers every
+      job in the file. Cassandra holds the Vietnam wall clock (silver's convention), and the
+      API appends `+07:00`.
 - [ ] Keys are designed backwards from the screen's question. All five live in one
       place — the `cassandra-table` skill's table, copied from SYSTEM_DESIGN section 6.
       Read the key there and copy it; do not retype one from memory, and never fold a
@@ -65,8 +82,8 @@ exists yet in W38; the first job sets the pattern the other three inherit.
 the design-side source; every other file in `.claude/` carries only a one-line pointer
 here, so a revision in W40-W41 is one edit, not seven. Keep it that way.
 `.claude/hooks/check_python.py` warns (advisory, never blocks) when an insert into
-`trending_products` or `stockout_risk` has no matching DELETE, or anything deletes from
-`abandoned_carts`. A warning is a prompt to check, not proof of correctness.
+`trending_products` or `stockout_risk` has no matching DELETE, or anything deletes from or
+truncates `abandoned_carts`. A warning is a prompt to check, not proof of correctness.
 
 A table that clusters on a value which changes between runs gets a *new* row from an
 upsert instead of replacing the old one — on screen, duplicates or a self-emptying list.
@@ -75,7 +92,7 @@ upsert instead of replacing the old one — on screen, duplicates or a self-empt
 |---|---|---|
 | `stockout_risk` | batch (BR6), full rewrite of every warehouse | `DELETE FROM stockout_risk WHERE warehouse_id = ?` then insert |
 | `trending_products` | streaming (BR3), re-emits each window | `DELETE FROM trending_products WHERE window_start = ?` then insert the new top-N |
-| `abandoned_carts` | streaming (BR5), accumulates through the day | **no delete at all** |
+| `abandoned_carts` | streaming (BR5), accumulates through the day | **no delete at all** (inside `write_batch`; `--fresh` emptying all four streaming tables before a run starts is a reset, not this) |
 
 Why each differs:
 

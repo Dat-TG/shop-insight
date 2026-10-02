@@ -40,8 +40,9 @@ when_to_use: Triggers on "write batch_silver.py", "change the warehouse build", 
 
 - [ ] Python 3.14.x, OpenJDK 21, `pyspark==4.1.3`. PySpark 3.5.x **segfaults** on Python
       3.14: its cloudpickle 2.x calls a `pickle._getattribute` that changed in 3.14, and
-      cloudpickle serialises every `foreachBatch` closure, so the crash lands on the
-      required Cassandra write path. Never pin `pyspark==3.*`.
+      cloudpickle serialises every UDF and RDD lambda Spark ships to a worker. (Not
+      `foreachBatch` in classic `local[*]`: a py4j callback on the driver.) Never pin
+      `pyspark==3.*`.
 - [ ] `spark.driver.memory 6g` lives in the committed `conf/spark-defaults.conf`, read
       because `SPARK_CONF_DIR` is set **before** the SparkSession is built. On
       `SparkSession.builder.config(...)` it works only if that builder starts the JVM; with

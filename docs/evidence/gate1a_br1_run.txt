@@ -1,0 +1,89 @@
+Gate 1a, BR1: evidence captured 2026-09-30 on Dat's machine (branch w40-br1-slice).
+Text copies of what the screenshots show; the screenshots themselves go to the group chat.
+
+== Commands, in this order ==
+docker compose up -d --wait; python serving/check_infra.py      -> INFRA OK
+python serving/apply_schema.py                                  -> APPLY_SCHEMA OK
+python processing/streaming_gold.py --fresh                     # terminal 1, wait for READY
+python ingestion/replayer.py --speed 60 --start "2019-11-17 08:00:00"   # terminal 2
+uvicorn serving.api.main:app --port 8000; cd web && npm run dev # then open /br1
+
+== Terminal 2, replayer (first files) ==
+file 000001  2019-11-17 08:00 .. 08:05 UTC  (Vietnam 11-17 15:00)   1,804 rows  total 1,804
+file 000002  2019-11-17 08:05 .. 08:10 UTC  (Vietnam 11-17 15:05)   2,011 rows  total 3,815
+file 000003  2019-11-17 08:10 .. 08:15 UTC  (Vietnam 11-17 15:10)   1,878 rows  total 5,693
+file 000004  2019-11-17 08:15 .. 08:20 UTC  (Vietnam 11-17 15:15)   1,820 rows  total 7,513
+file 000005  2019-11-17 08:20 .. 08:25 UTC  (Vietnam 11-17 15:20)   2,097 rows  total 9,610
+file 000006  2019-11-17 08:25 .. 08:30 UTC  (Vietnam 11-17 15:25)   2,057 rows  total 11,667
+
+== Terminal 1, streaming_gold.py (READY, then two lines per micro-batch) ==
+READY: 1 of 4 jobs running (br1_gmv_by_minute), watching /home/dat/shop-insight/data/stream_landing
+READY: now start python ingestion/replayer.py --speed 60
+[br1_gmv_by_minute] batch 0: upserted 56 rows into gmv_by_minute (13 partitions) in 1448 ms
+[br1_gmv_by_minute] batch 0: 1,791 events after cleaning, watermark none yet, 5,118 ms
+[br1_gmv_by_minute] batch 1: upserted 58 rows into gmv_by_minute (12 partitions) in 511 ms
+[br1_gmv_by_minute] batch 1: 2,007 events after cleaning, watermark 2019-11-17 14:54:59, 1,150 ms
+[br1_gmv_by_minute] batch 2: upserted 55 rows into gmv_by_minute (13 partitions) in 691 ms
+[br1_gmv_by_minute] batch 2: 1,871 events after cleaning, watermark 2019-11-17 14:59:59, 1,687 ms
+[br1_gmv_by_minute] batch 3: upserted 58 rows into gmv_by_minute (12 partitions) in 536 ms
+[br1_gmv_by_minute] batch 3: 1,812 events after cleaning, watermark 2019-11-17 15:04:59, 1,330 ms
+[br1_gmv_by_minute] batch 4: upserted 59 rows into gmv_by_minute (12 partitions) in 569 ms
+[br1_gmv_by_minute] batch 4: 2,087 events after cleaning, watermark 2019-11-17 15:09:59, 1,304 ms
+[br1_gmv_by_minute] batch 5: upserted 60 rows into gmv_by_minute (12 partitions) in 403 ms
+[br1_gmv_by_minute] batch 5: 2,046 events after cleaning, watermark 2019-11-17 15:14:59, 1,032 ms
+[br1_gmv_by_minute] batch 6: upserted 58 rows into gmv_by_minute (12 partitions) in 449 ms
+
+The partition count includes 'all': the categories with an event in the batch's 5 minutes,
+plus the total row.
+
+== cqlsh: the 'all' partition, newest first ==
+docker compose exec cassandra cqlsh -e "SELECT * FROM shopinsight.gmv_by_minute WHERE event_date = '2019-11-17' AND category_l1 = 'all' LIMIT 10"
+
+ event_date | category_l1 | window_start                    | gmv     | order_count
+------------+-------------+---------------------------------+---------+-------------
+ 2019-11-17 |         all | 2019-11-17 20:29:00.000000+0000 | 5196.94 |          17
+ 2019-11-17 |         all | 2019-11-17 20:28:00.000000+0000 | 4338.14 |          18
+ 2019-11-17 |         all | 2019-11-17 20:27:00.000000+0000 | 5720.91 |          14
+ 2019-11-17 |         all | 2019-11-17 20:26:00.000000+0000 | 4217.21 |          15
+ 2019-11-17 |         all | 2019-11-17 20:25:00.000000+0000 | 5542.92 |          18
+ 2019-11-17 |         all | 2019-11-17 20:24:00.000000+0000 | 3481.55 |           9
+ 2019-11-17 |         all | 2019-11-17 20:23:00.000000+0000 | 6507.56 |          14
+ 2019-11-17 |         all | 2019-11-17 20:22:00.000000+0000 | 4869.17 |          18
+ 2019-11-17 |         all | 2019-11-17 20:21:00.000000+0000 | 5092.75 |          17
+ 2019-11-17 |         all | 2019-11-17 20:20:00.000000+0000 | 6337.69 |          18
+
+(10 rows)
+
+Times are the Vietnam wall clock, matching the replayer's "(Vietnam ...)" column.
+
+== Correctness: gmv_by_minute vs silver, closed minutes of 2019-11-17 (Vietnam time) ==
+15:00-16:40  100 minutes: 'all' = sum of the 14 category rows in 100/100;
+             'all' = silver in 100/100. GMV 443,809.62 and 1,397 orders on both sides.
+20:20-21:10   50 minutes, spanning the Ctrl-C and restart below: 50/50 and 50/50.
+             GMV 256,441.32 and 840 orders on both sides.
+(One-off script: Cassandra partitions read with cassandra-driver, silver aggregated with
+batch Spark by date_trunc('minute', event_time). Not committed.)
+
+== Restart without --fresh ==
+Ctrl-C during batch 69 (offsets written, commit not). Restarted without --fresh:
+[br1_gmv_by_minute] batch 69: upserted 59 rows into gmv_by_minute (12 partitions) in 1608 ms
+[br1_gmv_by_minute] batch 70: upserted 434 rows into gmv_by_minute (15 partitions) in 590 ms
+READY: 1 of 4 jobs running (br1_gmv_by_minute), watching /home/dat/shop-insight/data/stream_landing
+READY: now start python ingestion/replayer.py --speed 60
+[br1_gmv_by_minute] batch 70: 19,598 events after cleaning, watermark 2019-11-17 20:39:59, 1,188 ms
+[br1_gmv_by_minute] batch 71: upserted 63 rows into gmv_by_minute (13 partitions) in 563 ms
+[br1_gmv_by_minute] batch 71: 2,889 events after cleaning, watermark 2019-11-17 21:14:59, 1,424 ms
+
+Batch 69 re-ran from the same offsets; batch 70 caught up the ~7 files written during the
+~35 s restart (not the 73 files in the landing directory); then one file per batch again.
+
+== API: GET /api/br1/realtime?event_date=2019-11-17 (category_l1 defaults to all) ==
+meta {'ms': 6.476, 'warehouse': 'Cassandra', 'partitions': 1, 'rows': 115}   (replay at 16:54)
+meta {'ms': 5.708, 'warehouse': 'Cassandra', 'partitions': 1, 'rows': 120}   (replay past midnight)
+bad date (2019-13-40) -> HTTP 422; no event_date -> today in Vietnam time -> 200, data []
+
+== Screen /br1 ==
+Two headless page loads at least 15 s apart: the chart window moved from 17:50-18:49 to
+18:20-19:19 and GMV (last 60 min) from 321.1K to 348.8K. One page left open 25 s called the
+API 4 times (StrictMode's double first call in dev, then at 10 s and 20 s). Footer:
+"15.844 ms / Cassandra / 1 partition / 120 rows".

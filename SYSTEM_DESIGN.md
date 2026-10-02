@@ -708,9 +708,12 @@ CREATE TABLE order_velocity_alerts (
 Reasoning behind the keys, to be reused in the report:
 
 - BR1: the partition key is `(event_date, category_l1)` because the screen always
-  filters by date and category. Clustering by `window_start DESC` means "the last
-  60 minutes" reads exactly 60 adjacent rows at the head of one partition, with
-  no sort step.
+  filters by date and category. Clustering by `window_start DESC` means the
+  screen's two hours (the last 60 minutes, plus the 60 before for "vs previous")
+  are at most 120 adjacent rows at the head of one partition, with no sort step.
+  "All categories" is a partition too: the stream writes one extra row per window
+  under `category_l1 = 'all'`, summed by the same aggregation, so the default
+  filter reads one partition instead of 14.
 - BR6: `days_to_stockout` ascending puts the most urgent SKUs at the head of the
   partition.
 
@@ -801,9 +804,15 @@ through both is the clearest way to explain the system.
 **Streaming path (BR1, BR3, BR5, BR8):**
 
 5. `replayer.py` reads `data/bronze/` (Parquet — *not* the raw CSV), orders by
-   `event_time`, and every 5 seconds writes a JSON file of roughly 2,000 rows
-   into `data/stream_landing/`. A speed factor compresses playback so a demo does
-   not have to wait: one hour of real data can replay in one minute.
+   `event_time`, and every 5 seconds writes a JSON file into `data/stream_landing/`.
+   A speed factor compresses playback so a demo does not have to wait: at
+   `--speed 60` one hour of real data replays in one minute, and each file holds
+   5 minutes of events: 554 rows on average, but about 90 at 00:00 UTC and about
+   880 at 15:00–16:00 UTC, about 2,000 from 08:00 UTC on 17 November (the day
+   with the most purchases, 13,076), and 3,078 in the busiest slice of the month
+   (measured over all 8,640 slices). `--start` picks the first event time, in
+   UTC. 15 November (UTC) has 432,575 events and no purchase at all, so BR1 shows
+   GMV 0 for that whole day.
 
    It must read bronze and not `data/raw/2019-Nov.csv`. The raw file holds all
    3,696,117 users; bronze holds only the 258,390 in the 7% bucket. A replayer
@@ -899,7 +908,7 @@ Executive screen sketch:
 |  |  __/    \      \/      \____/  \___                 |  |
 |  +-----------------------------------------------------+  |
 |                                                           |
-|  Query: 43 ms · Cassandra · 1 partition · 60 rows         |
+|  Query: 43 ms · Cassandra · 1 partition · 120 rows        |
 +----------------------------------------------------------+
 ```
 
@@ -1001,7 +1010,7 @@ python serving/load_star_postgres.py #    optional, Postgres only, until step 6 
 python processing/batch_gold.py      # 6. reads the star
 
 # 3. Real-time stream (two terminals)
-python processing/streaming_gold.py       # start FIRST, let it wait
+python processing/streaming_gold.py       # start FIRST, wait for READY (--fresh: start from nothing, streaming tables included)
 python ingestion/replayer.py --speed 60   # 1 hour of data per minute
 
 # 4. Application
@@ -1027,7 +1036,7 @@ during a demo.
 | | Version | Why |
 |---|---|---|
 | Python | 3.14.x | The only interpreter Ubuntu 26.04 ships; 3.11–3.13 are not in the repos |
-| PySpark | `pyspark==4.1.3` | 3.5.x **segfaults** on Python 3.14 — its vendored cloudpickle 2.x calls a `pickle._getattribute` that changed in 3.14, and cloudpickle serialises every `foreachBatch` closure, so the crash lands exactly on the project's required Cassandra write path |
+| PySpark | `pyspark==4.1.3` | 3.5.x **segfaults** on Python 3.14 — its vendored cloudpickle 2.x calls a `pickle._getattribute` that changed in 3.14, and cloudpickle serialises every Python function Spark ships to a worker (every UDF and RDD lambda). In the classic `local[*]` mode used here `foreachBatch` is *not* pickled — it is a py4j callback on the driver (`ForeachBatchFunction` in `pyspark/sql/utils.py`) — so the earlier claim that the crash lands on the Cassandra write path was wrong about the mechanism, not about the pin |
 | JDK | OpenJDK 21 | Spark 4.x needs Java 17 or newer; 21 is pinned so four machines match |
 | Cassandra | `cassandra:4.1.12` | Single node in Docker. Pinned to the patch: `4.1` is a moving tag, and a node that starts on one patch and restarts on another after a `docker pull` is a debugging session nobody has time for. Its heap is capped at 2 GB (`MAX_HEAP_SIZE` **and** `HEAP_NEWSIZE` in `docker-compose.yml` — this image runs CMS, which exits 1 unless both are set) because the default is a quarter of host RAM, about 3.7 GB inside a 16 GB WSL, and Spark's driver already claims 6 GB |
 | PostgreSQL | `postgres:16.15` | The **second physical realisation of the star schema** (section 5.3), not only a benchmark baseline. 16 ships `jsonb` and the `gin (... jsonb_path_ops)` operator class in core, so `warehouse/ddl.sql` needs no `CREATE EXTENSION` — only room: `maintenance_work_mem=256MB` for the W39 GIN build on `dim_product.attributes`, `shared_buffers=512MB` |

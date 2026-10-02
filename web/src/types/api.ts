@@ -76,11 +76,12 @@ export interface FixtureBundle<T = unknown> {
 /**
  * One row from gmv_by_minute.
  * category_l1 = "unknown" is valid (~32.4% of source events have no category_code).
+ * category_l1 = "all" is the stored total over every category, written by the stream.
  */
 export interface GmvRow {
   /** Date YYYY-MM-DD */
   event_date: string;
-  /** Top-level category; "unknown" when source category_code is null */
+  /** Top-level category; "unknown" when source category_code is null; "all" for the total row */
   category_l1: string;
   /** ISO 8601 timestamp with timezone */
   window_start: string;

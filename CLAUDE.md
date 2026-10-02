@@ -163,8 +163,16 @@ directories), so it prints `WAREHOUSE PARTIAL: 5 of 9 tables built`. Still stubs
 `fact_inventory_daily` (W40). Inputs and checks: `ingestion/gen_catalog.py` (run before
 batch_warehouse), `ingestion/gen_inventory.py`, `checks/scd2_integrity.py`,
 `checks/fact_event_spot.py`. Cassandra: `serving/cassandra_schema.cql` +
-`serving/apply_schema.py`. The FastAPI + React skeleton serves fixtures. No BR reads
-real data yet. The
+`serving/apply_schema.py`. The streaming foundation: `ingestion/replayer.py` (bronze ->
+`data/stream_landing/`, one JSON file every 5 s), `processing/source.py` (the only
+source reader) and `processing/streaming_gold.py`, where BR1 writes `gmv_by_minute`
+(plus a `category_l1 = 'all'` total row per window) and BR3, BR5 and BR8 are stubs for
+W41. `docs/STREAMING_PATTERN.md` walks through it
+block by block, and `docs/SPARK_GUIDE_VI.md` Phần 10 is its Vietnamese twin (keep the
+two in step). The FastAPI + React skeleton serves fixtures, except BR1, which is live
+end to end: `GET /api/br1/realtime` reads one Cassandra partition through
+`serving/api/cassandra.py` (the one session every Cassandra router imports) and
+`web/src/pages/BR1Page.tsx` refreshes every 10 s. The
 project runs W38-W46 (14 Sep - 15 Nov). W38 is a combined week: kickoff and
 infrastructure together.
 
@@ -175,7 +183,10 @@ repo. So: write the setup down instead of explaining it, comment the reference
 implementation instead of walking someone through it, and make every gate produce
 an artefact someone can look at on their own time.
 
-Next task: W40, the streaming foundation and BR1 for Gate 1. The remaining stubs in
+Next task: Gate 1a's BR1 screenshots (the checklist at the end of
+`docs/STREAMING_PATTERN.md`), then W41's streaming BRs, whose owners fill the stubs in
+`processing/streaming_gold.py` following `docs/STREAMING_PATTERN.md` and copy
+`serving/api/routers/br1.py` for their endpoint. The remaining stubs in
 `processing/batch_warehouse.py` stay with their owners: `dim_date`, `dim_warehouse` and
 step 6 (Tin), `fact_session_funnel` and `fact_inventory_daily` (W40). Replace the body,
 keep the signature, write through `write_dim`/`write_fact`.

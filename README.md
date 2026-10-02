@@ -253,8 +253,8 @@ section 11 and are this README's addition; [docs/SETUP_SPARK.md](docs/SETUP_SPAR
 in full, with a troubleshooting table for Linux and WSL. **(not written yet)** marks a file that does not exist yet.
 **(a) Once per machine:** pin all three exactly, reasons in SYSTEM_DESIGN 11.1 — Python **3.14.x** (the only
 interpreter Ubuntu 26.04 ships), **`pyspark==4.1.3`** (3.5.x segfaults on Python 3.14: its vendored cloudpickle 2.x
-calls a `pickle._getattribute` that changed in 3.14, and cloudpickle serialises every `foreachBatch` closure, so the
-crash lands exactly on this project's required Cassandra write path), **OpenJDK 21** (Spark 4.x needs 17 or newer; the
+calls a `pickle._getattribute` that changed in 3.14, and cloudpickle serialises every UDF and RDD lambda Spark ships to
+a worker), **OpenJDK 21** (Spark 4.x needs 17 or newer; the
 team pins 21).
 
 ```bash
@@ -300,8 +300,8 @@ python processing/batch_warehouse.py # 5. silver -> star (Parquet + Postgres); W
 python serving/load_star_postgres.py #    optional, Postgres only, until step 6 of batch_warehouse calls it; W39: the three small dims; prints POSTGRES STAR OK
 python processing/batch_gold.py      # 6. (not written yet — per-BR owners, W40-W41) reads the star
 # (d) run the stream — two terminals, IN THIS ORDER
-python processing/streaming_gold.py       # (not written yet — W40, Dat) start FIRST, let it wait
-python ingestion/replayer.py --speed 60   # (not written yet — W40, Dat) 1 hour of data per minute
+python processing/streaming_gold.py       # start FIRST, wait for READY; W40: BR1 only. --fresh starts from nothing, streaming tables included
+python ingestion/replayer.py --speed 60   # 1 hour of data per minute; --start "2019-11-17 08:00:00" for a busy demo
 # (e) the app
 uvicorn serving.api.main:app --reload --port 8000   # from the repo root; web/ calls :8000
 cd web && npm ci && npm run dev           # 2nd terminal; Node ^20.19 or >=22.12 (vite 8.3); :5173, CORS allows 5173-5175
@@ -381,15 +381,15 @@ lives in `seed/`, **not** under `data/` — `data/raw/holidays_2019.csv` is sile
 [~] data/            gitignored except the .gitkeep skeleton; nothing here travels between machines
     [x] raw/ bronze/ silver/ gold/ stream_landing/ checkpoints/ warehouse/ catalog/ inventory/
         each tracked only through its .gitkeep; a new data/ directory needs its own .gitignore negation
-[~] docs/            [x] AI_USAGE.md API_CONTRACT.md BR_SCOPE.md SETUP_SPARK.md SPARK_GUIDE_VI.md evidence/  [ ] STREAMING_PATTERN.md DATA_MODEL.md
+[~] docs/            [x] AI_USAGE.md API_CONTRACT.md BR_SCOPE.md SETUP_SPARK.md SPARK_GUIDE_VI.md STREAMING_PATTERN.md evidence/  [ ] DATA_MODEL.md
 [x] requirements.txt    [x] conf/spark-defaults.conf  driver memory + UTC, read by every script
 [x] docker-compose.yml  Cassandra 4.1.12 + Postgres 16.15   [x] .env.example  ports, db, user, password
 [~] web/  React + TypeScript: 8 tabs, BR2 screen on fixture data; fixtures/ holds the 8 contract bundles
 [x] seed/holidays_2019.csv  Committed, feeds dim_date.is_holiday
-[~] ingestion/       [x] load_bronze.py gen_catalog.py gen_inventory.py  [ ] replayer.py
-[~] processing/      [x] schema.py kata.py batch_silver.py dim_product.py dim_user.py
+[x] ingestion/       [x] load_bronze.py gen_catalog.py gen_inventory.py replayer.py
+[~] processing/      [x] schema.py kata.py batch_silver.py dim_product.py dim_user.py source.py
                      [~] batch_warehouse.py (5 of 9 tables; dim_date, dim_warehouse, 2 facts and step 6 still stubs)
-                     [ ] source.py streaming_gold.py batch_gold.py
+                     [~] streaming_gold.py (BR1 done; BR3, BR5, BR8 stubs for W41)  [ ] batch_gold.py
 [x] warehouse/ddl.sql  Postgres star schema DDL   [ ] benchmark/  queries.sql run_benchmark.py results/
 [~] serving/         [x] check_infra.py cassandra_schema.cql apply_schema.py  [~] api/ (fixtures only) load_star_postgres.py (3 small dims)
 [x] tests/test_fixtures.py  API contract check: fixtures and routers vs docs/API_CONTRACT.md

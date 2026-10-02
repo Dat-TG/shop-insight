@@ -79,8 +79,8 @@ source, and anything source cannot settle goes in the `Not checkable` list below
 - B6 `np.random`, `random.seed`, `.sample(`, or `add_argument("--rows"` under
   `ingestion/` or `processing/`: `data/` is gitignored and four machines
   regenerate bronze, so only `pmod(hash(user_id), 100) < 7` stays identical.
-- B7 `pyspark==3.`: 3.5.x segfaults on Python 3.14 via the cloudpickle in every
-  `foreachBatch` closure. Pin `pyspark==4.1.3`.
+- B7 `pyspark==3.`: 3.5.x segfaults on Python 3.14 via its vendored cloudpickle,
+  which serialises every UDF and RDD lambda. Pin `pyspark==4.1.3`.
 
 ## Audit C — style (costs time, not correctness)
 
