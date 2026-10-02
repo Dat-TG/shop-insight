@@ -598,9 +598,10 @@ past the 5-million-row cap in CLAUDE.md, to serve one BR. It is also 90% dead
 weight: only 12,731 products are ever purchased in the sample, so the other
 116,241 have zero velocity, infinite days-to-stock-out, and can never appear on
 the BR6 screen. The inventory universe is therefore **SKUs with at least one
-purchase in the window**: 12,731 × 5 × 30 = 1,909,650 rows. The grain is
-unchanged and the fact is still a dense periodic snapshot; only the SKU universe
-is scoped, and the report says so.
+purchase in silver**: 12,731 × 5 × 30 = 1,909,650 rows. Silver runs one Vietnam
+date past the 30-day window, so 42 of these SKUs are bought only on 1 December
+and have no sales in it. The grain is unchanged and the fact is still a dense
+periodic snapshot; only the SKU universe is scoped, and the report says so.
 
 ### 5.6 Build order
 

@@ -1598,3 +1598,103 @@ Closed here:
 - `fact_inventory_daily` 1,898,850 in SYSTEM_DESIGN 5.5 and README, left to its owner by
   Sessions 9 and 10.
 - Session 11's question on Khang's free 0.50 h in W41 (above).
+
+## Session 17 — 2 October 2026 (W40)
+
+**Tool:** Claude Code (Opus 5.5).
+**Scope:** Dat's review of PR #17 (Session 16's report sections 1, 2, 3 and 4.1 and the
+SYSTEM_DESIGN inventory counts), before and after PR #18 merged, and the fixes the review
+found, pushed to the PR branch `w40-khang-report` for Dat to review and merge. No application
+code was written. Session 16 is not edited here: this file is appended to, so its corrections
+are recorded below.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| The review draft for PR #17 | AI-drafted; not posted, at Dat's request |
+| `docs/REPORT.md` 1.1 — the purchase peak is 16–17 Nov (UTC): 17 Nov has 185,195 purchases, about 5.8 times Black Friday's 32,107, which ranks third. Section 1's source table gains the command | Measured (below); human review pending (Dat) |
+| `docs/REPORT.md` 2.4 — only customers with a purchase by the snapshot date get R, F and M scores; the others have none and are `no_purchase`. An event carries the segment of its week's snapshot (4.1 gives the 1–7 Nov case) | Checked against `dim_user.py` and API_CONTRACT 6; human review pending (Dat) |
+| `docs/REPORT.md` 4.1 — the diagram: the holiday seed goes straight to `batch_warehouse.py`, and `gen_catalog.py` and `gen_inventory.py` sit under processing, reading silver. The text says `batch_warehouse.py` reads the three side sources. The SCD2 bullet separates the product's closing price from the customer's weekly segment | Checked against the scripts and SYSTEM_DESIGN 1; human review pending (Dat) |
+| `SYSTEM_DESIGN.md` 5.5 — the inventory universe is the SKUs with a purchase in silver, not in the window: 42 of the 12,731 are bought only on 1 Dec (Vietnam time) | Measured (below); human review pending (Dat) |
+
+### How it was checked
+
+Every command ran on Dat's machine (WSL2) against `main` at `f15bd40` and the PR head
+`bc12fc0`. No Spark job ran. After #18 merged, a Workflow of 17 agents (4 checkers, then one
+skeptic per finding, told to refute it) re-read the PR against `main`: 8 findings survived and
+5 were refuted. Every number below was then re-measured directly. A second Workflow of 12
+agents (3 checkers on the fix diff, then one skeptic per finding) found 9 problems in the
+fixes. 7 survived, two of them the same point. All are corrected below except one: the
+contradiction with SYSTEM_DESIGN 3.2, which stays an open item.
+
+| Claim | How it was measured |
+|---|---|
+| Purchases per UTC day: 17 Nov 185,195, 16 Nov 68,247, 29 Nov 32,107 (third) | `awk -F, 'NR>1 && $2=="purchase" {d[substr($1,1,10)]++} END {for (k in d) print k, d[k]}' data/raw/2019-Nov.csv \| sort -k2 -n -r \| head -3`, the command added to the report |
+| Per Vietnam date on silver, 29 Nov ranks fourth (2,252 purchases), after 17 Nov (11,736), 16 Nov (4,853) and 18 Nov (3,115) | DuckDB: `SELECT event_date, count(*) FROM read_parquet('data/silver/*/*/*.parquet', hive_partitioning = true) WHERE event_type = 'purchase' GROUP BY 1 ORDER BY 2 DESC LIMIT 4` |
+| 12,731 SKUs are purchased in silver, 12,689 of them in 1–30 Nov; 42 only on 1 Dec | DuckDB: `min(event_date)` per purchased `product_id` over silver, counted all, `<= 2019-11-30` and `= 2019-12-01` |
+| Only customers with a purchase by 30 Nov are scored: 31,005 of 258,330 `rfm_segments` rows have an `r_score`; the 227,325 others are all `no_purchase`, including 112 who bought only on 1 Dec (Vietnam time) | DuckDB over `data/gold/rfm_segments`, joined on `user_id` to each user's first purchase date in silver |
+| BR4 gold against `stg_rfm_snapshot` at 30 Nov, buyers only: recency differs for 23,198, frequency and monetary for 590, segment for 0 | DuckDB join of `data/gold/rfm_segments` and `data/warehouse/stg_rfm_snapshot` on `user_id`, `snapshot_date = 2019-11-30` |
+| Session 16's report figures hold on `main`: `unknown` is 25.0% of purchases and 10.2% of revenue, 31,005 buyers by 30 Nov, silver 4,754,015 / 258,330 / 128,972 | The DuckDB command in report section 3's source table, run verbatim (25.0%, 10.2%); DuckDB `SELECT count(*), count(DISTINCT user_id), count(DISTINCT product_id)` over silver; DuckDB distinct purchasing `user_id` with `event_date <= 2019-11-30` (31,005). `batch_gold.py`, whose `buyers` line the report cites, was read but not run |
+| Session 16's raw-file figures for Dat: 21,898,171 rows without `category_code`, 9,218,235 without `brand`, row 5,000,000 at 2019-11-04 07:09:03 UTC | The `awk` commands in report section 3's source table |
+
+### What the AI got wrong, and was corrected on
+
+- **A rewrite of report 4.1 said `batch_warehouse.py` is the only reader of the three side
+  sources.** `serving/load_star_postgres.py` also reads `seed/holidays_2019.csv`, so the
+  sentence now says only that `batch_warehouse.py` reads them directly.
+- **The first review draft listed three report numbers as unverifiable** because DuckDB was not
+  installed. Once #18 brought it in, two of them were measured and both hold; only the 10.6%
+  below reorder is left, because `data/inventory` is empty on this machine.
+- **The first review draft asked whether #18 should merge before #17.** #18 merged first, so
+  the question became a request to correct Session 16 instead. That correction is made here,
+  not in Session 16, because this file is append-only.
+- **The first draft carried a nit on report 2.1** ("cộng vào doanh thu của mọi ngành"). It was
+  the weakest point, and it was dropped.
+- **The first fix of report 2.4 tied the scores to having bought at all.** 112 customers bought
+  only on 1 Dec (Vietnam time), after the last snapshot, and have no score. The sentences now
+  count purchases up to the snapshot date.
+- **The first fix of report 2.4 said every event carries the latest snapshot before its day.**
+  Events of 1–7 Nov carry the 7 Nov snapshot, as the fixed 4.1 bullet says, so 2.4 now names
+  the event's weekly snapshot and leaves the detail to 4.1.
+- **This session's first draft overstated three things about Session 16.** It said all of
+  #18's rows were "human review pending", when only two were. It listed Session 16's open items
+  for Dat without the tracker's BR4 row. It cited `batch_gold.py` for 31,005, although no Spark
+  job ran. All three are corrected above.
+
+### Judgement that stayed with the team
+
+Decisions put to Dat and answered by him:
+- No review comment is posted. The fixes are pushed to `w40-khang-report`, and Dat reviews and
+  merges them himself. An attempt to fix and merge in one step was refused by Claude Code's
+  auto-mode classifier ("Merge Without Review"), and Dat chose this path after it.
+
+Made by AI, flagged for review:
+- The fix scope: the two wrong statements (report 1.1, SYSTEM_DESIGN 5.5) and three report
+  wording fixes (2.4, the 4.1 diagram and its paragraph, the 4.1 SCD2 bullet). SYSTEM_DESIGN
+  3.2 and Session 16's items for Dat are left out.
+- Session 16's 90% figure in SYSTEM_DESIGN 5.5 (116,241 of 128,972), carried forward. Its
+  arithmetic was re-checked here; Dat's review of this push decides it.
+
+Corrections to Session 16:
+- Its scope line puts "BR4 end to end" in "this change set". BR4 merged separately as PR #18
+  (`f15bd40`) on 2 October. The rows for `batch_gold.py`, `br4.py`, `requirements.txt`,
+  `BR4Page.tsx` and `index.css`, the `BR_SCOPE.md` BR4 row and `README.md` landed there. The
+  "human review pending" statuses on the `BR_SCOPE.md` and `README.md` rows were written before
+  that merge; the other four rows were already run and verified.
+- Its BR4 decision gives the cost of projecting the current `dim_user` rows as 23,198 buyers
+  with an earlier recency. 590 buyers also show an earlier frequency and monetary, which the
+  cell list displays (`BR4Page.tsx`) and sorts by (`br4.py`, `ORDER BY monetary DESC`). The
+  choice between `dim_user` and `stg_rfm_snapshot` stays with Khang.
+
+Open:
+- SYSTEM_DESIGN 3.2 calls Black Friday "the single largest demand signal in the file". Its own
+  section 8 and the measurement above say 17 November (Dat). This joins Session 16's open
+  items for Dat: brand nulls, "two days", BR9, the tracker's BR4 row and the tracker's
+  21,898,175.
+- `gen_inventory.py` builds its SKU universe from all of silver. Limiting it to 1–30 Nov would
+  give 12,689 SKUs and 1,903,350 rows, and would change its `EXPECTED_PRODUCTS` (Khang).
+- The three-level data model is in report section 4. The tracker's W44 row for Dat still says
+  section 3 (Dat, tracker).
+- The 10.6% of pairs below reorder on 30 Nov was not re-measured: `data/inventory` is empty on
+  Dat's machine.
