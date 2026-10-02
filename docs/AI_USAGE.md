@@ -1604,9 +1604,11 @@ Closed here:
 **Tool:** Claude Code (Opus 5.5).
 **Scope:** Dat's review of PR #17 (Session 16's report sections 1, 2, 3 and 4.1 and the
 SYSTEM_DESIGN inventory counts), before and after PR #18 merged, and the fixes the review
-found, pushed to the PR branch `w40-khang-report` for Dat to review and merge. No application
-code was written. Session 16 is not edited here: this file is appended to, so its corrections
-are recorded below.
+found, pushed to the PR branch `w40-khang-report` for Dat to review and merge. Then, at Dat's
+request, the items Session 16 left to Dat, fixed in the same PR after `main` (#18) was merged
+into the branch so that README is current. No application code changed: two Python files
+change in a comment and a docstring only. Session 16 is not edited here: this file is
+appended to, so its corrections are recorded below.
 
 ### What the AI produced
 
@@ -1617,16 +1619,20 @@ are recorded below.
 | `docs/REPORT.md` 2.4 — only customers with a purchase by the snapshot date get R, F and M scores; the others have none and are `no_purchase`. An event carries the segment of its week's snapshot (4.1 gives the 1–7 Nov case) | Checked against `dim_user.py` and API_CONTRACT 6; human review pending (Dat) |
 | `docs/REPORT.md` 4.1 — the diagram: the holiday seed goes straight to `batch_warehouse.py`, and `gen_catalog.py` and `gen_inventory.py` sit under processing, reading silver. The text says `batch_warehouse.py` reads the three side sources. The SCD2 bullet separates the product's closing price from the customer's weekly segment | Checked against the scripts and SYSTEM_DESIGN 1; human review pending (Dat) |
 | `SYSTEM_DESIGN.md` 5.5 — the inventory universe is the SKUs with a purchase in silver, not in the window: 42 of the 12,731 are bought only on 1 Dec (Vietnam time) | Measured (below); human review pending (Dat) |
+| Session 16's items for Dat, plus SYSTEM_DESIGN 3.2 (left open by the first push) and PLAN.md's old-sample purchased-SKU count. Brand nulls 14.9% → 13.7% in SYSTEM_DESIGN 3.1, API_CONTRACT 5, `processing/schema.py` and SPARK_GUIDE_VI. The first 5M rows cover about three days, not two, in SYSTEM_DESIGN 3.1, README, `ingestion/load_bronze.py` and SPARK_GUIDE_VI. BR9 leaves SYSTEM_DESIGN 2. SYSTEM_DESIGN 3.2 no longer calls Black Friday the largest demand signal. PLAN.md's purchased-SKU count moves to 12,731 / 128,972 | Measured (the raw-file, peak and 12,731-SKU rows below); the two `.py` files change in a comment and a docstring only, and `python3 -m py_compile` passes; human review pending (Dat) |
 
 ### How it was checked
 
-Every command ran on Dat's machine (WSL2) against `main` at `f15bd40` and the PR head
-`bc12fc0`. No Spark job ran. After #18 merged, a Workflow of 17 agents (4 checkers, then one
+Every command ran on Dat's machine (WSL2): the first push against `main` at `f15bd40` and
+the PR head `bc12fc0`, the second against the branch after `main` was merged in (`889a391`). No Spark job ran. After #18 merged, a Workflow of 17 agents (4 checkers, then one
 skeptic per finding, told to refute it) re-read the PR against `main`: 8 findings survived and
 5 were refuted. Every number below was then re-measured directly. A second Workflow of 12
 agents (3 checkers on the fix diff, then one skeptic per finding) found 9 problems in the
-fixes. 7 survived, two of them the same point. All are corrected below except one: the
-contradiction with SYSTEM_DESIGN 3.2, which stays an open item.
+fixes. 7 survived, two of them the same point. All are corrected below; the last, the
+contradiction with SYSTEM_DESIGN 3.2, in the second push, with Session 16's items for Dat.
+A third Workflow of 15 agents (3 checkers on the second push's diff, then one skeptic per
+finding) found 12 problems; 7 survived, 5 of them distinct. Four are fixed. The fifth, the old
+12.659 in SPARK_GUIDE_VI's dated W38 changelog (Phần 7), is left as history.
 
 | Claim | How it was measured |
 |---|---|
@@ -1668,11 +1674,13 @@ Decisions put to Dat and answered by him:
 - No review comment is posted. The fixes are pushed to `w40-khang-report`, and Dat reviews and
   merges them himself. An attempt to fix and merge in one step was refused by Claude Code's
   auto-mode classifier ("Merge Without Review"), and Dat chose this path after it.
+- The items Session 16 left to Dat are fixed in this PR, not in a separate one.
 
 Made by AI, flagged for review:
-- The fix scope: the two wrong statements (report 1.1, SYSTEM_DESIGN 5.5) and three report
-  wording fixes (2.4, the 4.1 diagram and its paragraph, the 4.1 SCD2 bullet). SYSTEM_DESIGN
-  3.2 and Session 16's items for Dat are left out.
+- The fix scope. Left out: the tracker's items (outside the repo), `gen_inventory.py`'s window
+  (Khang), and BR9's other mentions in SYSTEM_DESIGN. Sections 1, 5.2, 5.4, 8, 9 and 13 still
+  describe BR9 as a bonus screen, and 5.4 cites it for the GIN operator class, so removing them
+  is a team decision.
 - Session 16's 90% figure in SYSTEM_DESIGN 5.5 (116,241 of 128,972), carried forward. Its
   arithmetic was re-checked here; Dat's review of this push decides it.
 
@@ -1688,13 +1696,16 @@ Corrections to Session 16:
   choice between `dim_user` and `stg_rfm_snapshot` stays with Khang.
 
 Open:
-- SYSTEM_DESIGN 3.2 calls Black Friday "the single largest demand signal in the file". Its own
-  section 8 and the measurement above say 17 November (Dat). This joins Session 16's open
-  items for Dat: brand nulls, "two days", BR9, the tracker's BR4 row and the tracker's
-  21,898,175.
+- The tracker: its BR4 row (Session 16), its W46 count of 21,898,175 rows without
+  `category_code` (the file has 21,898,171), and its W44 row, which puts the three-level data
+  model in section 3 when the report has it in section 4 (Dat, tracker).
 - `gen_inventory.py` builds its SKU universe from all of silver. Limiting it to 1–30 Nov would
   give 12,689 SKUs and 1,903,350 rows, and would change its `EXPECTED_PRODUCTS` (Khang).
-- The three-level data model is in report section 4. The tracker's W44 row for Dat still says
-  section 3 (Dat, tracker).
 - The 10.6% of pairs below reorder on 30 Nov was not re-measured: `data/inventory` is empty on
   Dat's machine.
+
+Closed here:
+- Session 16's open items for Dat that live in the repo: the brand-null share, the "two days"
+  claim, and BR9 in SYSTEM_DESIGN 2.
+- SYSTEM_DESIGN 3.2's Black Friday claim, which this session's first push left open.
+- PLAN.md's purchased-SKU count, 12,659 / 127,693 from the earlier sample, now 12,731 / 128,972.

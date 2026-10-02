@@ -267,7 +267,7 @@ each insert to prevent stale rows (products may change rank between windows).
 | `window_start` | `string` | No | ISO 8601 with `+07:00` |
 | `rank` | `integer` | No | 1-based |
 | `product_id` | `integer` | No | REES46 product identifier |
-| `brand` | `string` | No | `"unknown"` when source brand is null (14.9% of rows) |
+| `brand` | `string` | No | `"unknown"` when source brand is null (13.7% of rows) |
 | `category_l1` | `string` | No | `"unknown"` when source `category_code` is null (32.4%) |
 | `view_count` | `integer` | No | View events in the window |
 | `cart_count` | `integer` | No | Cart events in the window |

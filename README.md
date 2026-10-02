@@ -336,7 +336,7 @@ sequenceDiagram
 
 `load_bronze.py` takes no `--rows` flag: the sample size is whatever the deterministic hash rule yields — 4,767,012 rows,
 258,390 users, 129,899 products (SYSTEM_DESIGN 3.1) — and a row count would break byte-identical output across the four
-machines. Never take the first 5M rows: two days of November leaves BR4's recency meaningless and BR6's `velocity_7d`
+machines. Never take the first 5M rows: about three days of November leaves BR4's recency meaningless and BR6's `velocity_7d`
 with fewer than seven days to average over.
 
 ## Data never travels through git

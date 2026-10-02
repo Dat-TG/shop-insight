@@ -363,8 +363,8 @@ bằng tài liệu, không phải phỏng đoán.
   Không điền thì một phần ba lệnh insert BR1 fail và GMV thiếu khoảng một phần ba.
 - **`days_to_stockout` cũng không được null** — nó là clustering column của
   `stockout_risk`. `stock_on_hand / velocity_7d` trả NULL khi velocity bằng 0, mà đã đo:
-  chỉ 12,659 / 127,693 sản phẩm (mẫu cũ — đo lại ở W39 trên mẫu Spark 129,899 sản phẩm)
-  có phát sinh mua trong cả tháng, tức ~90% SKU velocity
+  chỉ 12,731 / 128,972 sản phẩm (mẫu Spark, xem SYSTEM_DESIGN 5.5)
+  có ít nhất một lượt mua trong silver, tức ~90% SKU velocity
   bằng 0 vĩnh viễn. Dùng `when(velocity_7d > 0, ...).otherwise(9999.0)`.
 - **BR3 không xếp hạng được trên streaming DataFrame** — top-N phải tính trong `foreachBatch`.
 - **BA bảng Cassandra để lại dòng rác, xử lý KHÁC NHAU:**

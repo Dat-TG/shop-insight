@@ -63,7 +63,7 @@ through both paths.
 |---|---|---|
 | Executives | How is revenue tracking against the last hour? Which category is driving it? | BR1 |
 | Growth & Marketing | Where do customers drop out of the funnel? Which segment deserves ad spend? Who abandoned a cart? | BR2, BR4, BR5 |
-| Merchandising | Which products are rising? What sells alongside product A? | BR3, BR7, BR9 |
+| Merchandising | Which products are rising? What sells alongside product A? | BR3, BR7 |
 | Operations & Risk | Which SKUs are about to run out? Which accounts order abnormally? | BR6, BR8 |
 
 ## 3. Source data
@@ -75,9 +75,9 @@ Four sources. One is downloaded, one is committed, two are generated.
 REES46 "eCommerce behavior data from multi category store" (Kaggle). Use
 `2019-Nov.csv`, 67,501,979 rows covering 1–30 November, and sample it down to
 ~4.77M by taking **7% of `user_id` values across the whole month** — never the
-first 5M rows. The first 5M rows are about two days of November, which leaves
-BR4's recency meaningless and BR6's `velocity_7d` with fewer than seven days to
-average over.
+first 5M rows. The first 5M rows are about three days of November (row
+5,000,000 is 4 Nov 07:09:03 UTC), which leaves BR4's recency meaningless and
+BR6's `velocity_7d` with fewer than seven days to average over.
 
 The sampling rule is `pmod(hash(user_id), 100) < 7`, hard-coded in
 `load_bronze.py`. It must be deterministic — never a random seed — so all four
@@ -102,7 +102,7 @@ event_type      string      view | cart | purchase   (remove_from_cart: document
 product_id      bigint      44600062
 category_id     bigint      2103807459595387724
 category_code   string      electronics.smartphone      (NULL in 32.4% of rows)
-brand           string      samsung                     (NULL in 14.9% of rows)
+brand           string      samsung                     (NULL in 13.7% of rows)
 price           decimal     489.07
 user_id         bigint      541312140
 user_session    string      9333dfbd-b87a-4708-9857-6336556a0fcc
@@ -142,11 +142,14 @@ holiday_date,holiday_name,holiday_type
 
 `holiday_type` is one of `public_holiday`, `retail_event`, `promo_period`,
 `observance`. For this dataset the retail events matter far more than national
-holidays: Black Friday falls inside the November window and is the single
-largest demand signal in the file. No Vietnamese public holiday falls between
-1 October and 31 December 2019, so the file has none. Every date in it must fall
-inside `dim_date` (2019-10-01 .. 2019-12-31); `serving/load_star_postgres.py`
-checks that.
+holidays: Singles Day and Black Friday fall inside the November window. Black
+Friday is not the file's largest demand peak, though: counted by UTC day over
+the full file, 17 November has 185,195 purchases against Black Friday's 32,107
+(third), and section 8 already calls 17 November the day with the most
+purchases. No Vietnamese public holiday falls between 1 October and
+31 December 2019, so the file has none. Every date in it must fall inside
+`dim_date` (2019-10-01 .. 2019-12-31);
+`serving/load_star_postgres.py` checks that.
 
 ### 3.3 Product catalogue (generated)
 
