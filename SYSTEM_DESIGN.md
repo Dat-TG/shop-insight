@@ -63,7 +63,7 @@ through both paths.
 |---|---|---|
 | Executives | How is revenue tracking against the last hour? Which category is driving it? | BR1 |
 | Growth & Marketing | Where do customers drop out of the funnel? Which segment deserves ad spend? Who abandoned a cart? | BR2, BR4, BR5 |
-| Merchandising | Which products are rising? What sells alongside product A? | BR3, BR7, BR9 |
+| Merchandising | Which products are rising? What sells alongside product A? | BR3, BR7 |
 | Operations & Risk | Which SKUs are about to run out? Which accounts order abnormally? | BR6, BR8 |
 
 ## 3. Source data
@@ -75,9 +75,9 @@ Four sources. One is downloaded, one is committed, two are generated.
 REES46 "eCommerce behavior data from multi category store" (Kaggle). Use
 `2019-Nov.csv`, 67,501,979 rows covering 1–30 November, and sample it down to
 ~4.77M by taking **7% of `user_id` values across the whole month** — never the
-first 5M rows. The first 5M rows are about two days of November, which leaves
-BR4's recency meaningless and BR6's `velocity_7d` with fewer than seven days to
-average over.
+first 5M rows. The first 5M rows are about three days of November (row
+5,000,000 is 4 Nov 07:09:03 UTC), which leaves BR4's recency meaningless and
+BR6's `velocity_7d` with fewer than seven days to average over.
 
 The sampling rule is `pmod(hash(user_id), 100) < 7`, hard-coded in
 `load_bronze.py`. It must be deterministic — never a random seed — so all four
@@ -90,9 +90,10 @@ INT selects a different sample (4,713,498 rows, only 18,150 users shared).
 **Counts derived from the sample elsewhere in this document were measured on an
 earlier sample**, drawn with a different hash function (4,694,166 rows / 258,088
 users / 127,693 products). That covers the star row counts in section 5, the SCD2
-version counts, the 12,659 purchased SKUs and the range-join size, but not
-`fact_event`, re-measured on Spark's sample by `batch_warehouse.py` (4,754,015 rows,
-1:1 with silver). Expect the others to move slightly; each is re-measured as
+version counts and the range-join size, but not `fact_event`, re-measured on
+Spark's sample by `batch_warehouse.py` (4,754,015 rows, 1:1 with silver), nor the
+inventory universe in 5.5, re-measured by `gen_inventory.py` (12,731 purchased
+SKUs, 1,909,650 rows). Expect the others to move slightly; each is re-measured as
 `batch_warehouse.py` builds its table.
 
 ```
@@ -101,7 +102,7 @@ event_type      string      view | cart | purchase   (remove_from_cart: document
 product_id      bigint      44600062
 category_id     bigint      2103807459595387724
 category_code   string      electronics.smartphone      (NULL in 32.4% of rows)
-brand           string      samsung                     (NULL in 14.9% of rows)
+brand           string      samsung                     (NULL in 13.7% of rows)
 price           decimal     489.07
 user_id         bigint      541312140
 user_session    string      9333dfbd-b87a-4708-9857-6336556a0fcc
@@ -141,11 +142,14 @@ holiday_date,holiday_name,holiday_type
 
 `holiday_type` is one of `public_holiday`, `retail_event`, `promo_period`,
 `observance`. For this dataset the retail events matter far more than national
-holidays: Black Friday falls inside the November window and is the single
-largest demand signal in the file. No Vietnamese public holiday falls between
-1 October and 31 December 2019, so the file has none. Every date in it must fall
-inside `dim_date` (2019-10-01 .. 2019-12-31); `serving/load_star_postgres.py`
-checks that.
+holidays: Singles Day and Black Friday fall inside the November window. Black
+Friday is not the file's largest demand peak, though: counted by UTC day over
+the full file, 17 November has 185,195 purchases against Black Friday's 32,107
+(third), and section 8 already calls 17 November the day with the most
+purchases. No Vietnamese public holiday falls between 1 October and
+31 December 2019, so the file has none. Every date in it must fall inside
+`dim_date` (2019-10-01 .. 2019-12-31);
+`serving/load_star_postgres.py` checks that.
 
 ### 3.3 Product catalogue (generated)
 
@@ -283,7 +287,7 @@ Three facts, one per Kimball fact type, sharing five conformed dimensions:
 |---|---|---|---|
 | Kimball type | Transaction | Accumulating snapshot | Periodic snapshot |
 | Grain | one user event | one session | one SKU × warehouse × day |
-| Rows (measured) | 4,754,015 | 954,686 | 1,898,850 |
+| Rows (measured) | 4,754,015 | 954,686 | 1,909,650 |
 | Measures | `price` | milestone lags, counts, values | stock, velocity, days to stock-out |
 | Degenerate dim | `user_session` | — | — |
 | Serves | BR1, BR3, BR8 | BR2, BR5 | BR6 |
@@ -591,15 +595,16 @@ across days is nonsense. The BR6 screen must therefore aggregate across
 warehouses and *filter* to one day, never sum a date range. This is the standard
 periodic-snapshot trap and it belongs in the report.
 
-**The SKU universe is narrowed, deliberately.** All 127,693 sampled products ×
-5 warehouses × 30 days would be 19,153,950 rows — four times `fact_event`, and
-past the 5-million-row cap in CLAUDE.md, to serve one BR. It is also 99.8% dead
-weight: only 12,659 products are ever purchased in the sample, so the other
-115,034 have zero velocity, infinite days-to-stock-out, and can never appear on
+**The SKU universe is narrowed, deliberately.** All 128,972 products in silver ×
+5 warehouses × 30 days would be 19,345,800 rows — four times `fact_event`, and
+past the 5-million-row cap in CLAUDE.md, to serve one BR. It is also 90% dead
+weight: only 12,731 products are ever purchased in the sample, so the other
+116,241 have zero velocity, infinite days-to-stock-out, and can never appear on
 the BR6 screen. The inventory universe is therefore **SKUs with at least one
-purchase in the window**: 12,659 × 5 × 30 = 1,898,850 rows. The grain is
-unchanged and the fact is still a dense periodic snapshot; only the SKU universe
-is scoped, and the report says so.
+purchase in silver**: 12,731 × 5 × 30 = 1,909,650 rows. Silver runs one Vietnam
+date past the 30-day window, so 42 of these SKUs are bought only on 1 December
+and have no sales in it. The grain is unchanged and the fact is still a dense
+periodic snapshot; only the SKU universe is scoped, and the report says so.
 
 ### 5.6 Build order
 

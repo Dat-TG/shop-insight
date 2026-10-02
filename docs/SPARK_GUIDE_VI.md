@@ -671,7 +671,7 @@ Nó định nghĩa `EVENT_SCHEMA`, gồm 9 cột theo đúng thứ tự trong fi
 | `product_id` | `LongType` (số nguyên 64 bit) | 1003461 | |
 | `category_id` | `LongType` | 2053013555631882655 | quá lớn cho 32 bit |
 | `category_code` | `StringType` | electronics.smartphone | trống trong CSV, Spark đọc thành **NULL** (32,4% số dòng) |
-| `brand` | `StringType` | xiaomi | trống trong CSV, Spark đọc thành **NULL** (14,9%) |
+| `brand` | `StringType` | xiaomi | trống trong CSV, Spark đọc thành **NULL** (13,7%) |
 | `price` | `DecimalType(10, 2)` | 489.07 | số thập phân chính xác, không dùng float cho tiền |
 | `user_id` | `LongType` | 520088904 | **bắt buộc là 64 bit**, xem dưới |
 | `user_session` | `StringType` | 4d3b30da-... | mã phiên |
@@ -768,7 +768,8 @@ Thứ tự trong `main()`:
    lý số âm: -713643297 chia 100 dư -97, và `pmod` đổi thành 3.
 
    Lấy mẫu theo **người dùng**, không phải 5 triệu dòng **đầu** file. File xếp theo thời
-   gian, nên 5 triệu dòng đầu chỉ là khoảng hai ngày đầu tháng. BR4 (RFM) sẽ mất ý
+   gian, nên 5 triệu dòng đầu chỉ là khoảng ba ngày đầu tháng (dòng thứ 5 triệu đã là
+   07:09 UTC ngày 4/11). BR4 (RFM) sẽ mất ý
    nghĩa recency, và BR6 không đủ 7 ngày để tính `velocity_7d`. Không dùng số ngẫu
    nhiên hay `.sample()`: `data/` không đi qua git, nên bốn máy chỉ ra cùng một tập dữ
    liệu khi quy tắc chọn là **tất định**.

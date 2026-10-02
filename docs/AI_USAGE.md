@@ -1415,3 +1415,297 @@ The warnings predate this change and do not involve the `abandoned_carts` check.
 ### Judgement that stayed with the team
 
 Dat decided: extend the hook (Session 14's open question, now closed).
+
+## Session 16 — 24 September – 1 October 2026 (W39–W40)
+
+**Tool:** Claude Code (Opus 5.5).
+**Scope:** Khang's own work, planned with GitHub spec-kit in a folder outside the repo, in
+three parts:
+- Bringing Khang's machine to the team baseline: WSL2 Ubuntu 26.04, Spark, and
+  `load_bronze.py` and `batch_silver.py` at `BRONZE OK` and `SILVER OK`.
+- The W38–W39 deliverables, merged as PR #10 (`8a3ce31`).
+- The W40 work in this change set: report sections 1, 2, 3 and 4.1, and BR4 end to end.
+
+The W40 part was drafted on 27 September and re-checked three times against `main`: on
+28 September at `2d385bc`, after PRs #11, #12 and #13 merged; on 30 September at `873140f`,
+after #14 and #15; and on 1 October at `3286057`, after #16. The AI ran no git command that
+writes. Khang
+reviews every change and runs every git command himself.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| `processing/dim_user.py` — weekly RFM snapshots (7, 14, 21, 28, 30 Nov) into `stg_rfm_snapshot`; `dim_user` SCD2 per SYSTEM_DESIGN 5.4 with `version_no`, `user_sk = user_id * 10 + version_no`, an exclusive `valid_to`, and a new segment valid from the day after its snapshot; `with_user_sk()`, which keys the events by an equi-join on (`user_id`, snapshot) | Run and verified; merged in PR #10 |
+| `checks/scd2_integrity.py` — overlaps, gaps, empty ranges, keys without exactly one current row, `is_current` disagreeing with `valid_to`, nulls. Reusable for `dim_product` | Run and verified, including on a deliberately broken dimension; merged in PR #10 |
+| `ingestion/gen_inventory.py` — daily stock for the 12,731 purchased SKUs × 5 warehouses × 30 days, as a running balance of real purchases | Run and verified; merged in PR #10 |
+| `docs/BR_SCOPE.md` — the eight BRs and their done criteria | Human-reviewed; merged in PR #10 |
+| `docs/REPORT.md` — sections 1, 2, 3 and 4.1 in Vietnamese, each ending in a table of the commands behind its numbers | AI-drafted, every command re-run on 27 Sep, sections 3.3 and 4.1 re-checked against `main` on 28 Sep, and sections 2.1, 3.1 and 3.2 corrected on 1 Oct; human review pending |
+| `processing/batch_gold.py` — the BR4 part. It runs the tracker's one-current-row query on `dim_user`, stops without writing if the count is not 0, then projects `dim_user WHERE is_current` into `data/gold/rfm_segments/snapshot_date=2019-11-30/`. With no `dim_user` it exits and names `batch_warehouse.py`, which builds it | Run and verified |
+| `serving/api/routers/br4.py` — DuckDB over the one partition directory; `rfm_cell` built from the three scores; `warehouse="Parquet"`; a malformed or missing date returns `data=[]` | Run and verified |
+| `requirements.txt` — `duckdb==1.5.5` | Run and verified: clean install, `pip check` |
+| `web/src/pages/BR4Page.tsx` and a heatmap block appended to `web/src/index.css` | Run and verified: `npm run build` (`tsc -b`) and `oxlint` pass with 0 warnings, and the page is served by Vite against the live API. Khang checked the screen in the browser on 28 Sep |
+| `docs/BR_SCOPE.md` — BR4 row aligned with the team documents (source `dim_user` current rows) | Human review pending |
+| `README.md` — the status lines this change makes false: the Status block (BR4 on real data, `batch_gold.py`), the step 6 comment under Getting started, and the layout marks for `batch_gold.py`, `web/` and `api/`. The same lines now also name BR1 on real data, which #16 made true without changing them. Also the `fact_inventory_daily` estimate under the star row counts: 1,909,650 on Spark's sample | AI-drafted, human review pending |
+| `SYSTEM_DESIGN.md` 5.5 — `fact_inventory_daily` at 12,731 purchased SKUs and 1,909,650 rows (was 12,659 and 1,898,850, from the earlier sample), with the figures derived from them. 3.1 — the old-sample paragraph now exempts the inventory universe, as it exempts `fact_event` | Checked against `gen_inventory.py` and silver (below); human review pending |
+| PR descriptions and notes to the team, drafted outside the repo | AI-drafted; Khang posts them |
+
+### How it was checked
+
+Every command ran on Khang's machine (WSL2, 12 cores, 15 GB). The second block is the
+re-check on 28 September, in the order README's Getting started gives.
+
+```bash
+python processing/dim_user.py                                  # DIM_USER OK
+python ingestion/gen_inventory.py                              # INVENTORY OK
+
+python ingestion/gen_catalog.py                                # products 128,972, CATALOG OK
+python processing/batch_warehouse.py                           # dim_user 319,426, all 20 checks at their expect,
+                                                               # WAREHOUSE PARTIAL: 5 of 9 tables built
+python checks/scd2_integrity.py data/warehouse/dim_user user_id  # SCD2 OK
+python processing/batch_gold.py                                # twice: RFM_SEGMENTS OK, GOLD OK
+python tests/test_fixtures.py                                  # All 8 fixture bundles passed validation
+uvicorn serving.api.main:app --port 8000                       # then curl every example in the BR4 contract
+cd web && npm ci && npm run build && npx oxlint src/pages/BR4Page.tsx   # tsc -b passes; 0 warnings, 0 errors
+```
+
+On 30 September at `873140f`, and again on 1 October at `3286057`, `pip install -r
+requirements.txt` and `pip check`, `batch_gold.py`, `test_fixtures.py`, the BR4 curl checks,
+the heatmap timing and the web build were run again. Every result matched, and the gold
+checksum was unchanged.
+
+The Vite chunk-size warning (676 kB) predates this change: a build of `main` alone at
+`3286057` gives 667 kB and the same warning. BR4 adds about 8 kB and no dependency.
+
+| Claim | How it was measured |
+|---|---|
+| `dim_user` is sound | `dim_user.py`: 1,291,650 snapshot rows, 319,426 versions, 258,330 current; 0 events without a `user_sk` or on the wrong version; `scd2_integrity.py` 0 on every check. The `dim_user` that `batch_warehouse.py` writes gives the same counts and `SCD2 OK` |
+| Inventory is a running balance of real purchases | Stock equals yesterday plus received minus sold on every row (0 broken); units sold per product, warehouse and day equal the silver purchases; 10.6% of pairs below reorder on 30 Nov |
+| The BR4 gold is deterministic | Two runs print identical lines and give the same checksum over all eight columns (`129134856866586`), both on the `dim_user` that `dim_user.py` wrote and on the one `batch_warehouse.py` wrote on 28 Sep |
+| The BR4 gold refuses a bad input | A scratch `dim_user` with 3 extra current rows: the run prints 3, exits without writing, and a sentinel file in the output directory survives. With `data/warehouse/dim_user` moved away, it exits 1 and names `batch_warehouse.py` |
+| The BR4 API follows contract section 6 | curl: cell (5,5) returns 2,228 rows, all `r=5, f=5`, sorted by monetary; `no_purchase` with `r_score=1` returns 0 rows; `2019-11-07` returns `partitions: 0`; `abc` returns 200 with no rows; `r_score=6` returns 422; an unknown segment returns 0 rows; never-purchased users carry null scores, never 0 |
+| The heatmap meets the 2-second target | 20 loads of five parallel `r_score` calls from a Python client on the same machine, on 1 Oct: p50 216 ms, p95 292 ms. The 25 cell lists all match their heatmap counts, and together sum to 31,005 buyers |
+| The report's numbers are current | Each command in the report's source tables was re-run on 27 Sep. Brand nulls were counted twice, by `awk` and by Spark, and both give 9,218,235 (13.7%). On 1 Oct DuckDB recounted the raw file and matched `awk` on every figure: 21,898,171 rows without `category_code`, 188,088 zero prices and none negative, 9,218,235 without `brand`, 916,939 purchases. The catalogue count, 128,972, is the `products` line of `gen_catalog.py` |
+| The `unknown` category's weight | DuckDB over `data/silver`, purchases grouped by `category_l1`: `unknown` has 16,271 of 65,150 purchases (25.0%) and 2,024,608 of 19,785,531 in revenue (10.2%), second after electronics. The command is in the report's section 3 source table |
+| SYSTEM_DESIGN 5.5's inventory figures | `gen_inventory.py` writes 12,731 products and 1,909,650 rows; silver has 128,972 products. So 128,972 × 5 × 30 = 19,345,800, and 116,241 of 128,972 products (90.1%) are never purchased |
+| Inventory rows without a `product_sk` | DuckDB over `data/inventory` and the merged `dim_product`: 198,755 of 1,909,650 rows, for 6,910 products, fall before the product's first version. No product is missing from `dim_product` |
+
+### What the AI got wrong, and was corrected on
+
+- **It scored F by value thresholds instead of `ntile(5)`,** departing from the tracker
+  without asking. Khang had it reverted. The underlying problem became a question for the
+  team: one-time buyers are spread over F1–F4, and 468 of them are champions on 30 Nov.
+- **The first `dim_user` used an inclusive `valid_to`.** It was changed to exclusive to match
+  SYSTEM_DESIGN and `dim_product`.
+- **A review found a look-ahead.** A new segment took effect on the snapshot day itself, so
+  that day's earlier events carried a segment earned by a later purchase. Validity now starts
+  the day after the snapshot.
+- **The first `gen_inventory.py` drew each day's stock independently,** so stock could rise
+  with no delivery. The first fix made it a running balance, but it dropped the tracker's
+  "about 10% of SKUs below reorder_point" and added a seventh column. Khang asked whether
+  the fix still followed the team, and it did not. The final version keeps the tracker's six
+  columns and holds about 10% of product-warehouse pairs below reorder as pairs waiting for a
+  supplier.
+- **`BR_SCOPE.md` collected implementation notes and open questions in chat voice.** It was
+  trimmed to the scope table, and the questions moved to the PR.
+- **The first PR description spoke about Khang in the third person and ran long.** It was
+  rewritten in his voice.
+- **A report draft said the brief caps the dataset at 5 million rows.** That cap is the team's
+  hard rule 5, not the brief. It was corrected before review.
+- **This entry waited for review while PRs #12 to #16 merged.** It was numbered Session 9,
+  then 11, then 13, and Dat's entries took each number. Its first draft also listed as open
+  README items that #12 and #13 closed. It was renumbered each time, and its open items were
+  re-checked against `main`.
+- **Four statements went stale when #11, #12 and #13 merged, and the re-check caught them.**
+  - `batch_gold.py` told a user with no `dim_user` to run `dim_user.py`. The run order now
+    builds `dim_user` in `batch_warehouse.py`, so the message names that script.
+  - The report's section 4.1 diagram named `dim_user.py` as its own step. It now names
+    `batch_warehouse.py`, which imports both SCD2 modules.
+  - Sections 2 and 4.1 said an event carries the product price and segment of its exact
+    moment. A version holds at most one day, with the day's closing price, so the text now
+    says the version in force on the event's day.
+  - Section 3.3 said the catalogue script was still on a branch, and section 3's source table
+    took the catalogue count from `batch_silver.py`. The count now comes from `gen_catalog.py`.
+- **A review against the team's `pr-review` checklist on 1 October found three report
+  sentences that the code or the data contradict.**
+  - Section 3.1 said dropping the `unknown` category would cut the executive screen's revenue
+    by about a third. That third is the share of events; measured on silver, `unknown` is
+    25.0% of purchases and 10.2% of revenue.
+  - Section 2.1 said the BR1 screen draws a separate line for `unknown`. The screen built in
+    #16 draws one line, with `unknown` as a category in the filter and inside the `all` total.
+  - Section 3.2 said all three retail events fall inside the data period. Cyber Monday,
+    2 December, falls one day after it, inside `dim_date`'s October to December range.
+- **The report outline put the three-level data model in section 5.** That left no place for
+  the tracker's section 5, the application and its evidence. Khang moved the model into
+  section 4, as his W45 tracker row says.
+
+### Judgement that stayed with the team
+
+Decisions put to Khang and answered by him:
+- RFM snapshots are weekly, `dim_user` follows SYSTEM_DESIGN 5.4, and F uses `ntile(5)` as
+  the tracker says.
+- BR4 gold follows the team documents and projects the current `dim_user` rows into the
+  30 Nov partition. This is despite the measured cost: 23,198 of 31,005 buyers then show the
+  recency of an earlier snapshot. The heatmap is unaffected, with 0 cells or segments
+  differing from the 30 Nov snapshot. This is Khang's answer to the tracker's open question
+  on BR4's source (Session 11); the team can still choose `stg_rfm_snapshot` instead.
+- The frozen API contract stays unchanged. The heatmap takes its 25 counts from five calls
+  by `r_score`, not from a new aggregate endpoint.
+- Khang creates `processing/batch_gold.py`, and Tin (BR6) and Nguyen (BR7) add their
+  functions to it.
+- The report is one Vietnamese file, `docs/REPORT.md`, with the tracker's six sections:
+  section 4 holds the architecture, the technologies and the three-level data model,
+  section 5 the application and its evidence, and section 6 the evaluation. The tracker's
+  W44 row for Dat still calls the data model section 3.
+- On 28 September Khang reversed his earlier call to leave README to Dat. README's Status
+  block asks each change to fix the lines it makes false, so the BR4 change updates them.
+- The `fact_inventory_daily` figures in SYSTEM_DESIGN 5.5, which Sessions 9 and 10 left to
+  their owner, are fixed in the report change, and so is SYSTEM_DESIGN 3.1, which listed
+  them among the old-sample counts. README repeats them, so its line is fixed in the BR4
+  change, the only change that touches README. The brand-null share, the "two days" claim
+  and BR9 stay with Dat.
+- `dim_user`'s own checks join `checks_ok` in `batch_warehouse.py` in a separate small change
+  after the two W40 changes, in Khang's free 0.50 h of W41. Khang says so on #13.
+
+Made by AI, flagged for review:
+- SYSTEM_DESIGN 5.5 called the unpurchased products "99.8% dead weight". It is 90%
+  (116,241 of 128,972), and it was 90.1% on the earlier sample too.
+
+Open:
+- The segment table in `dim_user.py` differs from the BR4 fixture examples: the fixture has
+  444 as loyal (champion here) and 111 as at_risk (hibernating here).
+- SYSTEM_DESIGN 3.1 gives brand nulls as 14.9%, but the file shows 13.7%. It and README say
+  the first 5M rows cover about two days, but row 5,000,000 is 2019-11-04 07:09:03 UTC,
+  about three days (Dat).
+- SYSTEM_DESIGN 2 still lists BR9 for Merchandising (Dat).
+- `fact_inventory_daily` (W40): 198,755 inventory rows fall before their product's first
+  `dim_product` version, so they find no `product_sk`. The `build_fact_inventory_daily`
+  docstring asks for that case to be decided explicitly.
+- `batch_warehouse.py` runs only `check_events` from `dim_user.py` (Khang, above).
+- A cell-count endpoint for BR4 would cut the heatmap payload from 5.4 MB to 25 rows. The
+  5.4 MB is the sum of `curl -w '%{size_download}'` over the five `r_score` calls, 5,423,848
+  bytes on 1 Oct. It needs a contract change, agreed by all.
+- The tracker's BR4 row says the gold groups by `rfm_cell` and `segment` with a customer
+  count and summed monetary. SYSTEM_DESIGN 7 and API_CONTRACT 6 freeze eight per-customer
+  columns, which the screen's customer list needs, and the code follows them (Dat, tracker).
+- The tracker's W46 cross-check row gives 21,898,175 events without `category_code`. `awk`
+  and DuckDB both count 21,898,171 (Dat, tracker).
+
+Closed here:
+- "`rfm_cell` is in the BR4 response but not in `rfm_segments` (Khang)", carried by
+  Sessions 8, 9 and 10. The router builds it from the three scores, and the gold keeps the
+  contract's eight columns.
+- `fact_inventory_daily` 1,898,850 in SYSTEM_DESIGN 5.5 and README, left to its owner by
+  Sessions 9 and 10.
+- Session 11's question on Khang's free 0.50 h in W41 (above).
+
+## Session 17 — 2 October 2026 (W40)
+
+**Tool:** Claude Code (Opus 5.5).
+**Scope:** Dat's review of PR #17 (Session 16's report sections 1, 2, 3 and 4.1 and the
+SYSTEM_DESIGN inventory counts), before and after PR #18 merged, and the fixes the review
+found, pushed to the PR branch `w40-khang-report` for Dat to review and merge. Then, at Dat's
+request, the items Session 16 left to Dat, fixed in the same PR after `main` (#18) was merged
+into the branch so that README is current. No application code changed: two Python files
+change in a comment and a docstring only. Session 16 is not edited here: this file is
+appended to, so its corrections are recorded below.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| The review draft for PR #17 | AI-drafted; not posted, at Dat's request |
+| `docs/REPORT.md` 1.1 — the purchase peak is 16–17 Nov (UTC): 17 Nov has 185,195 purchases, about 5.8 times Black Friday's 32,107, which ranks third. Section 1's source table gains the command | Measured (below); human review pending (Dat) |
+| `docs/REPORT.md` 2.4 — only customers with a purchase by the snapshot date get R, F and M scores; the others have none and are `no_purchase`. An event carries the segment of its week's snapshot (4.1 gives the 1–7 Nov case) | Checked against `dim_user.py` and API_CONTRACT 6; human review pending (Dat) |
+| `docs/REPORT.md` 4.1 — the diagram: the holiday seed goes straight to `batch_warehouse.py`, and `gen_catalog.py` and `gen_inventory.py` sit under processing, reading silver. The text says `batch_warehouse.py` reads the three side sources. The SCD2 bullet separates the product's closing price from the customer's weekly segment | Checked against the scripts and SYSTEM_DESIGN 1; human review pending (Dat) |
+| `SYSTEM_DESIGN.md` 5.5 — the inventory universe is the SKUs with a purchase in silver, not in the window: 42 of the 12,731 are bought only on 1 Dec (Vietnam time) | Measured (below); human review pending (Dat) |
+| Session 16's items for Dat, plus SYSTEM_DESIGN 3.2 (left open by the first push) and PLAN.md's old-sample purchased-SKU count. Brand nulls 14.9% → 13.7% in SYSTEM_DESIGN 3.1, API_CONTRACT 5, `processing/schema.py` and SPARK_GUIDE_VI. The first 5M rows cover about three days, not two, in SYSTEM_DESIGN 3.1, README, `ingestion/load_bronze.py` and SPARK_GUIDE_VI. BR9 leaves SYSTEM_DESIGN 2. SYSTEM_DESIGN 3.2 no longer calls Black Friday the largest demand signal. PLAN.md's purchased-SKU count moves to 12,731 / 128,972 | Measured (the raw-file, peak and 12,731-SKU rows below); the two `.py` files change in a comment and a docstring only, and `python3 -m py_compile` passes; human review pending (Dat) |
+
+### How it was checked
+
+Every command ran on Dat's machine (WSL2): the first push against `main` at `f15bd40` and
+the PR head `bc12fc0`, the second against the branch after `main` was merged in (`889a391`). No Spark job ran. After #18 merged, a Workflow of 17 agents (4 checkers, then one
+skeptic per finding, told to refute it) re-read the PR against `main`: 8 findings survived and
+5 were refuted. Every number below was then re-measured directly. A second Workflow of 12
+agents (3 checkers on the fix diff, then one skeptic per finding) found 9 problems in the
+fixes. 7 survived, two of them the same point. All are corrected below; the last, the
+contradiction with SYSTEM_DESIGN 3.2, in the second push, with Session 16's items for Dat.
+A third Workflow of 15 agents (3 checkers on the second push's diff, then one skeptic per
+finding) found 12 problems; 7 survived, 5 of them distinct. Four are fixed. The fifth, the old
+12.659 in SPARK_GUIDE_VI's dated W38 changelog (Phần 7), is left as history.
+
+| Claim | How it was measured |
+|---|---|
+| Purchases per UTC day: 17 Nov 185,195, 16 Nov 68,247, 29 Nov 32,107 (third) | `awk -F, 'NR>1 && $2=="purchase" {d[substr($1,1,10)]++} END {for (k in d) print k, d[k]}' data/raw/2019-Nov.csv \| sort -k2 -n -r \| head -3`, the command added to the report |
+| Per Vietnam date on silver, 29 Nov ranks fourth (2,252 purchases), after 17 Nov (11,736), 16 Nov (4,853) and 18 Nov (3,115) | DuckDB: `SELECT event_date, count(*) FROM read_parquet('data/silver/*/*/*.parquet', hive_partitioning = true) WHERE event_type = 'purchase' GROUP BY 1 ORDER BY 2 DESC LIMIT 4` |
+| 12,731 SKUs are purchased in silver, 12,689 of them in 1–30 Nov; 42 only on 1 Dec | DuckDB: `min(event_date)` per purchased `product_id` over silver, counted all, `<= 2019-11-30` and `= 2019-12-01` |
+| Only customers with a purchase by 30 Nov are scored: 31,005 of 258,330 `rfm_segments` rows have an `r_score`; the 227,325 others are all `no_purchase`, including 112 who bought only on 1 Dec (Vietnam time) | DuckDB over `data/gold/rfm_segments`, joined on `user_id` to each user's first purchase date in silver |
+| BR4 gold against `stg_rfm_snapshot` at 30 Nov, buyers only: recency differs for 23,198, frequency and monetary for 590, segment for 0 | DuckDB join of `data/gold/rfm_segments` and `data/warehouse/stg_rfm_snapshot` on `user_id`, `snapshot_date = 2019-11-30` |
+| Session 16's report figures hold on `main`: `unknown` is 25.0% of purchases and 10.2% of revenue, 31,005 buyers by 30 Nov, silver 4,754,015 / 258,330 / 128,972 | The DuckDB command in report section 3's source table, run verbatim (25.0%, 10.2%); DuckDB `SELECT count(*), count(DISTINCT user_id), count(DISTINCT product_id)` over silver; DuckDB distinct purchasing `user_id` with `event_date <= 2019-11-30` (31,005). `batch_gold.py`, whose `buyers` line the report cites, was read but not run |
+| Session 16's raw-file figures for Dat: 21,898,171 rows without `category_code`, 9,218,235 without `brand`, row 5,000,000 at 2019-11-04 07:09:03 UTC | The `awk` commands in report section 3's source table |
+
+### What the AI got wrong, and was corrected on
+
+- **A rewrite of report 4.1 said `batch_warehouse.py` is the only reader of the three side
+  sources.** `serving/load_star_postgres.py` also reads `seed/holidays_2019.csv`, so the
+  sentence now says only that `batch_warehouse.py` reads them directly.
+- **The first review draft listed three report numbers as unverifiable** because DuckDB was not
+  installed. Once #18 brought it in, two of them were measured and both hold; only the 10.6%
+  below reorder is left, because `data/inventory` is empty on this machine.
+- **The first review draft asked whether #18 should merge before #17.** #18 merged first, so
+  the question became a request to correct Session 16 instead. That correction is made here,
+  not in Session 16, because this file is append-only.
+- **The first draft carried a nit on report 2.1** ("cộng vào doanh thu của mọi ngành"). It was
+  the weakest point, and it was dropped.
+- **The first fix of report 2.4 tied the scores to having bought at all.** 112 customers bought
+  only on 1 Dec (Vietnam time), after the last snapshot, and have no score. The sentences now
+  count purchases up to the snapshot date.
+- **The first fix of report 2.4 said every event carries the latest snapshot before its day.**
+  Events of 1–7 Nov carry the 7 Nov snapshot, as the fixed 4.1 bullet says, so 2.4 now names
+  the event's weekly snapshot and leaves the detail to 4.1.
+- **This session's first draft overstated three things about Session 16.** It said all of
+  #18's rows were "human review pending", when only two were. It listed Session 16's open items
+  for Dat without the tracker's BR4 row. It cited `batch_gold.py` for 31,005, although no Spark
+  job ran. All three are corrected above.
+
+### Judgement that stayed with the team
+
+Decisions put to Dat and answered by him:
+- No review comment is posted. The fixes are pushed to `w40-khang-report`, and Dat reviews and
+  merges them himself. An attempt to fix and merge in one step was refused by Claude Code's
+  auto-mode classifier ("Merge Without Review"), and Dat chose this path after it.
+- The items Session 16 left to Dat are fixed in this PR, not in a separate one.
+
+Made by AI, flagged for review:
+- The fix scope. Left out: the tracker's items (outside the repo), `gen_inventory.py`'s window
+  (Khang), and BR9's other mentions in SYSTEM_DESIGN. Sections 1, 5.2, 5.4, 8, 9 and 13 still
+  describe BR9 as a bonus screen, and 5.4 cites it for the GIN operator class, so removing them
+  is a team decision.
+- Session 16's 90% figure in SYSTEM_DESIGN 5.5 (116,241 of 128,972), carried forward. Its
+  arithmetic was re-checked here; Dat's review of this push decides it.
+
+Corrections to Session 16:
+- Its scope line puts "BR4 end to end" in "this change set". BR4 merged separately as PR #18
+  (`f15bd40`) on 2 October. The rows for `batch_gold.py`, `br4.py`, `requirements.txt`,
+  `BR4Page.tsx` and `index.css`, the `BR_SCOPE.md` BR4 row and `README.md` landed there. The
+  "human review pending" statuses on the `BR_SCOPE.md` and `README.md` rows were written before
+  that merge; the other four rows were already run and verified.
+- Its BR4 decision gives the cost of projecting the current `dim_user` rows as 23,198 buyers
+  with an earlier recency. 590 buyers also show an earlier frequency and monetary, which the
+  cell list displays (`BR4Page.tsx`) and sorts by (`br4.py`, `ORDER BY monetary DESC`). The
+  choice between `dim_user` and `stg_rfm_snapshot` stays with Khang.
+
+Open:
+- The tracker: its BR4 row (Session 16), its W46 count of 21,898,175 rows without
+  `category_code` (the file has 21,898,171), and its W44 row, which puts the three-level data
+  model in section 3 when the report has it in section 4 (Dat, tracker).
+- `gen_inventory.py` builds its SKU universe from all of silver. Limiting it to 1–30 Nov would
+  give 12,689 SKUs and 1,903,350 rows, and would change its `EXPECTED_PRODUCTS` (Khang).
+- The 10.6% of pairs below reorder on 30 Nov was not re-measured: `data/inventory` is empty on
+  Dat's machine.
+
+Closed here:
+- Session 16's open items for Dat that live in the repo: the brand-null share, the "two days"
+  claim, and BR9 in SYSTEM_DESIGN 2.
+- SYSTEM_DESIGN 3.2's Black Friday claim, which this session's first push left open.
+- PLAN.md's purchased-SKU count, 12,659 / 127,693 from the earlier sample, now 12,731 / 128,972.

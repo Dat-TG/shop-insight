@@ -18,7 +18,8 @@ data/bronze/, never the raw file: the raw file holds 14x more users, so the
 stream would stop matching the batch side.
 
 Why sample users instead of taking the first 5 million rows: the file is in
-time order, so its first 5 million rows cover about two days of November.
+time order, so its first 5 million rows cover about three days of November
+(row 5,000,000 is 4 Nov 07:09:03 UTC).
 BR4's recency would mean nothing, and BR6's velocity_7d would not have seven
 days to average over.
 
