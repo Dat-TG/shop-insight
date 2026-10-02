@@ -55,3 +55,7 @@ typing_extensions==4.16.0
 uvloop==0.22.1
 watchfiles==1.3.0
 websockets==17.1
+
+# BR4 API reads the gold Parquet directly (SYSTEM_DESIGN 8, step 10); DuckDB is already
+# in the locked stack. It ships a cp314 manylinux wheel and has no dependencies of its own.
+duckdb==1.5.5
