@@ -1,0 +1,125 @@
+Gate 1b, BR3: evidence captured 2026-10-01 on Khang's machine (branch w41-khang-br3).
+Text copies of what the screenshots show; the screenshots themselves go to the group chat.
+
+== Commands, in this order ==
+docker compose up -d --wait; python serving/check_infra.py      -> INFRA OK
+python serving/apply_schema.py                                  -> APPLY_SCHEMA OK
+python processing/streaming_gold.py --fresh                     # terminal 1, wait for READY
+python ingestion/replayer.py --speed 60 --start "2019-11-17 08:00:00"   # terminal 2
+uvicorn serving.api.main:app --port 8000; cd web && npm run dev # then open /br3
+
+== Terminal 2, replayer (first files) ==
+file 000001  2019-11-17 08:00 .. 08:05 UTC  (Vietnam 11-17 15:00)   1,804 rows  total 1,804
+file 000002  2019-11-17 08:05 .. 08:10 UTC  (Vietnam 11-17 15:05)   2,011 rows  total 3,815
+file 000003  2019-11-17 08:10 .. 08:15 UTC  (Vietnam 11-17 15:10)   1,878 rows  total 5,693
+file 000004  2019-11-17 08:15 .. 08:20 UTC  (Vietnam 11-17 15:15)   1,820 rows  total 7,513
+file 000005  2019-11-17 08:20 .. 08:25 UTC  (Vietnam 11-17 15:20)   2,097 rows  total 9,610
+file 000006  2019-11-17 08:25 .. 08:30 UTC  (Vietnam 11-17 15:25)   2,057 rows  total 11,667
+Stopped with Ctrl-C after 413 s: 81 files, 196,024 rows, 15:00-21:45 Vietnam time.
+
+== Terminal 1, streaming_gold.py (BR3's lines; BR1's are interleaved) ==
+--fresh: removed 0 checkpoint directories and 0 landed files, emptied gmv_by_minute, trending_products, abandoned_carts, order_velocity_alerts
+READY: 2 of 4 jobs running (br1_gmv_by_minute, br3_trending_products), watching /home/khang/shop-insight/data/stream_landing
+READY: now start python ingestion/replayer.py --speed 60
+[br3_trending_products] batch 0: no window closed yet
+[br3_trending_products] batch 0: 1,707 events after cleaning, watermark none yet, 4,363 ms
+[br3_trending_products] batch 1: no window closed yet
+[br3_trending_products] batch 1: 1,944 events after cleaning, watermark 2019-11-17 14:54:59, 1,462 ms
+[br3_trending_products] batch 2: no window closed yet
+[br3_trending_products] batch 2: 1,799 events after cleaning, watermark 2019-11-17 14:59:59, 1,051 ms
+[br3_trending_products] batch 3: replaced 4 windows in trending_products (80 rows, windows from 14:46 to 14:49) in 656 ms
+[br3_trending_products] batch 3: 1,748 events after cleaning, watermark 2019-11-17 15:04:59, 1,100 ms
+[br3_trending_products] batch 4: replaced 5 windows in trending_products (100 rows, windows from 14:50 to 14:54) in 610 ms
+[br3_trending_products] batch 4: 2,018 events after cleaning, watermark 2019-11-17 15:09:59, 1,027 ms
+[br3_trending_products] batch 5: replaced 5 windows in trending_products (100 rows, windows from 14:55 to 14:59) in 500 ms
+[br3_trending_products] batch 5: 1,963 events after cleaning, watermark 2019-11-17 15:14:59, 918 ms
+[br3_trending_products] batch 6: replaced 5 windows in trending_products (100 rows, windows from 15:00 to 15:04) in 537 ms
+[br3_trending_products] batch 6: 1,958 events after cleaning, watermark 2019-11-17 15:19:59, 901 ms
+
+Append mode writes a window once, when the watermark (10 minutes behind the newest event)
+passes its end, so the first windows close in batch 3. From then on each batch, one file of
+5 minutes, closes 5 windows. The windows starting 14:46-14:59 begin before the replay and
+hold only its events from 15:00 on: partial by construction.
+
+== cqlsh: one window, in rank order ==
+docker compose exec cassandra cqlsh -e "SELECT window_start, rank, product_id, brand, category_l1, view_count, cart_count FROM shopinsight.trending_products WHERE window_start = '2019-11-17 21:19:00+0000'"
+
+ window_start                    | rank | product_id | brand   | category_l1 | view_count | cart_count
+---------------------------------+------+------------+---------+-------------+------------+------------
+ 2019-11-17 21:19:00.000000+0000 |    1 |    1005115 |   apple | electronics |         73 |         36
+ 2019-11-17 21:19:00.000000+0000 |    2 |    4804056 |   apple | electronics |         61 |         10
+ 2019-11-17 21:19:00.000000+0000 |    3 |    1004870 | samsung | electronics |         46 |         13
+ 2019-11-17 21:19:00.000000+0000 |    4 |    1004767 | samsung | electronics |         44 |         11
+ 2019-11-17 21:19:00.000000+0000 |    5 |    4804055 |   apple | electronics |         36 |          9
+ 2019-11-17 21:19:00.000000+0000 |    6 |    1004856 | samsung | electronics |         34 |          6
+ 2019-11-17 21:19:00.000000+0000 |    7 |    1005105 |   apple | electronics |         31 |          2
+ 2019-11-17 21:19:00.000000+0000 |    8 |    1005116 |   apple | electronics |         27 |         12
+ 2019-11-17 21:19:00.000000+0000 |    9 |    1004838 |    oppo | electronics |         26 |          9
+ 2019-11-17 21:19:00.000000+0000 |   10 |    1005100 | samsung | electronics |         25 |          5
+ 2019-11-17 21:19:00.000000+0000 |   11 |    1801690 | samsung | electronics |         24 |          2
+ 2019-11-17 21:19:00.000000+0000 |   12 |    1801766 |   artel | electronics |         22 |         16
+ 2019-11-17 21:19:00.000000+0000 |   13 |    1004249 |   apple | electronics |         21 |          2
+ 2019-11-17 21:19:00.000000+0000 |   14 |    1004836 | samsung | electronics |         20 |          3
+ 2019-11-17 21:19:00.000000+0000 |   15 |    1801882 | samsung | electronics |         20 |          0
+ 2019-11-17 21:19:00.000000+0000 |   16 |    1002544 |   apple | electronics |         19 |          3
+ 2019-11-17 21:19:00.000000+0000 |   17 |    3601489 | samsung |  appliances |         19 |          3
+ 2019-11-17 21:19:00.000000+0000 |   18 |    1801908 | samsung | electronics |         19 |          1
+ 2019-11-17 21:19:00.000000+0000 |   19 |    1005160 |  xiaomi | electronics |         18 |          4
+ 2019-11-17 21:19:00.000000+0000 |   20 |    1004768 | samsung | electronics |         18 |          2
+
+(20 rows)
+
+Times are the Vietnam wall clock, as in gmv_by_minute. The tie rule shows: ranks 14 and 15
+have 20 views each and the one with more carts comes first; ranks 16 and 17 tie on views
+(19) and carts (3), so the lower product_id comes first.
+
+== Correctness: trending_products vs silver ==
+All 394 windows written (14:46-21:19): one per minute with none missing, 20 rows each,
+ranks 1-20, no product twice in a window.
+The 380 windows from 15:00 on hold only replayed events. 7,600 of 7,600 rows are identical to
+silver recomputed with DuckDB: views and carts per product over the same 15 minutes, the same
+brand rule, ranked by view_count, cart_count, product_id. The 380 windows span the Ctrl-C and
+restart below.
+(One-off script: Cassandra read with cassandra-driver, silver aggregated with DuckDB. Not committed.)
+
+== Restart without --fresh ==
+Ctrl-C after batch 11:
+[br3_trending_products] batch 11: replaced 5 windows in trending_products (100 rows, windows from 15:25 to 15:29) in 469 ms
+Ctrl-C: stopping after the running micro-batch (Ctrl-C again to quit now)
+stopped; the checkpoints keep the progress
+Restarted without --fresh while the replayer kept writing:
+[br3_trending_products] batch 12: replaced 5 windows in trending_products (100 rows, windows from 15:30 to 15:34) in 2645 ms
+[br3_trending_products] batch 13: replaced 15 windows in trending_products (300 rows, windows from 15:35 to 15:49) in 775 ms
+READY: 2 of 4 jobs running (br1_gmv_by_minute, br3_trending_products), watching /home/khang/shop-insight/data/stream_landing
+[br3_trending_products] batch 14: replaced 5 windows in trending_products (100 rows, windows from 15:50 to 15:54) in 633 ms
+
+Batch 12 starts at 15:30, the window after batch 11's last: nothing lost, nothing written
+twice. Batch 13 caught up the files written during the restart, then 5 windows per batch again.
+
+== Micro-batch time, BR1 and BR3 in one JVM ==
+76 batches each, the very first one left out: BR1 median 476 ms (p95 790),
+BR3 median 719 ms (p95 1,120, max 1,462). All under the 5 s trigger.
+
+== API: GET /api/br3/trending ==
+No window_start: the newest window, found by listing the partition keys first.
+meta {'ms': 7.082, 'warehouse': 'Cassandra', 'partitions': 15, 'rows': 20}   window 14:59, top 3: 1004856, 1004767, 4804056
+meta {'ms': 6.495, 'warehouse': 'Cassandra', 'partitions': 25, 'rows': 20}   12 s later: window 15:09, top 3: 4804056, 1004856, 1004767
+At 394 windows, 20 calls: meta.ms median 7.6, partitions 395 (394 keys listed + 1 read), rows 20.
+window_start=2019-11-17T21:19:00+07:00: meta.ms median 2.3, partitions 1, rows 20.
+The same window without an offset (Vietnam time) or in UTC: the same 20 rows.
+window_start=2019-11-17T15:00:30+07:00 (not a window start): 200, data [], partitions 1.
+Before the first window closed: 200, data [], partitions 0.
+
+== Listing the keys as the table grows ==
+SELECT DISTINCT window_start plus the read of the newest window, on a scratch table with the
+same schema (dropped afterwards), 15 runs each, median:
+394 windows 7.5 ms, 1,440 (one day) 13.8 ms, 43,200 (the whole month) 346 ms.
+
+== Why the delete runs on its own ==
+On a window far from the data (2000-01-01): DELETE alone, then a batch of 3 INSERTs: 3 rows,
+and 3 again when repeated. DELETE inside the same batch as the INSERTs: 0 rows. Every
+statement in a batch gets one timestamp, and at equal timestamps the delete wins.
+
+== Screen /br3 ==
+Checked by Khang in the browser with the replayer running: the top 20 with rank-change arrows
+against the window a minute earlier, the Live mode following the newest window every 10 s.

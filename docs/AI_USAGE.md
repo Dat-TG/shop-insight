@@ -1415,3 +1415,81 @@ The warnings predate this change and do not involve the `abandoned_carts` check.
 ### Judgement that stayed with the team
 
 Dat decided: extend the hook (Session 14's open question, now closed).
+
+## Session 18 — 1-3 October 2026 (W40-W41)
+
+**Tool:** Claude Code (Opus 5.5).
+**Scope:** BR3 end to end: `start_br3` in the stream, `GET /api/br3/trending` on Cassandra, the BR3 screen, and
+the docs that move with them. Khang asked for the W41 work to start early, chose how the API finds the newest
+window, and checked the screen in the browser. The AI wrote the code and ran it against the live stack on Khang's
+machine. On branch `w41-khang-br3`, merged with `main` after #17 and #18 (3 October).
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| `processing/streaming_gold.py` — `start_br3`: views and carts per product in 15-minute windows sliding every minute, `outputMode("append")`, top 20 ranked in `write_batch` (`row_number` by `view_count`, `cart_count`, `product_id`), each window deleted then inserted; `TRENDING_TOP`; the module docstring marks BR3 done | Run and verified (below) |
+| `serving/api/routers/br3.py` — replaces the placeholder: without `window_start`, `SELECT DISTINCT window_start` and the largest key; then one partition read; `+07:00` appended; `meta` counts every partition key listed plus the one read | Run and verified |
+| `web/src/pages/BR3Page.tsx` — top 20 table with up, down and NEW arrows against the window a minute earlier, a Live mode and a window picker, 10 s refresh, four KPI cells, the QueryMeta footer; `web/src/index.css` — a BR3 block and `datetime-local` in one shared selector | Run and verified (Khang, in the browser) |
+| `docs/STREAMING_PATTERN.md` and `docs/SPARK_GUIDE_VI.md` Phần 10 — the BR3 row of the group-by table no longer groups by `brand` | AI-drafted, human review pending |
+| `README.md` status block, run line and layout marks; `CLAUDE.md` current status | AI-drafted, human review pending |
+| `docs/evidence/gate1b_br3_run.txt` (new) — text copy of the run below | Captured from the run |
+| `docs/AI_USAGE.md` — this session | AI-drafted |
+
+### How it was checked
+
+Scratch scripts in the session's scratchpad, not committed. Stack: `docker compose up -d --wait`, INFRA OK,
+APPLY_SCHEMA OK, `streaming_gold.py --fresh`, then `replayer.py --speed 60 --start "2019-11-17 08:00:00"` for
+413 s (81 files, 196,024 rows, 15:00-21:45 Vietnam time).
+
+| Claim | How it was measured |
+|---|---|
+| Grouping by `brand` would list a product twice | DuckDB over `data/silver`: 612 of 128,972 products have a real brand on some events and `unknown` on others (product 4804718: `apple`, and 49 `unknown` events on 1 Nov); 0 products have two `category_l1` |
+| Ties at rank 20 need a rule | 17 Nov 15:00-21:00 Vietnam time, 360 windows: #20 and #21 tie on `view_count` in 212, and on `cart_count` too in 64 |
+| A window has room for 20 | 43,134 full windows over the month: median 855 products, max 3,767; 193 (0.4%) have fewer than 20, mostly data gaps (5 Nov 07:53-08:07: 1 product) |
+| The ranking logic, before Cassandra existed here | A real stream over 36 replayer-style files (17 Nov 15:00-18:00), `write_batch` against a fake table keeping the `(window_start, rank)` rules: each batch closed 5 windows; 155 complete windows, 3,100 of 3,100 rows identical to DuckDB over silver |
+| The live table is right | All 394 windows written (14:46-21:19): one per minute, 20 rows each, ranks 1-20, no product twice. The 380 windows from 15:00: 7,600 of 7,600 rows identical to DuckDB over silver |
+| The same holds across a crash | Ctrl-C after batch 11 (windows to 15:29), restart without `--fresh`: batch 12 wrote 15:30-15:34, batch 13 caught up 15 windows. No lost or repeated window; the 380 windows above span it |
+| The delete must run on its own | A window at 2000-01-01: DELETE, then a batch of 3 INSERTs: 3 rows, twice. DELETE inside the insert batch: 0 rows |
+| Micro-batch time with BR1 and BR3 in one JVM | 76 batches each: BR1 median 476 ms (p95 790), BR3 median 719 ms (p95 1,120, max 1,462); `write_batch` median 392 ms |
+| The endpoint | 20 calls each: no `window_start` at 394 windows, `meta.ms` median 7.6, partitions 395; a given window 2.3 ms, 1 partition. Offset, no offset and UTC give the same window; `15:00:30` gives 200 `[]`; an empty table gives 200 `[]`, partitions 0. Two calls 12 s apart: window 14:59 then 15:09, top 3 reordered |
+| Listing the keys as the table grows | A scratch table with the same schema, dropped afterwards, 15 runs each: 394 windows 7.5 ms, 1,440 13.8 ms, 43,200 346 ms |
+| Build, contract and hook | `npm run build`, `npx oxlint` 0 warnings; `python tests/test_fixtures.py` all 8 bundles pass; `.claude/hooks/check_python.py` silent on both Python files, and it does warn on a probe file inserting into `trending_products` without a DELETE |
+| Review | The `pr-review` checklist, `layer-checks.md` and the `spark-reviewer` trap list, read in this session. The pr-review skill advises a fresh session for code written in the same one |
+| Session 17's open 10.6% (pairs below reorder on 30 Nov, report section 3) | DuckDB over `data/inventory` on Khang's machine: 6,738 of 63,655 pairs on 2019-11-30, 10.6%; 1,909,650 rows, 12,731 products |
+
+### What the AI got wrong, and was corrected on
+
+- **The offline harness first reported 51 views where silver had 54.** Its 36 files were written in the same
+  second, the file source orders by modification time, and the stream read them out of order, so the watermark
+  dropped events. Spacing the modification times 5 s apart, as the replayer does, gave 3,100 of 3,100. The job
+  was not at fault.
+- **The first hook check proved nothing.** A shell loop lost its variable and the probe file sat outside the
+  project, which the hook skips. Re-run with the real paths and an in-project probe (deleted afterwards).
+- **In Live mode the window picker showed the newest window**, so a 10 s refresh could overwrite a time being
+  typed. Found in a review of the diff; the picker now stays empty in Live mode.
+- **The first evidence draft said the first batch "of each run" was left out of the timings.** Only the very first
+  one was.
+
+### Judgement that stayed with the team
+
+Khang decided:
+- **The newest window is found by listing the partition keys**, with the real partition count in the footer. No
+  contract or schema change; the cost is measured above and is material for report 4.2.
+
+Made by AI, flagged for review:
+- **Ties go to `cart_count`, then the lower `product_id`.** API_CONTRACT §5 names only `view_count`.
+- **Grouped by `product_id` alone**: `brand` is the real one when any event has it, `category_l1` through `max()`.
+  Purchases are dropped before the aggregation.
+- **The arrows come from a second call** for the window a minute earlier. The footer adds both calls, as BR4's
+  heatmap footer adds its five.
+- **The docs edits above**, including Dat's pattern docs and `CLAUDE.md`.
+
+Open questions for the team:
+- **BR_SCOPE's "always 20 rows" for BR3.** 0.4% of the month's windows have fewer than 20 products and show fewer
+  rows.
+- **`STOP_WAIT_SECONDS = 10`** has room with BR1 and BR3 (max 1.46 s). Re-measure once BR5 and BR8 join.
+
+Closed here: Session 17's 10.6% below reorder, measured above.
+
+Pending: the group post with the Gate 1b screenshots, and the PR (Khang).

@@ -166,13 +166,14 @@ batch_warehouse), `ingestion/gen_inventory.py`, `checks/scd2_integrity.py`,
 `serving/apply_schema.py`. The streaming foundation: `ingestion/replayer.py` (bronze ->
 `data/stream_landing/`, one JSON file every 5 s), `processing/source.py` (the only
 source reader) and `processing/streaming_gold.py`, where BR1 writes `gmv_by_minute`
-(plus a `category_l1 = 'all'` total row per window) and BR3, BR5 and BR8 are stubs for
+(plus a `category_l1 = 'all'` total row per window), BR3 writes the top 20 of each
+15-minute window to `trending_products`, and BR5 and BR8 are stubs for
 W41. `docs/STREAMING_PATTERN.md` walks through it
 block by block, and `docs/SPARK_GUIDE_VI.md` Phần 10 is its Vietnamese twin (keep the
-two in step). The FastAPI + React skeleton serves fixtures, except BR1, which is live
-end to end: `GET /api/br1/realtime` reads one Cassandra partition through
-`serving/api/cassandra.py` (the one session every Cassandra router imports) and
-`web/src/pages/BR1Page.tsx` refreshes every 10 s. The
+two in step). The FastAPI + React skeleton serves fixtures, except BR1 and BR3, which are
+live end to end: `GET /api/br1/realtime` and `GET /api/br3/trending` read Cassandra through
+`serving/api/cassandra.py` (the one session every Cassandra router imports), and their
+screens refresh every 10 s. The
 project runs W38-W46 (14 Sep - 15 Nov). W38 is a combined week: kickoff and
 infrastructure together.
 

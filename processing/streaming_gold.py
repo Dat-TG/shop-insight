@@ -13,7 +13,7 @@ block by block and says what to change for BR3, BR5 and BR8; SPARK_GUIDE_VI.md
 has the same walk-through in Vietnamese.
 
     BR1  Dat     1-minute windows              gmv_by_minute            done (W40)
-    BR3  Khang   15-minute window, 1-min slide trending_products        stub (W41)
+    BR3  Khang   15-minute window, 1-min slide trending_products        done (W41)
     BR5  Nguyen  cart, no purchase in 30 min   abandoned_carts          stub (W41)
     BR8  Tin     5-minute windows per user     order_velocity_alerts    stub (W41)
 
@@ -80,7 +80,7 @@ time.tzset()
 from cassandra.cluster import EXEC_PROFILE_DEFAULT, Cluster, ExecutionProfile, NoHostAvailable
 from cassandra.policies import DCAwareRoundRobinPolicy
 from cassandra.query import BatchStatement, BatchType
-from pyspark.sql import SparkSession
+from pyspark.sql import SparkSession, Window
 from pyspark.sql import functions as F
 
 from processing.batch_silver import clean
@@ -124,6 +124,9 @@ STOP_WAIT_SECONDS = 10
 # category_l1 has 13 categories plus 'unknown' (measured 2026-09-30), so 'all'
 # names no real one.
 ALL_CATEGORIES = "all"
+
+# BR3 only: how many products each window keeps (API_CONTRACT section 5).
+TRENDING_TOP = 20
 
 
 # ---------------------------------------------------------------------------
@@ -216,30 +219,113 @@ def start_br1(events, cassandra):
 
 
 # ---------------------------------------------------------------------------
+# BR3 (Khang) - top 20 products per 15-minute window sliding every minute
+# -> trending_products
+# ---------------------------------------------------------------------------
+
+def start_br3(events, cassandra):
+    """Top 20 products by view count in each 15-minute window, sliding every minute.
+
+    Views and carts are counted per (window, product) on the stream, then ranked
+    and cut to 20 inside write_batch: a streaming DataFrame cannot be ranked.
+
+    events: the cleaned, watermarked stream built in main(). Returns the
+    running StreamingQuery.
+    """
+    # trending_products' key is (window_start, rank). A product at rank 3 in one
+    # write of a window and rank 5 in the next would leave two rows, and the
+    # screen would list it twice. One partition is one window, so each window is
+    # deleted first, then its top 20 inserted. Append mode writes a window once,
+    # but Spark runs a micro-batch again after a crash, and the delete makes
+    # that harmless.
+    delete = cassandra.prepare("DELETE FROM trending_products WHERE window_start = ?")
+    insert = cassandra.prepare(
+        "INSERT INTO trending_products "
+        "(window_start, rank, product_id, brand, category_l1, view_count, cart_count) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?)"
+    )
+    # Ties at the cut are common: on 17 Nov 15:00-21:00 (Vietnam time), #20 and
+    # #21 had the same view_count in 212 of 360 windows, and the same cart_count
+    # as well in 64. product_id settles the rest, so a re-run ranks the same way.
+    by_window = Window.partitionBy("window_start").orderBy(
+        F.desc("view_count"), F.desc("cart_count"), F.asc("product_id"))
+
+    def write_batch(batch, batch_id):
+        """Runs once per micro-batch, on the driver. batch is a plain static DataFrame."""
+        started = time.monotonic()
+        # Rank and cut in Spark, then collect() at most 20 rows per window: a
+        # closed window holds about 850 products (the month's median), up to 3,767.
+        rows = (
+            batch.withColumn("window_start", F.col("window.start"))
+            .withColumn("rank", F.row_number().over(by_window))
+            .where(F.col("rank") <= TRENDING_TOP)
+            .select("window_start", "rank", "product_id", "brand", "category_l1", "view_count", "cart_count")
+            .collect()
+        )
+        rows.sort(key=lambda row: (row.window_start, row.rank))
+        windows = 0
+        for window_start, same_window in itertools.groupby(rows, key=lambda row: row.window_start):
+            # The delete runs on its own, never inside the insert batch: every
+            # statement in a batch gets the same write timestamp, and at equal
+            # timestamps Cassandra lets the delete win, so the window would come
+            # out empty. Run separately, the insert gets the later timestamp.
+            cassandra.execute(delete, (window_start,))
+            statement = BatchStatement(batch_type=BatchType.UNLOGGED)
+            for row in same_window:
+                statement.add(insert, (row.window_start, row.rank, row.product_id, row.brand,
+                                       row.category_l1, row.view_count, row.cart_count))
+            cassandra.execute(statement)
+            windows += 1
+        if rows:
+            print(f"[br3_trending_products] batch {batch_id}: replaced {windows} windows in trending_products "
+                  f"({len(rows)} rows, windows from {rows[0].window_start:%H:%M} to {rows[-1].window_start:%H:%M}) "
+                  f"in {(time.monotonic() - started) * 1000:.0f} ms", flush=True)
+        else:
+            # Append mode writes only the windows the watermark has closed. A
+            # batch that closed none has nothing to write.
+            print(f"[br3_trending_products] batch {batch_id}: no window closed yet", flush=True)
+
+    is_view = F.col("event_type") == "view"
+    is_cart = F.col("event_type") == "cart"
+    trending = (
+        events
+        # Purchases count in neither column; dropping them keeps them out of the state.
+        .where(is_view | is_cart)
+        # No explode: that is BR1's alone, and here it would list every product
+        # twice. Grouped by product only, not by brand: 612 products carry their
+        # brand on some events and 'unknown' (clean()'s fill for a null) on
+        # others, so grouping by brand would split such a product into two rows.
+        # The brand kept is the real one when any event has it. category_l1 never
+        # differs within a product (measured on silver), so max() carries it through.
+        .groupBy(F.window("event_time", "15 minutes", "1 minute"), "product_id")
+        .agg(
+            F.count_if(is_view).alias("view_count"),
+            F.count_if(is_cart).alias("cart_count"),
+            F.coalesce(F.max(F.when(F.col("brand") != "unknown", F.col("brand"))), F.lit("unknown")).alias("brand"),
+            F.max("category_l1").alias("category_l1"),
+        )
+    )
+    return (
+        trending.writeStream
+        .queryName("br3_trending_products")
+        # append, not BR1's update: update hands write_batch only the products
+        # whose counts changed in this micro-batch, and a top 20 ranked from those
+        # silently misses every product that did not. append hands over each
+        # window once, complete, when the watermark closes it: 10 minutes of
+        # event time after the window ends.
+        .outputMode("append")
+        .foreachBatch(write_batch)
+        .option("checkpointLocation", str(CHECKPOINT_DIR / "br3_trending_products"))
+        .trigger(processingTime=TRIGGER)
+        .start()
+    )
+
+
+# ---------------------------------------------------------------------------
 # W41 stubs. Replace the body, keep the signature, return the StreamingQuery.
 # Copy start_br1, except its explode: same events, own checkpoint directory,
 # own queryName.
 # ---------------------------------------------------------------------------
-
-def start_br3(events, cassandra):
-    """BR3 (Khang, W41): top 20 products per 15-minute window sliding every minute.
-
-    Sink: trending_products, key (window_start, rank).
-    Trap 1: Structured Streaming cannot rank a streaming DataFrame. Aggregate
-    view/cart counts per window and product on the stream; rank and cut to 20
-    inside write_batch, where the micro-batch is an ordinary DataFrame.
-    Trap 2: use outputMode("append"), not BR1's "update". Update mode hands
-    write_batch only the (window, product) rows that changed in this batch, so
-    a top 20 ranked there silently misses every product that did not change.
-    Append mode hands over each window once, complete, when the watermark
-    closes it.
-    Trap 3: a product at rank 3 then rank 5 would leave two rows. For each
-    window in the micro-batch, DELETE FROM trending_products WHERE
-    window_start = ? first, then insert the new top 20. This also makes a
-    micro-batch that Spark re-runs after a crash harmless.
-    Checkpoint: data/checkpoints/br3_trending_products/.
-    """
-    return None
 
 
 def start_br5(events, cassandra):
