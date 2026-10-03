@@ -170,10 +170,11 @@ source reader) and `processing/streaming_gold.py`, where BR1 writes `gmv_by_minu
 15-minute window to `trending_products`, and BR5 and BR8 are stubs for
 W41. `docs/STREAMING_PATTERN.md` walks through it
 block by block, and `docs/SPARK_GUIDE_VI.md` Phần 10 is its Vietnamese twin (keep the
-two in step). The FastAPI + React skeleton serves fixtures, except BR1 and BR3, which are
-live end to end: `GET /api/br1/realtime` and `GET /api/br3/trending` read Cassandra through
+two in step). The FastAPI + React skeleton serves fixtures, except BR1, BR3 and BR4, which
+are live end to end: `GET /api/br1/realtime` and `GET /api/br3/trending` read Cassandra through
 `serving/api/cassandra.py` (the one session every Cassandra router imports), and their
-screens refresh every 10 s. The
+screens refresh every 10 s; `processing/batch_gold.py` projects BR4's `rfm_segments` from
+`dim_user` and `GET /api/br4/segments` reads it with DuckDB. The
 project runs W38-W46 (14 Sep - 15 Nov). W38 is a combined week: kickoff and
 infrastructure together.
 

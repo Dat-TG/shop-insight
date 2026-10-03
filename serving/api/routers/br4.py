@@ -38,7 +38,8 @@ Response shape
 Storage mapping: Parquet -> data/gold/rfm_segments/snapshot_date=2019-11-30/
 Gold columns:    user_id, recency_days, frequency, monetary,
                  r_score, f_score, m_score, segment
-                 (rfm_cell is in the response but not a gold column yet)
+                 (rfm_cell is built from the three scores at query time; it is
+                 not a gold column)
 
 batch_gold.py projects rfm_segments from dim_user WHERE is_current
 (SYSTEM_DESIGN section 7), so this endpoint never sees an SCD2 history row
@@ -47,42 +48,55 @@ and never filters on is_current itself.
 Nullable handling: send null, never 0. About 88% of users at the first
 snapshot have never purchased and have null scores.
 
-Now:  returns fixture data from web/fixtures/br4-rfm-segments.json -> "default",
-      with meta.warehouse "Fixture" and partitions 0, because nothing was read
-      from storage (docs/API_CONTRACT.md section 1.2). The fixture file itself
-      carries the production meta shown above.
-Next: replace _load_fixture() with DuckDB over data/gold/rfm_segments/, then
-      set meta.warehouse to "Parquet" (API_CONTRACT section 2).
+Now:  DuckDB reads the one snapshot_date directory directly. meta.warehouse is
+      "Parquet" (API_CONTRACT section 1.2); partitions is 1 when that directory
+      exists and 0 otherwise. A malformed or missing snapshot_date returns
+      data=[] (section 1.3). Rows are sorted by monetary DESC, then user_id.
 """
 
 from __future__ import annotations
 
-import json
 import time
+from datetime import date
 from pathlib import Path
-from typing import Any
 
+import duckdb
 from fastapi import APIRouter, Query
 
 from serving.api.models import ApiResponse, QueryMeta
 
 router = APIRouter(prefix="/api/br4", tags=["BR4 — RFM Segmentation"])
 
-# Path to the canonical fixture bundle (relative to the repository root).
 _REPO = Path(__file__).resolve().parents[3]
-_FIXTURE_PATH = _REPO / "web" / "fixtures" / "br4-rfm-segments.json"
+_GOLD_DIR = _REPO / "data" / "gold" / "rfm_segments"
+_QUERY = """
+    SELECT user_id, recency_days, frequency, CAST(monetary AS DOUBLE) AS monetary,
+           r_score, f_score, m_score,
+           CASE WHEN r_score IS NULL THEN NULL ELSE concat(r_score, f_score, m_score) END AS rfm_cell,
+           segment
+    FROM read_parquet($files)
+    WHERE ($segment = 'all' OR segment = $segment)
+      AND ($r_score IS NULL OR r_score = $r_score)
+      AND ($f_score IS NULL OR f_score = $f_score)
+      AND ($m_score IS NULL OR m_score = $m_score)
+    ORDER BY monetary DESC, user_id
+"""
 
 
-def _load_fixture(empty: bool = False) -> list[dict[str, Any]]:
-    """Return fixture data rows from the canonical bundle.
+def _partition(snapshot_date: str) -> Path | None:
+    try:
+        day = date.fromisoformat(snapshot_date)
+    except ValueError:
+        return None
+    path = _GOLD_DIR / f"snapshot_date={day.isoformat()}"
+    return path if path.is_dir() else None
 
-    Reads the "empty" scenario when empty=True, otherwise "default".
-    Next: swap this function body for DuckDB over data/gold/rfm_segments/.
-    """
-    with open(_FIXTURE_PATH) as fh:
-        bundle = json.load(fh)
-    scenario = "empty" if empty else "default"
-    return bundle[scenario]["data"]
+
+def _read_segments(partition: Path, params: dict[str, object]) -> list[dict[str, object]]:
+    with duckdb.connect() as con:
+        cursor = con.execute(_QUERY, {"files": str(partition / "*.parquet"), **params})
+        columns = [column[0] for column in cursor.description]
+        return [dict(zip(columns, row)) for row in cursor.fetchall()]
 
 
 @router.get(
@@ -93,8 +107,7 @@ def _load_fixture(empty: bool = False) -> list[dict[str, Any]]:
         "Returns RFM-segmented users for one snapshot date, optionally narrowed "
         "to one segment or to one R/F/M score (a heatmap cell).  Users who never "
         "purchased carry null scores, never 0.\n\n"
-        "**Now**: returns fixture data (warehouse=Fixture, partitions=0).  "
-        "**Next**: DuckDB over `data/gold/rfm_segments/`, then warehouse=Parquet."
+        "Reads `data/gold/rfm_segments/` with DuckDB (warehouse=Parquet)."
     ),
 )
 def get_segments(
@@ -106,8 +119,10 @@ def get_segments(
 ) -> ApiResponse:
     t0 = time.perf_counter()
 
-    # Fixture for now.  Next: DuckDB over data/gold/rfm_segments/.
-    data = _load_fixture(empty=False)
+    partition = _partition(snapshot_date)
+    params = {"segment": segment, "r_score": r_score, "f_score": f_score, "m_score": m_score}
+    rows = _read_segments(partition, params) if partition else []
+    data = [{**row, "snapshot_date": partition.name.removeprefix("snapshot_date=")} for row in rows]
 
     elapsed_ms = (time.perf_counter() - t0) * 1000
 
@@ -115,8 +130,8 @@ def get_segments(
         data=data,
         meta=QueryMeta(
             ms=round(elapsed_ms, 2),
-            warehouse="Fixture",  # "Parquet" once DuckDB reads data/gold/rfm_segments/
-            partitions=0,
+            warehouse="Parquet",
+            partitions=1 if partition else 0,
             rows=len(data),
         ),
     )

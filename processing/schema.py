@@ -46,7 +46,7 @@ EVENT_SCHEMA = StructType([
     StructField("product_id", LongType()),          # 1003461
     StructField("category_id", LongType()),         # 2053013555631882655, needs 64 bits
     StructField("category_code", StringType()),     # electronics.smartphone; empty in the CSV, so NULL once read (32.4% of rows)
-    StructField("brand", StringType()),             # xiaomi; empty in the CSV, so NULL once read (14.9% of rows)
+    StructField("brand", StringType()),             # xiaomi; empty in the CSV, so NULL once read (13.7% of rows)
     StructField("price", DecimalType(10, 2)),       # 489.07, same type as the star's numeric(10,2)
     StructField("user_id", LongType()),             # 520088904, must stay BIGINT: see the docstring
     StructField("user_session", StringType()),      # 4d3b30da-a5e4-49df-b1a8-ba5943f1dd33
