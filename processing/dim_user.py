@@ -20,6 +20,13 @@ FIRST_DAY = date(2019, 11, 1)
 OPEN_END = date(9999, 12, 31)
 EXPECTED_SILVER_ROWS = 4_754_015
 EXPECTED_USERS = 258_330
+ALL_SNAPSHOT_ROWS = EXPECTED_USERS * len(SNAPSHOTS)
+EXPECTED_RANGES = {
+    "stg_rfm_snapshot": (ALL_SNAPSHOT_ROWS, ALL_SNAPSHOT_ROWS),
+    "dim_user versions": (EXPECTED_USERS, ALL_SNAPSHOT_ROWS),
+    "dim_user current": (EXPECTED_USERS, EXPECTED_USERS),
+    "events": (EXPECTED_SILVER_ROWS, EXPECTED_SILVER_ROWS),
+}
 VERSION_SLOTS = 10
 RFM_COLUMNS = [
     "user_id", "snapshot_date", "recency_days", "frequency", "monetary",
@@ -136,6 +143,30 @@ def non_buyers_with_extra_versions(dim):
     return per_user.where((F.col("frequency") == 0) & (F.col("versions") != 1)).count()
 
 
+def dim_user_stats(rfm, dim):
+    versions = dim.agg(F.count("*").alias("all"), F.count_if("is_current").alias("current")).first()
+    return {
+        "stg_rfm_snapshot": rfm.count(),
+        "dim_user versions": versions["all"],
+        "dim_user current": versions["current"],
+        "duplicate user_sk": dim.groupBy("user_sk").count().where("count > 1").count(),
+        "non-buyers not 1 version": non_buyers_with_extra_versions(dim),
+        **scd2_violations(dim, "user_id"),
+    }
+
+
+def expected_range(name):
+    return EXPECTED_RANGES.get(name, (0, 0))
+
+
+def all_as_expected(stats):
+    for name, value in stats.items():
+        low, high = expected_range(name)
+        if not low <= value <= high:
+            return False
+    return True
+
+
 def report(stats):
     for name, value in stats.items():
         print(f"{name:<25}{value:>10,}")
@@ -165,31 +196,10 @@ def main():
     rfm = spark.read.parquet(str(RFM_DIR))
     build_dim_user(rfm).write.mode("overwrite").parquet(str(DIM_USER_DIR))
     dim = spark.read.parquet(str(DIM_USER_DIR))
-    versions = dim.agg(F.count("*").alias("all"), F.count_if("is_current").alias("current")).first()
-    violations = scd2_violations(dim, "user_id")
-    stats = {
-        "stg_rfm_snapshot": rfm.count(),
-        "dim_user versions": versions["all"],
-        "dim_user current": versions["current"],
-        "duplicate user_sk": dim.groupBy("user_sk").count().where("count > 1").count(),
-        "non-buyers not 1 version": non_buyers_with_extra_versions(dim),
-        **check_events(with_user_sk(silver, rfm), dim),
-        **violations,
-    }
+    stats = {**dim_user_stats(rfm, dim), **check_events(with_user_sk(silver, rfm), dim)}
     spark.stop()
     report(stats)
-    must_be_zero = [
-        "duplicate user_sk", "non-buyers not 1 version", "events without user_sk", "events on wrong version",
-        *violations,
-    ]
-    ok = (
-        stats["stg_rfm_snapshot"] == EXPECTED_USERS * len(SNAPSHOTS)
-        and stats["dim_user current"] == EXPECTED_USERS
-        and EXPECTED_USERS <= stats["dim_user versions"] <= EXPECTED_USERS * len(SNAPSHOTS)
-        and stats["events"] == EXPECTED_SILVER_ROWS
-        and not any(stats[name] for name in must_be_zero)
-    )
-    if not ok:
+    if not all_as_expected(stats):
         print("DIM_USER MISMATCH")
         sys.exit(1)
     print("DIM_USER OK")

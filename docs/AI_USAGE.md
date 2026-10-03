@@ -1709,3 +1709,45 @@ Closed here:
   claim, and BR9 in SYSTEM_DESIGN 2.
 - SYSTEM_DESIGN 3.2's Black Friday claim, which this session's first push left open.
 - PLAN.md's purchased-SKU count, 12,659 / 127,693 from the earlier sample, now 12,731 / 128,972.
+
+## Session 19 — 3 October 2026 (W41)
+
+**Tool:** Claude Code (Opus 5.5).
+**Scope:** the follow-up Khang promised on #13: `batch_warehouse.py` now runs the `dim_user` checks that only
+`processing/dim_user.py` ran before. It uses Khang's 0.50 h of W41. Branch `w41-khang-dimuser-checks`.
+(Session 18 is in PR #19, not merged yet.)
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| `processing/dim_user.py` — `EXPECTED_RANGES` (what each count must be, in one place), `dim_user_stats()` (the counts on `stg_rfm_snapshot` and `dim_user`), `expected_range()` and `all_as_expected()`; `main()` uses them instead of its own list | Run and verified (below) |
+| `processing/batch_warehouse.py` — `check_dim_user()`: eleven lines in the style of `check_fact_event()`, folded into `checks_ok`; three lines in the docstring's sample output | Run and verified |
+| `docs/AI_USAGE.md` — this session | AI-drafted |
+
+### How it was checked
+
+| Claim | How it was measured |
+|---|---|
+| The build passes with the new checks | `python processing/batch_warehouse.py` on Khang's machine, 123 s: each of the eleven new lines at its expected value (`stg_rfm_snapshot` 1,291,650; `dim_user versions` 319,426, within 258,330 to 1,291,650; `dim_user current` 258,330; the eight others 0), then `WAREHOUSE PARTIAL: 5 of 9 tables built` |
+| `dim_user.py` run alone behaves as before | `python processing/dim_user.py`: the same counts and `DIM_USER OK`, 27 s |
+| The check can fail | A scratch script called `check_dim_user()` on copies read back from disk and changed in memory only. One user given a second current version: current 258,331, overlaps 1, not_one_current 1. A non-buyer given a second, closed version: non-buyers not 1 version 1, empty_ranges 1. `stg_rfm_snapshot` one row short: 1,291,649. It returned False all three times and True on the intact tables. Nothing on disk changed |
+| No clash with Tin's branch | `git diff origin/main origin/w40-tin-br6 -- processing/batch_warehouse.py`: its hunks start at lines 156, 181, 297 and 475; the checks block and the `checks_ok` lines in `main()` are untouched |
+| Hook | `.claude/hooks/check_python.py` silent on both files |
+
+### What the AI got wrong, and was corrected on
+
+No defect was found in this change. What could have found one: the three corruptions above, each of which turns
+a different count, and the standalone run of `dim_user.py`, whose pass rule now comes from the same table.
+
+### Judgement that stayed with the team
+
+Khang decided (30 September, on the tracker's question about his free 0.50 h in W41): spend it on these checks,
+as said on #13.
+
+Made by AI, flagged for review:
+- **The expected values live in `dim_user.py`**, not in `batch_warehouse.py`, so the standalone script and the
+  build read one list. `batch_warehouse.py` reaches them through the `user_scd2` alias, like its build steps.
+- **The events are not counted twice.** `check_fact_event()` already runs `user_scd2.check_events()`.
+- **`dim_user.py` run alone now prints its six SCD2 counts before the three event counts.** The counts and the
+  pass rule are unchanged.
