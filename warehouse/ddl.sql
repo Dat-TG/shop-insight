@@ -221,7 +221,7 @@ CREATE INDEX ix_fact_event_user
 
 -- =====================================================================
 -- fact_session_funnel. ACCUMULATING SNAPSHOT. Grain: one session.
--- Measured: 954,686 sessions.
+-- Measured: 970,797 sessions.
 -- =====================================================================
 CREATE TABLE fact_session_funnel (
   session_sk         bigint        NOT NULL,  -- surrogate, xxhash64(user_session)

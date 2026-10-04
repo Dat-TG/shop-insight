@@ -91,7 +91,8 @@ INT selects a different sample (4,713,498 rows, only 18,150 users shared).
 earlier sample**, drawn with a different hash function (4,694,166 rows / 258,088
 users / 127,693 products). That covers the star row counts in section 5, the SCD2
 version counts and the range-join size, but not `fact_event`, re-measured on
-Spark's sample by `batch_warehouse.py` (4,754,015 rows, 1:1 with silver), nor the
+Spark's sample by `batch_warehouse.py` (4,754,015 rows, 1:1 with silver), nor
+`fact_session_funnel` (970,797 rows, one per silver `user_session`), nor the
 inventory universe in 5.5, re-measured by `gen_inventory.py` (12,731 purchased
 SKUs, 1,909,650 rows). Expect the others to move slightly; each is re-measured as
 `batch_warehouse.py` builds its table.
@@ -287,7 +288,7 @@ Three facts, one per Kimball fact type, sharing five conformed dimensions:
 |---|---|---|---|
 | Kimball type | Transaction | Accumulating snapshot | Periodic snapshot |
 | Grain | one user event | one session | one SKU × warehouse × day |
-| Rows (measured) | 4,754,015 | 954,686 | 1,909,650 |
+| Rows (measured) | 4,754,015 | 970,797 | 1,909,650 |
 | Measures | `price` | milestone lags, counts, values | stock, velocity, days to stock-out |
 | Degenerate dim | `user_session` | — | — |
 | Serves | BR1, BR3, BR8 | BR2, BR5 | BR6 |
@@ -519,7 +520,7 @@ CREATE INDEX ix_fact_event_user
 
 -- =====================================================================
 -- fact_session_funnel. ACCUMULATING SNAPSHOT. Grain: one session.
--- Measured: 954,686 sessions.
+-- Measured: 970,797 sessions.
 -- =====================================================================
 CREATE TABLE fact_session_funnel (
   session_sk         bigint        NOT NULL,  -- surrogate, xxhash64(user_session)
@@ -866,7 +867,7 @@ the Cassandra gold tables and nothing else.
 snapshot is defined by rows that fill in over time, and plain Parquet cannot
 update in place — Iceberg and Delta are out of scope. So
 `fact_session_funnel` is rebuilt by full recompute-and-overwrite on every batch
-run, not incrementally updated. It is cheap (954,686 sessions, one shuffle,
+run, not incrementally updated. It is cheap (970,797 sessions, one shuffle,
 seconds). Saying plainly that "accumulating snapshot here means
 recompute-and-overwrite, and this is exactly the limitation a table format would
 remove" is a stronger report paragraph than pretending the rows mutate.
