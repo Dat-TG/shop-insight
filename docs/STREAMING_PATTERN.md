@@ -228,7 +228,7 @@ double every count, and in BR3 it would list every product twice.
 
 | BR | Group by | Aggregate |
 |---|---|---|
-| BR3 | `F.window("event_time", "15 minutes", "1 minute")`, `product_id`. Not `brand`: 612 products carry their brand on some events and `'unknown'` on others, so they would split into two rows | `count_if` view, `count_if` cart; `brand` is the real one when any event has it, `category_l1` through `max()` |
+| BR3 | `F.window("event_time", "15 minutes", "1 minute")`, `product_id`. Not `brand`: 612 products have more than one brand value in silver (573 a real brand and `'unknown'`, 42 two real brands, 3 both), so they would split into two rows | `count_if` view, `count_if` cart; `brand` is the real one when any event has it (of two real ones, the alphabetically last), `category_l1` through `max()` |
 | BR5 | per `user_session`. `F.session_window("event_time", "30 minutes")` is one way to say "30 minutes with nothing after the cart" | whether it had a cart, whether it had a purchase, cart value, item count, last event time |
 | BR8 | `F.window("event_time", "5 minutes")`, `user_id` | purchases, their total value |
 

@@ -1822,7 +1822,9 @@ Closed here:
 **Scope:** BR3 end to end: `start_br3` in the stream, `GET /api/br3/trending` on Cassandra, the BR3 screen, and
 the docs that move with them. Khang asked for the W41 work to start early, chose how the API finds the newest
 window, and checked the screen in the browser. The AI wrote the code and ran it against the live stack on Khang's
-machine. On branch `w41-khang-br3`, merged with `main` after #17 and #18 (3 October).
+machine. On branch `w41-khang-br3`, merged with `main` after #17 and #18 (3 October). Merged with `main` again
+after #22 (6 October, Dat): the README and AI_USAGE conflicts were resolved with AI help, and this session was
+renumbered 18 → 19.
 
 ### What the AI produced
 
@@ -1831,8 +1833,8 @@ machine. On branch `w41-khang-br3`, merged with `main` after #17 and #18 (3 Octo
 | `processing/streaming_gold.py` — `start_br3`: views and carts per product in 15-minute windows sliding every minute, `outputMode("append")`, top 20 ranked in `write_batch` (`row_number` by `view_count`, `cart_count`, `product_id`), each window deleted then inserted; `TRENDING_TOP`; the module docstring marks BR3 done | Run and verified (below) |
 | `serving/api/routers/br3.py` — replaces the placeholder: without `window_start`, `SELECT DISTINCT window_start` and the largest key; then one partition read; `+07:00` appended; `meta` counts every partition key listed plus the one read | Run and verified |
 | `web/src/pages/BR3Page.tsx` — top 20 table with up, down and NEW arrows against the window a minute earlier, a Live mode and a window picker, 10 s refresh, four KPI cells, the QueryMeta footer; `web/src/index.css` — a BR3 block and `datetime-local` in one shared selector | Run and verified (Khang, in the browser) |
-| `docs/STREAMING_PATTERN.md` and `docs/SPARK_GUIDE_VI.md` Phần 10 — the BR3 row of the group-by table no longer groups by `brand` | AI-drafted, human review pending |
-| `README.md` status block, run line and layout marks; `CLAUDE.md` current status | AI-drafted, human review pending |
+| `docs/STREAMING_PATTERN.md` and `docs/SPARK_GUIDE_VI.md` Phần 10 — the BR3 row of the group-by table no longer groups by `brand` | Reviewed by Dat in #19, brand counts corrected |
+| `README.md` status block, run line and layout marks; `CLAUDE.md` current status | Reviewed by Dat in #19 |
 | `docs/evidence/gate1b_br3_run.txt` (new) — text copy of the run below | Captured from the run |
 | `docs/AI_USAGE.md` — this session | AI-drafted |
 
@@ -1844,7 +1846,7 @@ APPLY_SCHEMA OK, `streaming_gold.py --fresh`, then `replayer.py --speed 60 --sta
 
 | Claim | How it was measured |
 |---|---|
-| Grouping by `brand` would list a product twice | DuckDB over `data/silver`: 612 of 128,972 products have a real brand on some events and `unknown` on others (product 4804718: `apple`, and 49 `unknown` events on 1 Nov); 0 products have two `category_l1` |
+| Grouping by `brand` would list a product twice | DuckDB over `data/silver`: 612 of 128,972 products have more than one brand value: 573 a real brand on some events and `unknown` on others (product 4804718: `apple`, and 49 `unknown` events), 42 two real brands (16600184: `bugati` and `bugatti`), 3 both; 0 products have two `category_l1` |
 | Ties at rank 20 need a rule | 17 Nov 15:00-21:00 Vietnam time, 360 windows: #20 and #21 tie on `view_count` in 212, and on `cart_count` too in 64 |
 | A window has room for 20 | 43,134 full windows over the month: median 855 products, max 3,767; 193 (0.4%) have fewer than 20, mostly data gaps (5 Nov 07:53-08:07: 1 product) |
 | The ranking logic, before Cassandra existed here | A real stream over 36 replayer-style files (17 Nov 15:00-18:00), `write_batch` against a fake table keeping the `(window_start, rank)` rules: each batch closed 5 windows; 155 complete windows, 3,100 of 3,100 rows identical to DuckDB over silver |
@@ -1870,6 +1872,9 @@ APPLY_SCHEMA OK, `streaming_gold.py --fresh`, then `replayer.py --speed 60 --sta
   typed. Found in a review of the diff; the picker now stays empty in Live mode.
 - **The first evidence draft said the first batch "of each run" was left out of the timings.** Only the very first
   one was.
+- **612 was first described as products with a real brand and `unknown`.** It counts every product with more than
+  one brand value: 573 of those, 42 with two real brands, 3 both. Found in Dat's review of #19; the code was right,
+  the sentence in four places was not.
 
 ### Judgement that stayed with the team
 
@@ -1885,10 +1890,15 @@ Made by AI, flagged for review:
   heatmap footer adds its five.
 - **The docs edits above**, including Dat's pattern docs and `CLAUDE.md`.
 
-Open questions for the team:
+Closed in review (Dat, #19):
 - **BR_SCOPE's "always 20 rows" for BR3.** 0.4% of the month's windows have fewer than 20 products and show fewer
-  rows.
-- **`STOP_WAIT_SECONDS = 10`** has room with BR1 and BR3 (max 1.46 s). Re-measure once BR5 and BR8 join.
+  rows, so the criterion now reads "20 rows when the window has at least 20 products".
+- **`STOP_WAIT_SECONDS = 10`** has room with BR1 and BR3 (max 1.46 s). It stays at 10 s; re-measure once BR5 and
+  BR8 join (Nguyen, Tin).
+- **Ties** need no contract change: API_CONTRACT §5 fixes only `view_count` and `rank ASC`.
+- **The footer adding both calls** is fine, as BR4's does.
+- **The newest window by listing the keys** is kept and written down as the one exception in
+  `.claude/skills/br-slice/SKILL.md`.
 
 Closed here: Session 17's 10.6% below reorder, measured above.
 

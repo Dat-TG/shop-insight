@@ -1388,7 +1388,7 @@ nhân đôi mọi con số, còn ở BR3 mỗi sản phẩm sẽ hiện hai lầ
 
 | BR | Gộp theo | Tính gì |
 |---|---|---|
-| BR3 | `F.window("event_time", "15 minutes", "1 minute")`, `product_id`. Không gộp theo `brand`: 612 sản phẩm có brand thật ở vài sự kiện và `'unknown'` ở sự kiện khác, nên sẽ bị tách thành hai dòng | `count_if` view, `count_if` cart; `brand` là brand thật nếu có sự kiện mang nó, `category_l1` lấy bằng `max()` |
+| BR3 | `F.window("event_time", "15 minutes", "1 minute")`, `product_id`. Không gộp theo `brand`: trong silver có 612 sản phẩm mang hơn một giá trị brand (573 vừa có brand thật vừa có `'unknown'`, 42 có hai brand thật, 3 có cả hai), nên sẽ bị tách thành hai dòng | `count_if` view, `count_if` cart; `brand` là brand thật nếu có sự kiện mang nó (có hai brand thật thì lấy cái đứng sau theo thứ tự chữ cái), `category_l1` lấy bằng `max()` |
 | BR5 | theo `user_session`. `F.session_window("event_time", "30 minutes")` là một cách để nói "30 phút sau khi thêm giỏ mà không có gì" | có cart không, có mua không, giá trị giỏ, số món, thời điểm sự kiện cuối |
 | BR8 | `F.window("event_time", "5 minutes")`, `user_id` | số lượt mua, tổng giá trị |
 

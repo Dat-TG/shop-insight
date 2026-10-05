@@ -84,6 +84,11 @@ fixture to read. Until Tin lands it, take column names from SYSTEM_DESIGN sectio
   full partition key: `(event_date, category_l1)` for BR1, `window_start` for BR3,
   `event_date` for BR5 and BR8, `warehouse_id` for BR6. A filter that is not the
   partition key is not expressible — redesign the key backwards from the screen instead.
+  One deliberate exception, BR3's default view: no key says which window is newest,
+  because Cassandra orders rows inside a partition, never partitions. So without
+  `window_start` the endpoint lists the keys (`SELECT DISTINCT window_start`, keys only)
+  and reads the largest, and `meta.partitions` counts every key listed. Measured at a
+  full month of windows: 346 ms (#19).
   BR5 sorts by `cart_value` **in the API**, because the key change to
   `((event_date), user_session)` gave up on-disk ordering to get idempotent upserts.
 - **BR2, BR4, BR7, BR9 let DuckDB read Parquet directly** from `data/gold/` (BR9 from

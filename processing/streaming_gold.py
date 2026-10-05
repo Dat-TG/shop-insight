@@ -292,11 +292,13 @@ def start_br3(events, cassandra):
         # Purchases count in neither column; dropping them keeps them out of the state.
         .where(is_view | is_cart)
         # No explode: that is BR1's alone, and here it would list every product
-        # twice. Grouped by product only, not by brand: 612 products carry their
-        # brand on some events and 'unknown' (clean()'s fill for a null) on
-        # others, so grouping by brand would split such a product into two rows.
-        # The brand kept is the real one when any event has it. category_l1 never
-        # differs within a product (measured on silver), so max() carries it through.
+        # twice. Grouped by product only, not by brand: in silver 612 products have
+        # more than one brand value, 573 a real brand on some events and 'unknown'
+        # (clean()'s fill for a null) on others, 42 two real brands, 3 both. Grouping
+        # by brand would split such a product into two rows. The brand kept is the
+        # real one when any event has it, and of two real ones the alphabetically
+        # last. category_l1 never differs within a product (measured on silver), so
+        # max() carries it through.
         .groupBy(F.window("event_time", "15 minutes", "1 minute"), "product_id")
         .agg(
             F.count_if(is_view).alias("view_count"),
