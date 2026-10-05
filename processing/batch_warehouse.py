@@ -79,6 +79,10 @@ then it prints WAREHOUSE PARTIAL and says how many are built. Today it prints
     funnel_stage 1 / 2 / 3         838,795 / 77,098 / 54,904
     is_abandoned                    77,098   (a cart, no purchase: funnel_stage 2)
     negative lags                      521 / 448   (view->cart / cart->purchase, kept as measured)
+
+    stg_rfm_snapshot             1,291,650   (expect 1,291,650)
+    dim_user versions              319,426   (expect 258,330 to 1,291,650)
+    ...                                      (9 more check lines on dim_user, each at its expect)
     postgres                 not loaded yet (step 6: Tin, W40)
     WAREHOUSE PARTIAL: 6 of 9 tables built
 """
@@ -604,6 +608,24 @@ def check_fact_session_funnel(fact_session_funnel, silver, dim_user):
     return ok
 
 
+def check_dim_user(stg_rfm_snapshot, dim_user):
+    """stg_rfm_snapshot and dim_user, as processing/dim_user.py checks them when run alone.
+
+    Both tables are the copies read back from disk. The counts and what each must
+    be come from dim_user.py itself (dim_user_stats, EXPECTED_RANGES), so the two
+    scripts cannot disagree about a whole dim_user: one current version per user,
+    no user_sk twice, one version for anyone who never bought, and no overlap or
+    gap between versions. The events are not counted again here: check_fact_event()
+    already runs user_scd2.check_events().
+    """
+    stats = user_scd2.dim_user_stats(stg_rfm_snapshot, dim_user)
+    for name, value in stats.items():
+        low, high = user_scd2.expected_range(name)
+        want = f"{low:,}" if low == high else f"{low:,} to {high:,}"
+        print(f"{name:<25}{value:>13,}   (expect {want})")
+    return user_scd2.all_as_expected(stats)
+
+
 # ---------------------------------------------------------------------------
 # The two writers. Both skip None, which is what lets the skeleton run, and
 # both return the table read back from disk, so the next step starts from the
@@ -721,6 +743,8 @@ def main():
         ) and checks_ok
         print()
         checks_ok = check_fact_session_funnel(tables["fact_session_funnel"], silver, tables["dim_user"]) and checks_ok
+        print()
+        checks_ok = check_dim_user(tables["stg_rfm_snapshot"], tables["dim_user"]) and checks_ok
 
         # Step 6
         load_postgres(tables)
