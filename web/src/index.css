@@ -321,7 +321,8 @@ body {
   color: var(--text-primary);
 }
 
-.toolbar__input[type="date"]::-webkit-calendar-picker-indicator {
+.toolbar__input[type="date"]::-webkit-calendar-picker-indicator,
+.toolbar__input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   filter: invert(0.8);
   cursor: pointer;
 }
@@ -716,6 +717,67 @@ body {
   border-color: rgba(255, 69, 58, 0.3);
   color: var(--danger-subtle);
   background: rgba(255, 69, 58, 0.08);
+}
+
+/* ── BR3 Trending Products ────────────────────────────────────────────── */
+.live-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.55rem;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.live-toggle:hover {
+  background: var(--bg-control);
+}
+
+.live-toggle:focus-visible {
+  outline: 2px solid var(--accent-apple);
+  outline-offset: 1px;
+}
+
+.live-toggle--on {
+  background: var(--accent-tint);
+  color: var(--accent-apple);
+}
+
+.rank-change {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.rank-change--up {
+  color: var(--success-subtle);
+}
+
+.rank-change--down {
+  color: var(--danger-subtle);
+}
+
+.rank-change--same {
+  color: var(--text-tertiary);
+}
+
+.rank-change--new {
+  padding: 0.05rem 0.35rem;
+  border-radius: 4px;
+  background: var(--accent-tint);
+  color: var(--accent-apple);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
 }
 
 /* ── Animation Utilities ──────────────────────────────────────────────── */

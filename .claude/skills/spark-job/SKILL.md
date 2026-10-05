@@ -136,7 +136,7 @@ reads `dim_user` and recomputes nothing.
       Assign `product_sk` in the **same window pass over silver that detects the price
       change**, so the surrogate key is already on the event row and no join happens.
 - [ ] `fact_session_funnel` is recomputed and overwritten in full every run — plain
-      Parquet has no UPDATE and Iceberg/Delta are out of scope. Cheap (954,686 sessions,
+      Parquet has no UPDATE and Iceberg/Delta are out of scope. Cheap (970,797 sessions,
       one shuffle, seconds), and saying so beats pretending the rows mutate.
 
 ## 8. Reading rules for gold

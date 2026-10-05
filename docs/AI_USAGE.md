@@ -1710,12 +1710,205 @@ Closed here:
 - SYSTEM_DESIGN 3.2's Black Friday claim, which this session's first push left open.
 - PLAN.md's purchased-SKU count, 12,659 / 127,693 from the earlier sample, now 12,731 / 128,972.
 
-## Session 19 — 3 October 2026 (W41)
+## Session 18 — 3 October 2026 (W40)
+
+**Tool:** Claude Code (Opus 5.5).
+**Scope:** Dat's W40 task, `fact_session_funnel`, the accumulating snapshot. In
+`processing/batch_warehouse.py`: the body of `build_fact_session_funnel(events)` (signature
+kept), a new `check_fact_session_funnel()` folded into `checks_ok`, and the docstring. Plus
+the doc lines the new table makes false. Planned in plan mode first, then built on branch
+`w40-fact-session-funnel`. Postgres is not loaded here: that goes through Tin's step 6.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| `processing/batch_warehouse.py` — `build_fact_session_funnel()`: one `groupBy("user_session")`, `user_sk`/`user_id`/`event_date` from the first event (min of a struct), milestones, signed lags, counts, values, `funnel_stage` from the counts, `is_abandoned` | Run and verified (three full runs, below); human review pending (Dat) |
+| `processing/batch_warehouse.py` — `check_fact_session_funnel()` (12 checked lines, 3 information lines) and its line in `main()` | Run and verified, including five mutations that make it fail; human review pending (Dat) |
+| `processing/batch_warehouse.py` module docstring — the "Today it prints" block, pasted from the third run | Run output; human review pending (Dat) |
+| `SYSTEM_DESIGN.md` 5.2 table, 5.5 DDL comment, section 8 and the old-sample paragraph; `warehouse/ddl.sql` (Tin's file, mirrors 5.5); `.claude/skills/spark-job/SKILL.md` — 954,686 → 970,797 | Measured (below); human review pending (Dat; Tin for `ddl.sql`) |
+| `README.md` and `CLAUDE.md` status lines — 6 of 9 tables, `fact_session_funnel` no longer a stub; README date line | Checked against the run; human review pending (Dat) |
+| `docs/REPORT.md` 4.1 — the full-recompute sentence Dat asked for, reworded to read naturally, with the milestone clause the reason needs | Human review pending (Khang, report owner) |
+| Drafts, not posted: the PR description, a message to Tin, a note to Nguyen and Khang, the group post | AI-drafted; Dat sends them |
+
+### How it was checked
+
+Everything ran on Dat's machine (WSL2), branch `w40-fact-session-funnel` off `main` `9d964d0`.
+Before any code was written, a read-only prototype ran the drafted body in memory. Two
+independent rebuilds matched it row for row (`exceptAll` 0 both ways): Spark SQL with window
+functions, and DuckDB over silver plus `dim_user`. Then `python processing/batch_warehouse.py`
+ran three times (59, 58 and 59 s). Each run printed `WAREHOUSE PARTIAL: 6 of 9 tables built`
+with every check line at its expect. The table's fingerprint was the same after every run:
+`.venv/bin/python -c "import duckdb; print(duckdb.sql(\"select count(*), bit_xor(hash(t)) from read_parquet('data/warehouse/fact_session_funnel/**/*.parquet', hive_partitioning=true) t\").fetchone())"`
+gave `(970797, 2197298498416271562)`. Three Workflows of 3 agents each did the work: one to
+understand, one to review the plan (prototype, spark-reviewer, completeness critic) and one to
+review the diff (spark-reviewer, data-fact-checker, docs sweep). `python tests/test_fixtures.py`
+passes.
+
+| Claim | How it was measured |
+|---|---|
+| 970,797 rows, one per distinct silver `user_session` (old sample: 954,686) | The check's first line; DuckDB `select count(distinct user_session) from read_parquet('data/silver/**/*.parquet', hive_partitioning=true)` |
+| `funnel_stage` 1 / 2 / 3: 838,795 / 77,098 / 54,904, no stage 0; `is_abandoned` 77,098; negative lags 521 (view→cart) and 448 (cart→purchase) | The check's information lines; DuckDB `select funnel_stage, count(*) from read_parquet('data/warehouse/fact_session_funnel/**/*.parquet', hive_partitioning=true) group by 1` |
+| Measure totals equal silver: view 4,474,579, cart 214,286, purchase 65,150 events; cart value 62,570,985.31, purchase value 19,785,531.43 | The check's five total lines, against `silver.agg(...)` in the same function |
+| The check can fail. `funnel_stage = 1` → `ck_fsf_stage violated` 132,002. `coalesce(view_to_cart_sec, 0)` → `ck_fsf_lags violated` 848,073. `user_sk + 1` → `user_sk not in force` 970,797. `purchase_count = cart_count` → 214,286 against 65,150. `purchase_value = cart_value` → 62,570,985.31 against 19,785,531.43 | `bw.check_fact_session_funnel()` on mutated in-memory copies of the table read back from disk; nothing written. Each mutation fails exactly its own line |
+| `is_abandoned` and BR5's 30-minute rule disagree on 498 sessions, 0.6% of the 77,098 abandoned ones. 1 has a cart in the last 30 minutes of data; 497 bought, but only more than 30 minutes after the first cart, or only before it | DuckDB over silver: per session the first cart and first purchase, and the purchases in `[first_cart_at, first_cart_at + 30 min]`; data ends at `max(event_time)` = 2019-12-01 06:59:49 |
+| 31 `session_start_date` directories, matching `ddl.sql`'s 31 day partitions | `write_fact`'s own line |
+
+### What the AI got wrong, and was corrected on
+
+- **The first plan shared one `funnel_stage()` helper between the build and the check.** The
+  `ck_fsf_stage` line would have compared an expression with itself and could never fail
+  (spark-reviewer and the critic, plan review). The build now derives the stage from the counts
+  and the check uses `ddl.sql`'s CASE on the timestamps; the `funnel_stage = 1` mutation shows
+  it failing.
+- **The first plan took `session_start_date` from `to_date(session_start_at)`,** so "session_start_date
+  wrong" re-ran the build's own expression. The date now comes from silver's `event_date` on
+  the first event, the date step 4 used to pick `user_sk`.
+- **The first plan's `user_sk` check did not compare `user_id`,** so a `user_sk` belonging to
+  another user would have passed. Added.
+- **The first version of the check compared only the row count with silver.** A wrong measure,
+  for example `purchase_count` counted from carts, printed every line at its expect
+  (spark-reviewer, diff review). Five total lines against silver were added, and two mutations
+  show them failing.
+- **The first docstring said "one shuffle, no join".** That is true of the function's code, but
+  `events` is a plan: writing the table re-runs steps 2-4, `with_user_sk`'s broadcast join
+  included. Reworded.
+- **The first docstring put BR5's difference at "a few hundred sessions, about 0.6%"** without
+  saying 0.6% of what. Measured: 498, of the 77,098 abandoned sessions.
+- **The first `REPORT.md` sentence** parsed "mỗi lần chạy bảng này" as one phrase and made
+  Parquet the subject of "cập nhật". Reworded.
+- **The first plan missed six stale status lines:** README.md's date line, :17, :164-165, :299
+  and :391, and CLAUDE.md's second status paragraph (completeness critic).
+
+### Judgement that stayed with the team
+
+Given by Dat in the task: the grain, the columns, `session_sk = xxhash64(user_session)`,
+`user_sk` from the session's first event with no join, the load through step 6, the check
+counting `ck_fsf_stage` and `ck_fsf_lags`, and the report sentence.
+
+Decisions put to Dat and answered by him (3 October, in plan mode):
+- Lags are kept signed (521 + 448 negative), not clamped to 0.
+- `is_abandoned` = a cart and no purchase in the session, not BR5's 30-minute rule.
+- Tin fixes his own loader. This change does not touch `serving/load_star_postgres.py`.
+- Every doc line the table makes false is fixed in the same change.
+
+Made by AI, flagged for review:
+- `purchase_at` is the **first** purchase (7,138 sessions buy more than once).
+- `cart_value` sums cart prices and ignores `remove_from_cart` (0 rows in the source).
+- The check's size: the task asked for the two CHECK counts. The other ten lines catch NOT
+  NULL, the primary key, the date, `user_sk` and the measures, each shown able to fail.
+- The `REPORT.md` wording (Khang owns the report) and the `ddl.sql` comment (Tin's file).
+
+Open:
+- Tin's `load_fact_session_funnel` on `origin/w40-tin-br6` (no PR yet). Its INSERT leaves out
+  `last_event_at` and `purchase_value`, both NOT NULL. Its five timestamps are not cast to
+  `timestamp_ntz`, so they would land 7 h late. Loading and checking this table in Postgres
+  waits on it (Tin).
+- BR2's `funnel_daily` needs `category_l1`, and this table has no product or category column
+  (Dat, W41).
+- The `is_abandoned` difference from BR5 goes to Nguyen (BR5) and Khang (correctness gate).
+- Not caused by this change: `serving/load_star_postgres.py:4` says no Parquet star exists;
+  CLAUDE.md says only BR1 serves real data (BR4 does too); SYSTEM_DESIGN 5.2 lists BR5 as served
+  by this table.
+- The group post of 970,797 (Dat).
+
+Closed here:
+- Session 11's "Keep or drop `fact_session_funnel`" (row 28): kept. Dat decided by assigning
+  this build.
+
+## Session 19 — 1-3 October 2026 (W40-W41)
+
+**Tool:** Claude Code (Opus 5.5).
+**Scope:** BR3 end to end: `start_br3` in the stream, `GET /api/br3/trending` on Cassandra, the BR3 screen, and
+the docs that move with them. Khang asked for the W41 work to start early, chose how the API finds the newest
+window, and checked the screen in the browser. The AI wrote the code and ran it against the live stack on Khang's
+machine. On branch `w41-khang-br3`, merged with `main` after #17 and #18 (3 October). Merged with `main` again
+after #22 (6 October, Dat): the README and AI_USAGE conflicts were resolved with AI help, and this session was
+renumbered 18 → 19.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| `processing/streaming_gold.py` — `start_br3`: views and carts per product in 15-minute windows sliding every minute, `outputMode("append")`, top 20 ranked in `write_batch` (`row_number` by `view_count`, `cart_count`, `product_id`), each window deleted then inserted; `TRENDING_TOP`; the module docstring marks BR3 done | Run and verified (below) |
+| `serving/api/routers/br3.py` — replaces the placeholder: without `window_start`, `SELECT DISTINCT window_start` and the largest key; then one partition read; `+07:00` appended; `meta` counts every partition key listed plus the one read | Run and verified |
+| `web/src/pages/BR3Page.tsx` — top 20 table with up, down and NEW arrows against the window a minute earlier, a Live mode and a window picker, 10 s refresh, four KPI cells, the QueryMeta footer; `web/src/index.css` — a BR3 block and `datetime-local` in one shared selector | Run and verified (Khang, in the browser) |
+| `docs/STREAMING_PATTERN.md` and `docs/SPARK_GUIDE_VI.md` Phần 10 — the BR3 row of the group-by table no longer groups by `brand` | Reviewed by Dat in #19, brand counts corrected |
+| `README.md` status block, run line and layout marks; `CLAUDE.md` current status | Reviewed by Dat in #19 |
+| `docs/evidence/gate1b_br3_run.txt` (new) — text copy of the run below | Captured from the run |
+| `docs/AI_USAGE.md` — this session | AI-drafted |
+
+### How it was checked
+
+Scratch scripts in the session's scratchpad, not committed. Stack: `docker compose up -d --wait`, INFRA OK,
+APPLY_SCHEMA OK, `streaming_gold.py --fresh`, then `replayer.py --speed 60 --start "2019-11-17 08:00:00"` for
+413 s (81 files, 196,024 rows, 15:00-21:45 Vietnam time).
+
+| Claim | How it was measured |
+|---|---|
+| Grouping by `brand` would list a product twice | DuckDB over `data/silver`: 612 of 128,972 products have more than one brand value: 573 a real brand on some events and `unknown` on others (product 4804718: `apple`, and 49 `unknown` events), 42 two real brands (16600184: `bugati` and `bugatti`), 3 both; 0 products have two `category_l1` |
+| Ties at rank 20 need a rule | 17 Nov 15:00-21:00 Vietnam time, 360 windows: #20 and #21 tie on `view_count` in 212, and on `cart_count` too in 64 |
+| A window has room for 20 | 43,134 full windows over the month: median 855 products, max 3,767; 193 (0.4%) have fewer than 20, mostly data gaps (5 Nov 07:53-08:07: 1 product) |
+| The ranking logic, before Cassandra existed here | A real stream over 36 replayer-style files (17 Nov 15:00-18:00), `write_batch` against a fake table keeping the `(window_start, rank)` rules: each batch closed 5 windows; 155 complete windows, 3,100 of 3,100 rows identical to DuckDB over silver |
+| The live table is right | All 394 windows written (14:46-21:19): one per minute, 20 rows each, ranks 1-20, no product twice. The 380 windows from 15:00: 7,600 of 7,600 rows identical to DuckDB over silver |
+| The same holds across a crash | Ctrl-C after batch 11 (windows to 15:29), restart without `--fresh`: batch 12 wrote 15:30-15:34, batch 13 caught up 15 windows. No lost or repeated window; the 380 windows above span it |
+| The delete must run on its own | A window at 2000-01-01: DELETE, then a batch of 3 INSERTs: 3 rows, twice. DELETE inside the insert batch: 0 rows |
+| Micro-batch time with BR1 and BR3 in one JVM | 76 batches each: BR1 median 476 ms (p95 790), BR3 median 719 ms (p95 1,120, max 1,462); `write_batch` median 392 ms |
+| The endpoint | 20 calls each: no `window_start` at 394 windows, `meta.ms` median 7.6, partitions 395; a given window 2.3 ms, 1 partition. Offset, no offset and UTC give the same window; `15:00:30` gives 200 `[]`; an empty table gives 200 `[]`, partitions 0. Two calls 12 s apart: window 14:59 then 15:09, top 3 reordered |
+| Listing the keys as the table grows | A scratch table with the same schema, dropped afterwards, 15 runs each: 394 windows 7.5 ms, 1,440 13.8 ms, 43,200 346 ms |
+| Build, contract and hook | `npm run build`, `npx oxlint` 0 warnings; `python tests/test_fixtures.py` all 8 bundles pass; `.claude/hooks/check_python.py` silent on both Python files, and it does warn on a probe file inserting into `trending_products` without a DELETE |
+| Review | The `pr-review` checklist, `layer-checks.md` and the `spark-reviewer` trap list, read in this session. The pr-review skill advises a fresh session for code written in the same one |
+| Session 17's open 10.6% (pairs below reorder on 30 Nov, report section 3) | DuckDB over `data/inventory` on Khang's machine: 6,738 of 63,655 pairs on 2019-11-30, 10.6%; 1,909,650 rows, 12,731 products |
+
+### What the AI got wrong, and was corrected on
+
+- **The offline harness first reported 51 views where silver had 54.** Its 36 files were written in the same
+  second, the file source orders by modification time, and the stream read them out of order, so the watermark
+  dropped events. Spacing the modification times 5 s apart, as the replayer does, gave 3,100 of 3,100. The job
+  was not at fault.
+- **The first hook check proved nothing.** A shell loop lost its variable and the probe file sat outside the
+  project, which the hook skips. Re-run with the real paths and an in-project probe (deleted afterwards).
+- **In Live mode the window picker showed the newest window**, so a 10 s refresh could overwrite a time being
+  typed. Found in a review of the diff; the picker now stays empty in Live mode.
+- **The first evidence draft said the first batch "of each run" was left out of the timings.** Only the very first
+  one was.
+- **612 was first described as products with a real brand and `unknown`.** It counts every product with more than
+  one brand value: 573 of those, 42 with two real brands, 3 both. Found in Dat's review of #19; the code was right,
+  the sentence in four places was not.
+
+### Judgement that stayed with the team
+
+Khang decided:
+- **The newest window is found by listing the partition keys**, with the real partition count in the footer. No
+  contract or schema change; the cost is measured above and is material for report 4.2.
+
+Made by AI, flagged for review:
+- **Ties go to `cart_count`, then the lower `product_id`.** API_CONTRACT §5 names only `view_count`.
+- **Grouped by `product_id` alone**: `brand` is the real one when any event has it, `category_l1` through `max()`.
+  Purchases are dropped before the aggregation.
+- **The arrows come from a second call** for the window a minute earlier. The footer adds both calls, as BR4's
+  heatmap footer adds its five.
+- **The docs edits above**, including Dat's pattern docs and `CLAUDE.md`.
+
+Closed in review (Dat, #19):
+- **BR_SCOPE's "always 20 rows" for BR3.** 0.4% of the month's windows have fewer than 20 products and show fewer
+  rows, so the criterion now reads "20 rows when the window has at least 20 products".
+- **`STOP_WAIT_SECONDS = 10`** has room with BR1 and BR3 (max 1.46 s). It stays at 10 s; re-measure once BR5 and
+  BR8 join (Nguyen, Tin).
+- **Ties** need no contract change: API_CONTRACT §5 fixes only `view_count` and `rank ASC`.
+- **The footer adding both calls** is fine, as BR4's does.
+- **The newest window by listing the keys** is kept and written down as the one exception in
+  `.claude/skills/br-slice/SKILL.md`.
+
+Closed here: Session 17's 10.6% below reorder, measured above.
+
+Pending: the group post with the Gate 1b screenshots, and the PR (Khang).
+
+## Session 20 — 3 October 2026 (W41)
 
 **Tool:** Claude Code (Opus 5.5).
 **Scope:** the follow-up Khang promised on #13: `batch_warehouse.py` now runs the `dim_user` checks that only
 `processing/dim_user.py` ran before. It uses Khang's 0.50 h of W41. Branch `w41-khang-dimuser-checks`.
-(Session 18 is in PR #19, not merged yet.)
 
 ### What the AI produced
 
@@ -1730,6 +1923,7 @@ Closed here:
 | Claim | How it was measured |
 |---|---|
 | The build passes with the new checks | `python processing/batch_warehouse.py` on Khang's machine, 123 s: each of the eleven new lines at its expected value (`stg_rfm_snapshot` 1,291,650; `dim_user versions` 319,426, within 258,330 to 1,291,650; `dim_user current` 258,330; the eight others 0), then `WAREHOUSE PARTIAL: 5 of 9 tables built` |
+| The build still passes after main took #22 (`fact_session_funnel`) and #19 (BR3) | Dat merged `origin/main` into this branch on 6 October. The three conflicts in `batch_warehouse.py` (docstring, checks, `main()`) keep both sides, `check_dim_user()` after `check_fact_session_funnel()`; this session became 20. `python processing/batch_warehouse.py` on Dat's machine, 61 s: all three check blocks at their expected values, the eleven `dim_user` lines last, then `WAREHOUSE PARTIAL: 6 of 9 tables built` |
 | `dim_user.py` run alone behaves as before | `python processing/dim_user.py`: the same counts and `DIM_USER OK`, 27 s |
 | The check can fail | A scratch script called `check_dim_user()` on copies read back from disk and changed in memory only. One user given a second current version: current 258,331, overlaps 1, not_one_current 1. A non-buyer given a second, closed version: non-buyers not 1 version 1, empty_ranges 1. `stg_rfm_snapshot` one row short: 1,291,649. It returned False all three times and True on the intact tables. Nothing on disk changed |
 | No clash with Tin's branch | `git diff origin/main origin/w40-tin-br6 -- processing/batch_warehouse.py`: its hunks start at lines 156, 181, 297 and 475; the checks block and the `checks_ok` lines in `main()` are untouched |
