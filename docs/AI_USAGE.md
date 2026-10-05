@@ -1709,3 +1709,109 @@ Closed here:
   claim, and BR9 in SYSTEM_DESIGN 2.
 - SYSTEM_DESIGN 3.2's Black Friday claim, which this session's first push left open.
 - PLAN.md's purchased-SKU count, 12,659 / 127,693 from the earlier sample, now 12,731 / 128,972.
+
+## Session 18 — 3 October 2026 (W40)
+
+**Tool:** Claude Code (Opus 5.5).
+**Scope:** Dat's W40 task, `fact_session_funnel`, the accumulating snapshot. In
+`processing/batch_warehouse.py`: the body of `build_fact_session_funnel(events)` (signature
+kept), a new `check_fact_session_funnel()` folded into `checks_ok`, and the docstring. Plus
+the doc lines the new table makes false. Planned in plan mode first, then built on branch
+`w40-fact-session-funnel`. Postgres is not loaded here: that goes through Tin's step 6.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| `processing/batch_warehouse.py` — `build_fact_session_funnel()`: one `groupBy("user_session")`, `user_sk`/`user_id`/`event_date` from the first event (min of a struct), milestones, signed lags, counts, values, `funnel_stage` from the counts, `is_abandoned` | Run and verified (three full runs, below); human review pending (Dat) |
+| `processing/batch_warehouse.py` — `check_fact_session_funnel()` (12 checked lines, 3 information lines) and its line in `main()` | Run and verified, including five mutations that make it fail; human review pending (Dat) |
+| `processing/batch_warehouse.py` module docstring — the "Today it prints" block, pasted from the third run | Run output; human review pending (Dat) |
+| `SYSTEM_DESIGN.md` 5.2 table, 5.5 DDL comment, section 8 and the old-sample paragraph; `warehouse/ddl.sql` (Tin's file, mirrors 5.5); `.claude/skills/spark-job/SKILL.md` — 954,686 → 970,797 | Measured (below); human review pending (Dat; Tin for `ddl.sql`) |
+| `README.md` and `CLAUDE.md` status lines — 6 of 9 tables, `fact_session_funnel` no longer a stub; README date line | Checked against the run; human review pending (Dat) |
+| `docs/REPORT.md` 4.1 — the full-recompute sentence Dat asked for, reworded to read naturally, with the milestone clause the reason needs | Human review pending (Khang, report owner) |
+| Drafts, not posted: the PR description, a message to Tin, a note to Nguyen and Khang, the group post | AI-drafted; Dat sends them |
+
+### How it was checked
+
+Everything ran on Dat's machine (WSL2), branch `w40-fact-session-funnel` off `main` `9d964d0`.
+Before any code was written, a read-only prototype ran the drafted body in memory. Two
+independent rebuilds matched it row for row (`exceptAll` 0 both ways): Spark SQL with window
+functions, and DuckDB over silver plus `dim_user`. Then `python processing/batch_warehouse.py`
+ran three times (59, 58 and 59 s). Each run printed `WAREHOUSE PARTIAL: 6 of 9 tables built`
+with every check line at its expect. The table's fingerprint was the same after every run:
+`.venv/bin/python -c "import duckdb; print(duckdb.sql(\"select count(*), bit_xor(hash(t)) from read_parquet('data/warehouse/fact_session_funnel/**/*.parquet', hive_partitioning=true) t\").fetchone())"`
+gave `(970797, 2197298498416271562)`. Three Workflows of 3 agents each did the work: one to
+understand, one to review the plan (prototype, spark-reviewer, completeness critic) and one to
+review the diff (spark-reviewer, data-fact-checker, docs sweep). `python tests/test_fixtures.py`
+passes.
+
+| Claim | How it was measured |
+|---|---|
+| 970,797 rows, one per distinct silver `user_session` (old sample: 954,686) | The check's first line; DuckDB `select count(distinct user_session) from read_parquet('data/silver/**/*.parquet', hive_partitioning=true)` |
+| `funnel_stage` 1 / 2 / 3: 838,795 / 77,098 / 54,904, no stage 0; `is_abandoned` 77,098; negative lags 521 (view→cart) and 448 (cart→purchase) | The check's information lines; DuckDB `select funnel_stage, count(*) from read_parquet('data/warehouse/fact_session_funnel/**/*.parquet', hive_partitioning=true) group by 1` |
+| Measure totals equal silver: view 4,474,579, cart 214,286, purchase 65,150 events; cart value 62,570,985.31, purchase value 19,785,531.43 | The check's five total lines, against `silver.agg(...)` in the same function |
+| The check can fail. `funnel_stage = 1` → `ck_fsf_stage violated` 132,002. `coalesce(view_to_cart_sec, 0)` → `ck_fsf_lags violated` 848,073. `user_sk + 1` → `user_sk not in force` 970,797. `purchase_count = cart_count` → 214,286 against 65,150. `purchase_value = cart_value` → 62,570,985.31 against 19,785,531.43 | `bw.check_fact_session_funnel()` on mutated in-memory copies of the table read back from disk; nothing written. Each mutation fails exactly its own line |
+| `is_abandoned` and BR5's 30-minute rule disagree on 498 sessions, 0.6% of the 77,098 abandoned ones. 1 has a cart in the last 30 minutes of data; 497 bought, but only more than 30 minutes after the first cart, or only before it | DuckDB over silver: per session the first cart and first purchase, and the purchases in `[first_cart_at, first_cart_at + 30 min]`; data ends at `max(event_time)` = 2019-12-01 06:59:49 |
+| 31 `session_start_date` directories, matching `ddl.sql`'s 31 day partitions | `write_fact`'s own line |
+
+### What the AI got wrong, and was corrected on
+
+- **The first plan shared one `funnel_stage()` helper between the build and the check.** The
+  `ck_fsf_stage` line would have compared an expression with itself and could never fail
+  (spark-reviewer and the critic, plan review). The build now derives the stage from the counts
+  and the check uses `ddl.sql`'s CASE on the timestamps; the `funnel_stage = 1` mutation shows
+  it failing.
+- **The first plan took `session_start_date` from `to_date(session_start_at)`,** so "session_start_date
+  wrong" re-ran the build's own expression. The date now comes from silver's `event_date` on
+  the first event, the date step 4 used to pick `user_sk`.
+- **The first plan's `user_sk` check did not compare `user_id`,** so a `user_sk` belonging to
+  another user would have passed. Added.
+- **The first version of the check compared only the row count with silver.** A wrong measure,
+  for example `purchase_count` counted from carts, printed every line at its expect
+  (spark-reviewer, diff review). Five total lines against silver were added, and two mutations
+  show them failing.
+- **The first docstring said "one shuffle, no join".** That is true of the function's code, but
+  `events` is a plan: writing the table re-runs steps 2-4, `with_user_sk`'s broadcast join
+  included. Reworded.
+- **The first docstring put BR5's difference at "a few hundred sessions, about 0.6%"** without
+  saying 0.6% of what. Measured: 498, of the 77,098 abandoned sessions.
+- **The first `REPORT.md` sentence** parsed "mỗi lần chạy bảng này" as one phrase and made
+  Parquet the subject of "cập nhật". Reworded.
+- **The first plan missed six stale status lines:** README.md's date line, :17, :164-165, :299
+  and :391, and CLAUDE.md's second status paragraph (completeness critic).
+
+### Judgement that stayed with the team
+
+Given by Dat in the task: the grain, the columns, `session_sk = xxhash64(user_session)`,
+`user_sk` from the session's first event with no join, the load through step 6, the check
+counting `ck_fsf_stage` and `ck_fsf_lags`, and the report sentence.
+
+Decisions put to Dat and answered by him (3 October, in plan mode):
+- Lags are kept signed (521 + 448 negative), not clamped to 0.
+- `is_abandoned` = a cart and no purchase in the session, not BR5's 30-minute rule.
+- Tin fixes his own loader. This change does not touch `serving/load_star_postgres.py`.
+- Every doc line the table makes false is fixed in the same change.
+
+Made by AI, flagged for review:
+- `purchase_at` is the **first** purchase (7,138 sessions buy more than once).
+- `cart_value` sums cart prices and ignores `remove_from_cart` (0 rows in the source).
+- The check's size: the task asked for the two CHECK counts. The other ten lines catch NOT
+  NULL, the primary key, the date, `user_sk` and the measures, each shown able to fail.
+- The `REPORT.md` wording (Khang owns the report) and the `ddl.sql` comment (Tin's file).
+
+Open:
+- Tin's `load_fact_session_funnel` on `origin/w40-tin-br6` (no PR yet). Its INSERT leaves out
+  `last_event_at` and `purchase_value`, both NOT NULL. Its five timestamps are not cast to
+  `timestamp_ntz`, so they would land 7 h late. Loading and checking this table in Postgres
+  waits on it (Tin).
+- BR2's `funnel_daily` needs `category_l1`, and this table has no product or category column
+  (Dat, W41).
+- The `is_abandoned` difference from BR5 goes to Nguyen (BR5) and Khang (correctness gate).
+- Not caused by this change: `serving/load_star_postgres.py:4` says no Parquet star exists;
+  CLAUDE.md says only BR1 serves real data (BR4 does too); SYSTEM_DESIGN 5.2 lists BR5 as served
+  by this table.
+- The group post of 970,797 (Dat).
+
+Closed here:
+- Session 11's "Keep or drop `fact_session_funnel`" (row 28): kept. Dat decided by assigning
+  this build.
