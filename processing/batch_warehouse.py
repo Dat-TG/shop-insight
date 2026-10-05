@@ -2,12 +2,12 @@
 
     python processing/batch_warehouse.py
 
-Five of the nine tables are built: dim_event_type, dim_product,
-stg_rfm_snapshot, dim_user and fact_event. The other build_* functions are
-still stubs that return None, and each of those prints "not built yet". Each
-owner replaces the BODY of their own function and keeps its signature. Nobody
-writes Parquet directly: every table goes through write_dim() or write_fact(),
-so all nine tables land the same way.
+Six of the nine tables are built: dim_event_type, dim_product,
+stg_rfm_snapshot, dim_user, fact_event and fact_session_funnel. The other
+build_* functions are still stubs that return None, and each of those prints
+"not built yet". Each owner replaces the BODY of their own function and keeps
+its signature. Nobody writes Parquet directly: every table goes through
+write_dim() or write_fact(), so all nine tables land the same way.
 
 The build order is forced (SYSTEM_DESIGN.md 5.6), and main() runs it top to
 bottom:
@@ -20,7 +20,7 @@ bottom:
     3     stg_rfm_snapshot               Khang    silver
     4     dim_user (SCD2 on RFM cell)    Khang    stg_rfm_snapshot
     5     fact_event                     Dat      the events, keys already on them
-    5     fact_session_funnel            W40      the events
+    5     fact_session_funnel            Dat      the events, keys already on them
     5     fact_inventory_daily           W40      data/inventory/ + dim_product
     6     load Postgres                  Tin      the tables written above
 
@@ -47,7 +47,7 @@ check_environment() prints the heap the JVM really got.
 
 Done when the script prints WAREHOUSE OK, with all nine tables built. Until
 then it prints WAREHOUSE PARTIAL and says how many are built. Today it prints
-(Spark 4.1.3, measured, about 75 s):
+(Spark 4.1.3, measured, about 60 s):
 
     dim_date                 not built yet
     dim_event_type                       5
@@ -56,15 +56,31 @@ then it prints WAREHOUSE PARTIAL and says how many are built. Today it prints
     stg_rfm_snapshot             1,291,650   (5 snapshot_date directories)
     dim_user                       319,426
     fact_event                   4,754,015   (31 event_date directories)
-    fact_session_funnel      not built yet
+    fact_session_funnel            970,797   (31 session_start_date directories)
     fact_inventory_daily     not built yet
 
     fact_event rows              4,754,015   (expect 4,754,015)
     ...                                      (19 more check lines, each at its expect)
     most events in one day         482,049   (event_sk has room for 9,999,999)
     price != version price         677,255   (14.2%, versions are per day: not an error)
+
+    fact_session_funnel rows       970,797   (expect 970,797)
+    null values                          0   (expect 0)
+    duplicate session_sk                 0   (expect 0)
+    session_start_date wrong             0   (expect 0)
+    ck_fsf_stage violated                0   (expect 0)
+    ck_fsf_lags violated                 0   (expect 0)
+    view_count total             4,474,579   (expect 4,474,579)
+    cart_count total               214,286   (expect 214,286)
+    purchase_count total            65,150   (expect 65,150)
+    cart_value total         62,570,985.31   (expect 62,570,985.31)
+    purchase_value total     19,785,531.43   (expect 19,785,531.43)
+    user_sk not in force                 0   (expect 0)
+    funnel_stage 1 / 2 / 3         838,795 / 77,098 / 54,904
+    is_abandoned                    77,098   (a cart, no purchase: funnel_stage 2)
+    negative lags                      521 / 448   (view->cart / cart->purchase, kept as measured)
     postgres                 not loaded yet (step 6: Tin, W40)
-    WAREHOUSE PARTIAL: 5 of 9 tables built
+    WAREHOUSE PARTIAL: 6 of 9 tables built
 """
 
 import os
@@ -289,11 +305,78 @@ def build_fact_event(events, dim_event_type):
 
 
 def build_fact_session_funnel(events):
-    """Accumulating snapshot, W40. One row per session, user_sk as of session start.
+    """Accumulating snapshot, owner Dat. One row per session, 1:1 with silver's user_session.
 
-    Columns: warehouse/ddl.sql, fact_session_funnel. Stub: returns None.
+    Kimball's accumulating snapshot: one row per run of a process, one timestamp
+    per milestone, NULL until the milestone is reached. Here the process is a
+    session's funnel and the milestones are first_view_at, first_cart_at and
+    purchase_at (the first purchase). Plain Parquet cannot update a row in
+    place, so every run recomputes the whole table from all events and
+    overwrites it; it is never updated incrementally (SYSTEM_DESIGN.md section 8).
+
+    The groupBy on user_session is this function's only shuffle, and it joins
+    nothing; events is a plan, so writing the table re-runs steps 2-4 under it.
+    user_sk, user_id and the start date come from the session's first event,
+    where step 4 already put user_sk, so user_sk is the version in force on
+    session_start_date. Never range-join dim_user for it (see the module docstring).
+    is_abandoned: a cart and no purchase anywhere in the session. BR5's
+    streaming rule (no purchase in the 30 minutes after the cart) disagrees on
+    498 sessions, 0.6% of the 77,098 abandoned ones, mostly purchases that came
+    later than 30 minutes. cart_value ignores remove_from_cart
+    (cart_value_sign -1): the source has none. A lag is negative when the later
+    milestone came first, and is kept that way. Columns: warehouse/ddl.sql,
+    fact_session_funnel, in its order (read back, session_start_date comes last).
     """
-    return None
+    is_view = F.col("event_type") == "view"
+    is_cart = F.col("event_type") == "cart"
+    is_purchase = F.col("event_type") == "purchase"
+    sessions = events.groupBy("user_session").agg(
+        # min() of a struct compares field by field: the earliest event, and on a
+        # tie the lowest user_sk, so all four machines pick the same row.
+        F.min(F.struct("event_time", "user_sk", "user_id", "event_date")).alias("first_event"),
+        F.min(F.when(is_view, F.col("event_time"))).alias("first_view_at"),
+        F.min(F.when(is_cart, F.col("event_time"))).alias("first_cart_at"),
+        F.min(F.when(is_purchase, F.col("event_time"))).alias("purchase_at"),
+        F.max("event_time").alias("last_event_at"),
+        F.count_if(is_view).alias("view_count"),
+        F.count_if(is_cart).alias("cart_count"),
+        F.count_if(is_purchase).alias("purchase_count"),
+        F.sum(F.when(is_cart, F.col("price"))).alias("cart_value"),
+        F.sum(F.when(is_purchase, F.col("price"))).alias("purchase_value"),
+    )
+
+    def seconds(start, end):
+        # NULL when either end is NULL, which is what ck_fsf_lags demands.
+        return (F.unix_seconds(end) - F.unix_seconds(start)).cast("int")
+
+    return sessions.select(
+        F.xxhash64("user_session").alias("session_sk"),
+        "user_session",
+        F.col("first_event.user_sk").cast("bigint").alias("user_sk"),
+        F.col("first_event.user_id").alias("user_id"),
+        F.col("first_event.event_date").alias("session_start_date"),  # silver's Vietnam date
+        F.col("first_event.event_time").alias("session_start_at"),
+        "first_view_at",
+        "first_cart_at",
+        "purchase_at",
+        "last_event_at",
+        seconds("first_view_at", "first_cart_at").alias("view_to_cart_sec"),
+        seconds("first_cart_at", "purchase_at").alias("cart_to_purchase_sec"),
+        F.col("view_count").cast("int").alias("view_count"),
+        F.col("cart_count").cast("int").alias("cart_count"),
+        F.col("purchase_count").cast("int").alias("purchase_count"),
+        F.coalesce("cart_value", F.lit(0)).cast("decimal(12,2)").alias("cart_value"),  # NOT NULL in ddl.sql
+        F.coalesce("purchase_value", F.lit(0)).cast("decimal(12,2)").alias("purchase_value"),
+        # The furthest milestone, from the counts. check_fact_session_funnel() tests
+        # it against ddl.sql's CASE on the timestamps.
+        F.when(F.col("purchase_count") > 0, 3)
+        .when(F.col("cart_count") > 0, 2)
+        .when(F.col("view_count") > 0, 1)
+        .otherwise(0)
+        .cast("smallint")
+        .alias("funnel_stage"),
+        (F.col("first_cart_at").isNotNull() & F.col("purchase_at").isNull()).alias("is_abandoned"),
+    )
 
 
 def build_fact_inventory_daily(spark, dim_product, dim_warehouse):
@@ -430,6 +513,97 @@ def check_fact_event(fact_event, silver, events, dim_event_type, dim_product, di
     return ok
 
 
+def check_fact_session_funnel(fact_session_funnel, silver, dim_user):
+    """fact_session_funnel against silver, dim_user and its own two CHECK constraints.
+
+    fact_session_funnel and dim_user are the copies read back from disk. Each
+    measure column's total must equal silver's, so every event sits in exactly
+    one session and is counted as its own type. The two CHECKs are
+    warehouse/ddl.sql's text, copied word for word, so each row counted here is
+    a row Postgres would refuse at step 6. Neither can be NULL once "null
+    values" is 0, so they need no coalesce. funnel_stage was built from the
+    counts and is tested here on the timestamps: two derivations, not one
+    expression compared with itself.
+    """
+    # warehouse/ddl.sql, fact_session_funnel. Change them together.
+    ck_fsf_stage = """funnel_stage =
+        CASE WHEN purchase_at   IS NOT NULL THEN 3
+             WHEN first_cart_at IS NOT NULL THEN 2
+             WHEN first_view_at IS NOT NULL THEN 1
+             ELSE 0 END"""
+    ck_fsf_lags = """(view_to_cart_sec     IS NULL) = (first_view_at IS NULL OR first_cart_at IS NULL)
+        AND (cart_to_purchase_sec IS NULL) = (first_cart_at IS NULL OR purchase_at   IS NULL)"""
+    nullable = {"first_view_at", "first_cart_at", "purchase_at", "view_to_cart_sec", "cart_to_purchase_sec"}
+    any_null = F.lit(False)
+    for column in fact_session_funnel.columns:
+        if column not in nullable:
+            any_null = any_null | F.col(column).isNull()
+    stats = (
+        fact_session_funnel.agg(
+            F.count("*").alias("fact_session_funnel rows"),
+            F.count_if(any_null).alias("null values"),
+            (F.count("*") - F.count_distinct("session_sk")).alias("duplicate session_sk"),  # ddl pk_fsf
+            F.count_if(F.col("session_start_date") != F.to_date("session_start_at")).alias("session_start_date wrong"),
+            F.count_if(~F.expr(ck_fsf_stage)).alias("ck_fsf_stage violated"),
+            F.count_if(~F.expr(ck_fsf_lags)).alias("ck_fsf_lags violated"),
+            F.sum("view_count").alias("view_count total"),
+            F.sum("cart_count").alias("cart_count total"),
+            F.sum("purchase_count").alias("purchase_count total"),
+            F.sum("cart_value").alias("cart_value total"),
+            F.sum("purchase_value").alias("purchase_value total"),
+            # Information, not checks: popped below and printed after them.
+            F.count_if(F.col("funnel_stage") == 1).alias("stage 1"),
+            F.count_if(F.col("funnel_stage") == 2).alias("stage 2"),
+            F.count_if(F.col("funnel_stage") == 3).alias("stage 3"),
+            F.count_if("is_abandoned").alias("is_abandoned"),
+            F.count_if(F.col("view_to_cart_sec") < 0).alias("view_to_cart_sec < 0"),
+            F.count_if(F.col("cart_to_purchase_sec") < 0).alias("cart_to_purchase_sec < 0"),
+        )
+        .first()
+        .asDict()
+    )
+    stages = [stats.pop(f"stage {stage}") for stage in (1, 2, 3)]
+    abandoned = stats.pop("is_abandoned")
+    negative = [stats.pop("view_to_cart_sec < 0"), stats.pop("cart_to_purchase_sec < 0")]
+
+    # On the files written: user_sk is a version of the session's own user, in
+    # force on the day the session started. An equi-join on the unique user_sk,
+    # then a filter, as in check_fact_event; a user_sk missing from dim_user counts.
+    versions = dim_user.select("user_sk", F.col("user_id").alias("version_user_id"), "valid_from", "valid_to")
+    in_force = (
+        (F.col("version_user_id") == F.col("user_id"))
+        & (F.col("session_start_date") >= F.col("valid_from"))
+        & (F.col("session_start_date") < F.col("valid_to"))
+    )
+    stats["user_sk not in force"] = (
+        fact_session_funnel.join(versions, "user_sk", "left").where(~F.coalesce(in_force, F.lit(False))).count()
+    )
+
+    # Silver's own numbers, in one pass: one row per distinct user_session, and
+    # the same events and the same money as the measure columns add up to.
+    expected = (
+        silver.agg(
+            F.count_distinct("user_session").alias("fact_session_funnel rows"),
+            F.count_if(F.col("event_type") == "view").alias("view_count total"),
+            F.count_if(F.col("event_type") == "cart").alias("cart_count total"),
+            F.count_if(F.col("event_type") == "purchase").alias("purchase_count total"),
+            F.sum(F.when(F.col("event_type") == "cart", F.col("price"))).alias("cart_value total"),
+            F.sum(F.when(F.col("event_type") == "purchase", F.col("price"))).alias("purchase_value total"),
+        )
+        .first()
+        .asDict()
+    )
+    ok = True
+    for name, value in stats.items():
+        want = expected.get(name, 0)  # every other count must be 0
+        ok = ok and value == want
+        print(f"{name:<25}{value:>13,}   (expect {want:,})")
+    print(f"{'funnel_stage 1 / 2 / 3':<25}{stages[0]:>13,} / {stages[1]:,} / {stages[2]:,}")
+    print(f"{'is_abandoned':<25}{abandoned:>13,}   (a cart, no purchase: funnel_stage 2)")
+    print(f"{'negative lags':<25}{negative[0]:>13,} / {negative[1]:,}   (view->cart / cart->purchase, kept as measured)")
+    return ok
+
+
 # ---------------------------------------------------------------------------
 # The two writers. Both skip None, which is what lets the skeleton run, and
 # both return the table read back from disk, so the next step starts from the
@@ -545,6 +719,8 @@ def main():
         checks_ok = check_fact_event(
             tables["fact_event"], silver, events, tables["dim_event_type"], tables["dim_product"], tables["dim_user"]
         ) and checks_ok
+        print()
+        checks_ok = check_fact_session_funnel(tables["fact_session_funnel"], silver, tables["dim_user"]) and checks_ok
 
         # Step 6
         load_postgres(tables)

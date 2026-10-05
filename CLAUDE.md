@@ -157,9 +157,10 @@ install is `docs/SETUP_SPARK.md` step 9. The warehouse layer: the Postgres star 
 `processing/batch_warehouse.py`, the 5.6 build order, which imports
 `processing/dim_product.py` (`dim_product` SCD2 + `product_sk`) and `processing/dim_user.py`
 (`stg_rfm_snapshot` + `dim_user` SCD2 + `user_sk`) and builds `dim_event_type`,
-`dim_product`, `stg_rfm_snapshot`, `dim_user` and `fact_event` (4,754,015 rows, 31 date
-directories), so it prints `WAREHOUSE PARTIAL: 5 of 9 tables built`. Still stubs:
-`dim_date`, `dim_warehouse` and Postgres step 6 (Tin), `fact_session_funnel` and
+`dim_product`, `stg_rfm_snapshot`, `dim_user`, `fact_event` (4,754,015 rows, 31 date
+directories) and `fact_session_funnel` (970,797 rows, one per silver `user_session`,
+checked against `ck_fsf_stage` and `ck_fsf_lags`), so it prints `WAREHOUSE PARTIAL: 6 of
+9 tables built`. Still stubs: `dim_date`, `dim_warehouse` and Postgres step 6 (Tin), and
 `fact_inventory_daily` (W40). Inputs and checks: `ingestion/gen_catalog.py` (run before
 batch_warehouse), `ingestion/gen_inventory.py`, `checks/scd2_integrity.py`,
 `checks/fact_event_spot.py`. Cassandra: `serving/cassandra_schema.cql` +
@@ -190,5 +191,5 @@ Next task: Gate 1a's BR1 screenshots (the checklist at the end of
 `processing/streaming_gold.py` following `docs/STREAMING_PATTERN.md` and copy
 `serving/api/routers/br1.py` for their endpoint. The remaining stubs in
 `processing/batch_warehouse.py` stay with their owners: `dim_date`, `dim_warehouse` and
-step 6 (Tin), `fact_session_funnel` and `fact_inventory_daily` (W40). Replace the body,
-keep the signature, write through `write_dim`/`write_fact`.
+step 6 (Tin), and `fact_inventory_daily` (W40). Replace the body, keep the signature,
+write through `write_dim`/`write_fact`.
