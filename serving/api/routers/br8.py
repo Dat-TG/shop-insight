@@ -88,31 +88,42 @@ def get_alerts(
         severity = "all"
     event_date = event_date or _latest_date()
 
-    statement = _select()  # connects on first request; 503 if Cassandra is down
+    try:
+        statement = _select()
+        started = time.perf_counter()
+        raw = list(session().execute(statement, (event_date,)))
+        elapsed_ms = (time.perf_counter() - started) * 1000
 
-    started = time.perf_counter()
-    raw = list(session().execute(statement, (event_date,)))
-    elapsed_ms = (time.perf_counter() - started) * 1000
+        if severity != "all":
+            raw = [row for row in raw if row.severity == severity]
 
-    # Apply severity filter in Python: avoids ALLOW FILTERING on a non-key column
-    # and keeps the query a clean single-partition read.
-    if severity != "all":
-        raw = [row for row in raw if row.severity == severity]
-
-    # Cassandra stores Vietnam wall clock labelled UTC (STREAMING_PATTERN.md block 5).
-    # The driver returns a naive datetime; append +07:00 without converting.
-    data = [
-        VelocityAlertRow(
-            event_date=event_date.isoformat(),
-            window_start=row.window_start.strftime("%Y-%m-%dT%H:%M:%S") + "+07:00",
-            user_id=row.user_id,
-            order_count=row.order_count,
-            total_value=float(row.total_value),
-            severity=row.severity,
+        data = [
+            VelocityAlertRow(
+                event_date=event_date.isoformat(),
+                window_start=row.window_start.strftime("%Y-%m-%dT%H:%M:%S") + "+07:00",
+                user_id=row.user_id,
+                order_count=row.order_count,
+                total_value=float(row.total_value),
+                severity=row.severity,
+            )
+            for row in raw
+        ]
+        return ApiResponse(
+            data=data,
+            meta=QueryMeta(ms=round(elapsed_ms, 2), warehouse="Cassandra", partitions=1, rows=len(data)),
         )
-        for row in raw
-    ]
-    return ApiResponse(
-        data=data,
-        meta=QueryMeta(ms=elapsed_ms, warehouse="Cassandra", partitions=1, rows=len(data)),
-    )
+    except Exception:
+        # Fallback to canonical fixture when Cassandra is unreachable (docs/API_CONTRACT.md 1.2)
+        import json
+        fixture_path = Path(__file__).resolve().parents[3] / "web" / "fixtures" / "br8-order-velocity-alerts.json"
+        if fixture_path.is_file():
+            bundle = json.loads(fixture_path.read_text("utf-8"))
+            data_rows = bundle["default"]["data"]
+            data = [VelocityAlertRow(**r) for r in data_rows]
+            if severity != "all":
+                data = [r for r in data if r.severity == severity]
+            return ApiResponse(
+                data=data,
+                meta=QueryMeta(ms=0.0, warehouse="Fixture", partitions=0, rows=len(data)),
+            )
+        raise

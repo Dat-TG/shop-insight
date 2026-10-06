@@ -52,7 +52,12 @@ import time
 from pathlib import Path
 
 import psycopg2
-from cassandra.cluster import Cluster, NoHostAvailable
+try:
+    from cassandra.cluster import Cluster, NoHostAvailable
+except ImportError:
+    Cluster = None
+    class NoHostAvailable(Exception):
+        pass
 
 REPO = Path(__file__).resolve().parents[1]
 ENV_EXAMPLE = REPO / ".env.example"
