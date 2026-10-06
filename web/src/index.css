@@ -833,7 +833,68 @@ body {
 .data-table__row--danger td   { background: rgba(255, 69, 58, 0.08); }
 .data-table__row--warning td  { background: rgba(245, 166, 35, 0.07); }
 
+
+/* ── BR8 / BR6 Summary Cards ─────────────────────────────────────────────── */
+.br8-summary {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.br8-summary__card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 1rem 1.5rem;
+  background: var(--bg-surface-elev);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  min-width: 90px;
+  color: var(--text-secondary);
+  flex: 1;
+}
+
+.br8-summary__card--high {
+  border-color: rgba(255, 59, 48, 0.35);
+  background: rgba(255, 59, 48, 0.06);
+  color: #ff3b30;
+}
+
+.br8-summary__card--medium {
+  border-color: rgba(255, 159, 10, 0.35);
+  background: rgba(255, 159, 10, 0.06);
+  color: #ff9f0a;
+}
+
+.br8-summary__count {
+  font-family: var(--font-mono);
+  font-size: 1.65rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.br8-summary__card--high   .br8-summary__count { color: #ff3b30; }
+.br8-summary__card--medium .br8-summary__count { color: #ff9f0a; }
+
+.br8-summary__label {
+  font-size: 0.73rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+}
+
+/* Muted toolbar item (e.g. "Updated X s ago"). */
+.toolbar__item--muted {
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  gap: 5px;
+}
+
 /* ── Animation Utilities ──────────────────────────────────────────────── */
+
 @keyframes spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }

@@ -2,28 +2,117 @@
 
 Owner: Tin.
 
-Endpoint (placeholder):
-    GET /api/br8/alerts
+CONTRACT FROZEN — see docs/API_CONTRACT.md section 10.
 
-Now:  returns no rows, with meta.warehouse "Fixture" and partitions 0
-      (docs/API_CONTRACT.md section 1.2).
-Next: read Cassandra table ``order_velocity_alerts`` partitioned by
-      ``event_date``, clustered by ``window_start DESC``.
-      severity values: "low" | "medium" | "high".
-      Then set meta.warehouse to "Cassandra" (API_CONTRACT section 2).
+Endpoint
+--------
+GET /api/br8/alerts
+    Query parameters (all optional):
+        event_date : str  e.g. "2019-11-17"  (default: latest date in table)
+        severity   : str  "low" | "medium" | "high" | "all"  (default: "all")
+
+Reads Cassandra order_velocity_alerts, written by processing/streaming_gold.py
+start_br8(). One partition per event_date, clustered window_start DESC so the
+newest windows are at the head — no sort step. Severity filter applied in Python
+after fetching (not CQL ALLOW FILTERING) to keep the query a clean partition read.
+
+The table key: PRIMARY KEY ((event_date), window_start, user_id)
+CLUSTERING ORDER BY (window_start DESC, user_id ASC)
 """
 
-from fastapi import APIRouter
+import functools
+import time
+from datetime import date, datetime, timedelta, timezone
 
-from serving.api.models import ApiResponse, QueryMeta
+from fastapi import APIRouter, Query
+
+from serving.api.cassandra import session
+from serving.api.models import ApiResponse, QueryMeta, VelocityAlertRow
 
 router = APIRouter(prefix="/api/br8", tags=["BR8 — Order Velocity Alerts"])
 
+VIETNAM = timezone(timedelta(hours=7))
+# Maximum rows fetched per request. Enough for a day of minute-resolution alerts
+# at the sample dataset's purchase rate (about 1.5 purchases / minute → ~432 rows
+# per day if every minute had exactly one alert, much less in practice).
+_LIMIT = 500
+_SEVERITY_VALUES = {"low", "medium", "high", "all"}
 
-@router.get("/alerts", response_model=ApiResponse, summary="Order velocity alerts (placeholder)")
-def get_alerts() -> ApiResponse:
-    """Placeholder: returns no rows."""
+
+@functools.cache
+def _select():
+    """Prepared once on the first request: Cassandra parses it once, not per call."""
+    return session().prepare(
+        f"SELECT event_date, window_start, user_id, order_count, total_value, severity "
+        f"FROM order_velocity_alerts WHERE event_date = ? LIMIT {_LIMIT}"
+    )
+
+
+def _latest_date() -> date:
+    """Scan the first partition key to find the most recent event_date in the table.
+
+    Called only when event_date is omitted. Falls back to today (Vietnam time) if
+    the table is empty — which gives an empty 200, matching the contract.
+    """
+    try:
+        # system_schema.columns doesn't help here; we need the actual data.
+        # A token-range scan of one token range would be expensive; instead, let
+        # the caller pass a date whenever possible. This path fires only for the
+        # default case in a browser that hasn't set event_date.
+        rows = list(session().execute(
+            "SELECT DISTINCT event_date FROM order_velocity_alerts LIMIT 30"
+        ))
+        if rows:
+            return max(row.event_date for row in rows)
+    except Exception:
+        pass
+    return datetime.now(VIETNAM).date()
+
+
+@router.get(
+    "/alerts",
+    response_model=ApiResponse,
+    summary="Order velocity alerts — unusual purchase bursts per user",
+    description=(
+        "One partition of `order_velocity_alerts`, newest window first. "
+        "Rows are pre-sorted `window_start DESC, user_id ASC` by Cassandra. "
+        "`severity` values: `low` (1 order), `medium` (2–4), `high` (≥5). "
+        "Omit `event_date` to get the latest date available in the table."
+    ),
+)
+def get_alerts(
+    event_date: date | None = Query(None, description="Date YYYY-MM-DD (default: latest in table)"),
+    severity: str = Query("all", description='"low" | "medium" | "high" | "all"'),
+) -> ApiResponse:
+    if severity not in _SEVERITY_VALUES:
+        severity = "all"
+    event_date = event_date or _latest_date()
+
+    statement = _select()  # connects on first request; 503 if Cassandra is down
+
+    started = time.perf_counter()
+    raw = list(session().execute(statement, (event_date,)))
+    elapsed_ms = (time.perf_counter() - started) * 1000
+
+    # Apply severity filter in Python: avoids ALLOW FILTERING on a non-key column
+    # and keeps the query a clean single-partition read.
+    if severity != "all":
+        raw = [row for row in raw if row.severity == severity]
+
+    # Cassandra stores Vietnam wall clock labelled UTC (STREAMING_PATTERN.md block 5).
+    # The driver returns a naive datetime; append +07:00 without converting.
+    data = [
+        VelocityAlertRow(
+            event_date=event_date.isoformat(),
+            window_start=row.window_start.strftime("%Y-%m-%dT%H:%M:%S") + "+07:00",
+            user_id=row.user_id,
+            order_count=row.order_count,
+            total_value=float(row.total_value),
+            severity=row.severity,
+        )
+        for row in raw
+    ]
     return ApiResponse(
-        data=[],
-        meta=QueryMeta(ms=0.0, warehouse="Fixture", partitions=0, rows=0),
+        data=data,
+        meta=QueryMeta(ms=elapsed_ms, warehouse="Cassandra", partitions=1, rows=len(data)),
     )

@@ -1,4 +1,242 @@
-import UnderDevelopment from '../components/UnderDevelopment';
+import { useEffect, useState } from 'react';
+import {
+  AlertTriangle,
+  Calendar,
+  Filter as FilterIcon,
+  RefreshCw,
+  ShieldAlert,
+  User,
+} from 'lucide-react';
+import type { ApiResponse, VelocityAlertRow } from '../types/api';
+import QueryMeta from '../components/QueryMeta';
+
+const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8000';
+
+const REFRESH_MS = 10_000;
+const DEMO_DATE = '2019-11-17';
+
+const SEVERITY_CONFIG = {
+  high:   { label: 'High',   color: '#ff3b30', bg: 'rgba(255,59,48,0.12)',  badge: 'badge badge--danger'  },
+  medium: { label: 'Medium', color: '#ff9f0a', bg: 'rgba(255,159,10,0.10)', badge: 'badge badge--warning' },
+  low:    { label: 'Low',    color: '#30d158', bg: 'rgba(48,209,88,0.08)',  badge: 'badge badge--success' },
+} as const;
+
+const SEVERITY_OPTIONS = ['all', 'high', 'medium', 'low'];
+
+// window_start is Vietnam wall clock with +07:00. Read first 19 chars as UTC for
+// arithmetic; toISOString gives the same wall clock back.
+const toMs = (s: string) => Date.parse(`${s.slice(0, 19)}Z`);
+const hhmm = (ms: number) => new Date(ms).toISOString().slice(11, 16);
+
+const money = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
 export default function BR8Page() {
-  return <UnderDevelopment name="BR8 — Order Velocity Alerts" owner="Tin" eta="W41" />;
+  const [eventDate, setEventDate] = useState(DEMO_DATE);
+  const [severity, setSeverity]   = useState('all');
+
+  const [response, setResponse]   = useState<ApiResponse<VelocityAlertRow> | null>(null);
+  const [loading, setLoading]     = useState(false);
+  const [error, setError]         = useState<string | null>(null);
+  const [fetchedAt, setFetchedAt] = useState<number | null>(null);
+  const [now, setNow]             = useState(() => Date.now());
+
+  // Tick the "X s ago" label every second.
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    let controller: AbortController | null = null;
+    const load = () => {
+      controller?.abort();
+      controller = new AbortController();
+      const params = new URLSearchParams({ event_date: eventDate, severity });
+      setLoading(true);
+      setError(null);
+      fetch(`${API_BASE}/api/br8/alerts?${params}`, { signal: controller.signal })
+        .then(async r => {
+          if (!r.ok) {
+            const body = await r.json().catch(() => null);
+            throw new Error(body?.detail ?? `HTTP ${r.status}`);
+          }
+          return r.json() as Promise<ApiResponse<VelocityAlertRow>>;
+        })
+        .then(json => { setResponse(json); setFetchedAt(Date.now()); })
+        .catch(e => { if (e.name !== 'AbortError') setError(String(e)); })
+        .finally(() => setLoading(false));
+    };
+    load();
+    const id = setInterval(load, REFRESH_MS);
+    return () => { clearInterval(id); controller?.abort(); };
+  }, [eventDate, severity]);
+
+  const rows = response?.data ?? [];
+  const highCount   = rows.filter(r => r.severity === 'high').length;
+  const mediumCount = rows.filter(r => r.severity === 'medium').length;
+  const lowCount    = rows.filter(r => r.severity === 'low').length;
+  const secsAgo = fetchedAt ? Math.round((now - fetchedAt) / 1000) : null;
+
+  return (
+    <div className="page">
+      {/* ── Page Header ─────────────────────────────────────── */}
+      <div className="page-header">
+        <div className="page-header__left">
+          <div className="page-header__breadcrumb">
+            <span>Modules</span>
+            <span className="page-header__sep">/</span>
+            <span className="page-header__current">BR8</span>
+          </div>
+          <h1 className="page-header__title">Risk Alerts</h1>
+          <p className="page-header__description">
+            Users placing an abnormally high number of orders in a 5-minute window
+          </p>
+        </div>
+
+        {/* ── Toolbar ─────────────────────────────────────────── */}
+        <div className="toolbar">
+          <div className="toolbar__item">
+            <Calendar size={13} strokeWidth={1.75} className="toolbar__icon" />
+            <span className="toolbar__label">Date</span>
+            <input
+              type="date"
+              id="br8-date-input"
+              className="toolbar__input"
+              value={eventDate}
+              onChange={e => setEventDate(e.target.value)}
+            />
+          </div>
+          <div className="toolbar__sep" />
+          <div className="toolbar__item">
+            <FilterIcon size={13} strokeWidth={1.75} className="toolbar__icon" />
+            <span className="toolbar__label">Severity</span>
+            <select
+              id="br8-severity-select"
+              className="toolbar__select"
+              value={severity}
+              onChange={e => setSeverity(e.target.value)}
+            >
+              {SEVERITY_OPTIONS.map(s => (
+                <option key={s} value={s}>{s === 'all' ? 'All Severities' : s.charAt(0).toUpperCase() + s.slice(1)}</option>
+              ))}
+            </select>
+          </div>
+          <div className="toolbar__sep" />
+          <div className="toolbar__item toolbar__item--muted">
+            <RefreshCw size={12} strokeWidth={1.75} className={loading ? 'spin' : ''} />
+            <span className="toolbar__label">
+              {secsAgo === null ? 'Loading…' : `Updated ${secsAgo}s ago`}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Status Messages ─────────────────────────────────── */}
+      {loading && !response && (
+        <div className="status-banner">
+          <RefreshCw size={14} className="spin" />
+          <span>Querying Cassandra order_velocity_alerts…</span>
+        </div>
+      )}
+      {error && (
+        <div className="status-banner status-banner--error">
+          <AlertTriangle size={14} />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {/* ── Summary Cards ────────────────────────────────────── */}
+      {response && (
+        <div className="br8-summary">
+          <div className="br8-summary__card br8-summary__card--high">
+            <ShieldAlert size={18} />
+            <span className="br8-summary__count">{highCount}</span>
+            <span className="br8-summary__label">High</span>
+          </div>
+          <div className="br8-summary__card br8-summary__card--medium">
+            <AlertTriangle size={18} />
+            <span className="br8-summary__count">{mediumCount}</span>
+            <span className="br8-summary__label">Medium</span>
+          </div>
+          <div className="br8-summary__card br8-summary__card--low">
+            <User size={18} />
+            <span className="br8-summary__count">{lowCount}</span>
+            <span className="br8-summary__label">Low</span>
+          </div>
+          <div className="br8-summary__card">
+            <span className="br8-summary__count">{rows.length}</span>
+            <span className="br8-summary__label">Total Alerts</span>
+          </div>
+        </div>
+      )}
+
+      {/* ── Empty State ─────────────────────────────────────── */}
+      {!loading && !error && response && rows.length === 0 && (
+        <div className="empty-panel">
+          <ShieldAlert size={28} strokeWidth={1.5} className="empty-panel__icon" />
+          <h3 className="empty-panel__title">No Alerts</h3>
+          <p className="empty-panel__desc">
+            No order velocity alerts found for {eventDate}
+            {severity !== 'all' ? ` with severity "${severity}"` : ''}.
+            Try a different date or severity filter.
+          </p>
+        </div>
+      )}
+
+      {/* ── Alert Table ─────────────────────────────────────── */}
+      {!loading && !error && response && rows.length > 0 && (
+        <div className="content-stack">
+          <div className="panel">
+            <div className="panel__header">
+              <div className="panel__title-group">
+                <h2 className="panel__title">Alert Timeline — {eventDate}</h2>
+                <span className="panel__subtitle">
+                  Newest window first · 5-minute rolling count per user
+                </span>
+              </div>
+            </div>
+            <div className="panel__table-wrapper">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Window</th>
+                    <th>User ID</th>
+                    <th>Orders</th>
+                    <th>Total Value</th>
+                    <th>Severity</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((row, i) => {
+                    const sev = SEVERITY_CONFIG[row.severity as keyof typeof SEVERITY_CONFIG];
+                    const rowClass = row.severity === 'high'
+                      ? 'data-table__row--danger'
+                      : row.severity === 'medium'
+                        ? 'data-table__row--warning'
+                        : '';
+                    return (
+                      <tr key={`${row.window_start}-${row.user_id}-${i}`} className={rowClass}>
+                        <td className="font-mono text-secondary">{hhmm(toMs(row.window_start))}</td>
+                        <td className="data-table__numeric font-mono text-emphasis">{row.user_id}</td>
+                        <td className="data-table__numeric font-mono">{row.order_count}</td>
+                        <td className="data-table__numeric font-mono">${money.format(row.total_value)}</td>
+                        <td>
+                          <span className={sev?.badge ?? 'badge'}>
+                            {sev?.label ?? row.severity}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="panel__footer">
+              {response && <QueryMeta meta={response.meta} />}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
