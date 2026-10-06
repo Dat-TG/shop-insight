@@ -21,8 +21,10 @@ CLUSTERING ORDER BY (window_start DESC, user_id ASC)
 """
 
 import functools
+import json
 import time
 from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
 
 from fastapi import APIRouter, Query
 
@@ -37,6 +39,8 @@ VIETNAM = timezone(timedelta(hours=7))
 # per day if every minute had exactly one alert, much less in practice).
 _LIMIT = 500
 _SEVERITY_VALUES = {"low", "medium", "high", "all"}
+_REPO = Path(__file__).resolve().parents[3]
+_FIXTURE_PATH = _REPO / "web" / "fixtures" / "br8-order-velocity-alerts.json"
 
 
 @functools.cache
@@ -114,10 +118,8 @@ def get_alerts(
         )
     except Exception:
         # Fallback to canonical fixture when Cassandra is unreachable (docs/API_CONTRACT.md 1.2)
-        import json
-        fixture_path = Path(__file__).resolve().parents[3] / "web" / "fixtures" / "br8-order-velocity-alerts.json"
-        if fixture_path.is_file():
-            bundle = json.loads(fixture_path.read_text("utf-8"))
+        if _FIXTURE_PATH.is_file():
+            bundle = json.loads(_FIXTURE_PATH.read_text("utf-8"))
             data_rows = bundle["default"]["data"]
             data = [VelocityAlertRow(**r) for r in data_rows]
             if severity != "all":
