@@ -176,9 +176,35 @@ def read_silver(spark):
 def build_dim_date(spark):
     """dim_date: one row per day, 2019-10-01 .. 2019-12-31 (92 rows), is_holiday from seed/.
 
-    Columns and types: warehouse/ddl.sql, dim_date. Stub: returns None.
+    Owner: Tin. Reads seed/holidays_2019.csv through build_dim_date_rows() in
+    serving/load_star_postgres.py — the same data the Postgres loader uses, so both
+    stores hold byte-identical dim_date rows.
+
+    Columns and types: warehouse/ddl.sql, dim_date.
     """
-    return None
+    from serving.load_star_postgres import build_dim_date_rows
+    rows = build_dim_date_rows()
+    # createDataFrame reads Python ints as bigint; select() casts to the DDL types
+    # and lists columns in warehouse/ddl.sql order.
+    return (
+        spark.createDataFrame(rows)
+        .select(
+            F.col("date_key").cast("int"),
+            F.col("full_date").cast("date"),
+            F.col("year").cast("smallint"),
+            F.col("quarter").cast("smallint"),
+            F.col("month").cast("smallint"),
+            "month_name",
+            F.col("day_of_month").cast("smallint"),
+            F.col("day_of_week").cast("smallint"),
+            "day_name",
+            F.col("iso_week").cast("smallint"),
+            "is_weekend",
+            "is_holiday",
+            "holiday_name",
+            "holiday_type",
+        )
+    )
 
 
 def build_dim_event_type(spark):
@@ -201,9 +227,28 @@ def build_dim_event_type(spark):
 def build_dim_warehouse(spark):
     """dim_warehouse: the five warehouses, warehouse_id 1..5.
 
-    Columns and types: warehouse/ddl.sql, dim_warehouse. Stub: returns None.
+    Owner: Tin. Reads DIM_WAREHOUSE_ROWS from serving/load_star_postgres.py — the
+    same five rows the Postgres loader uses, so Parquet and Postgres are byte-identical.
+    warehouse_id is ALSO the Cassandra partition key of stockout_risk (SYSTEM_DESIGN 5.4).
+
+    Columns and types: warehouse/ddl.sql, dim_warehouse.
     """
-    return None
+    from serving.load_star_postgres import DIM_WAREHOUSE_ROWS
+    return (
+        spark.createDataFrame(DIM_WAREHOUSE_ROWS)
+        .select(
+            F.col("warehouse_key").cast("smallint"),
+            F.col("warehouse_id").cast("smallint"),
+            "warehouse_code",
+            "warehouse_name",
+            "city",
+            "region",
+            "warehouse_type",
+            F.col("lead_time_days").cast("smallint"),
+            F.col("capacity_units").cast("int"),
+            "is_active",
+        )
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -384,18 +429,149 @@ def build_fact_session_funnel(events):
 
 
 def build_fact_inventory_daily(spark, dim_product, dim_warehouse):
-    """Periodic snapshot, W40. One row per SKU x warehouse x day, from data/inventory/.
+    """Periodic snapshot, owner Tin (W40). One row per purchased SKU x warehouse x day.
 
-    product_sk is the version in force on snapshot_date. No event rows carry it
-    here, and the range join is banned here too (see the module docstring). So
-    expand each dim_product version into one row per day it covers,
-    sequence(valid_from, valid_to - 1) clipped to the inventory dates, and
-    equi-join on (product_id, snapshot_date). A product has no version before
-    its first event day, yet product_sk is NOT NULL: decide that case
-    explicitly. Columns: warehouse/ddl.sql, fact_inventory_daily.
-    Stub: returns None.
+    Grain: 12,659 purchased SKUs × 5 warehouses × 30 November days = 1,898,850 rows
+    (SYSTEM_DESIGN.md 5.5).  Only products with at least one purchase appear.
+
+    product_sk lookup without a range-join (banned — see module docstring):
+        Expand each dim_product version to one row per covered day, clipped to
+        the November window, then equi-join on (product_id, snapshot_date).
+        A product with no version before its first event day simply does not appear
+        in fact rows for those early days — the fact is dense within the purchased
+        universe but not outside it.
+
+    units_sold_that_day is re-derived from silver using the same warehouse
+    assignment rule as gen_inventory.py: warehouse_id = 1 + pmod(xxhash64(user_id), 5).
+    velocity_7d is the rolling 7-day sum of units_sold_that_day / 7 (NON-ADDITIVE).
+    days_to_stockout is NULL (not 9999) when velocity_7d = 0 — the Cassandra
+    sentinel 9999.0 is only written in batch_gold.py (SYSTEM_DESIGN 6.1).
+
+    Columns and types: warehouse/ddl.sql, fact_inventory_daily.
     """
-    return None
+    from datetime import date as _date
+
+    INVENTORY_DIR = REPO / "data" / "inventory"
+    if not list(INVENTORY_DIR.glob("*.parquet")):
+        print(f"  {INVENTORY_DIR} is empty — run python ingestion/gen_inventory.py first")
+        return None
+
+    FIRST_SNAP = _date(2019, 11, 1)
+    LAST_SNAP  = _date(2019, 11, 30)
+    WAREHOUSES = 5
+
+    # ── 1. Daily units_sold from silver purchases, by synthetic warehouse ──────
+    # Same warehouse assignment as gen_inventory.py so the two sources agree.
+    silver = spark.read.parquet(str(SILVER_DIR))
+    purchases = (
+        silver
+        .where(F.col("event_type") == "purchase")
+        .withColumn(
+            "warehouse_id",
+            (1 + F.pmod(F.xxhash64("user_id"), F.lit(WAREHOUSES))).cast("int"),
+        )
+    )
+    units_sold_daily = (
+        purchases
+        .groupBy(
+            F.col("product_id"),
+            F.col("warehouse_id"),
+            F.col("event_date").alias("snapshot_date"),
+        )
+        .agg(F.count("*").cast("int").alias("units_sold_that_day"))
+    )
+
+    # ── 2. Read inventory Parquet (stock_on_hand, reorder_point per SKU/wh/day) ─
+    inv = spark.read.parquet(str(INVENTORY_DIR))
+
+    # ── 3. Left-join units_sold; fill missing days with 0 ─────────────────────
+    inv = (
+        inv
+        .join(units_sold_daily, ["product_id", "warehouse_id", "snapshot_date"], "left")
+        .fillna(0, ["units_sold_that_day"])
+    )
+
+    # ── 4. velocity_7d: rolling 7-day average (NON-ADDITIVE; SYSTEM_DESIGN 5.5) ─
+    w7d = (
+        Window.partitionBy("product_id", "warehouse_id")
+        .orderBy("snapshot_date")
+        .rowsBetween(-6, 0)
+    )
+    inv = inv.withColumn(
+        "velocity_7d",
+        (F.sum("units_sold_that_day").over(w7d) / F.lit(7)).cast("float"),
+    )
+
+    # ── 5. days_to_stockout: NULL when velocity=0 (CHECK ck_fid_dts) ──────────
+    # The Cassandra sentinel 9999.0 is NOT applied here — only in batch_gold.py.
+    inv = inv.withColumn(
+        "days_to_stockout",
+        F.when(
+            F.col("velocity_7d") > 0,
+            (F.col("stock_on_hand") / F.col("velocity_7d")).cast("float"),
+        ),
+    )
+
+    # ── 6. is_below_reorder ───────────────────────────────────────────────────
+    inv = inv.withColumn(
+        "is_below_reorder",
+        F.col("stock_on_hand") <= F.col("reorder_point"),
+    )
+
+    # ── 7. product_sk via equi-join on (product_id, snapshot_date) ────────────
+    # Expand each dim_product version to one row per covered day, clipped to
+    # the November window. valid_to is exclusive (9999-12-31 = open), so the
+    # last valid day is valid_to - 1.
+    product_days = (
+        dim_product
+        .select(
+            "product_id",
+            F.col("product_sk").cast("bigint"),
+            F.col("valid_from"),
+            F.date_sub("valid_to", 1).alias("valid_to_incl"),
+        )
+        .withColumn("clip_from", F.greatest("valid_from", F.lit(FIRST_SNAP)))
+        .withColumn("clip_to",   F.least("valid_to_incl", F.lit(LAST_SNAP)))
+        .where(F.col("clip_from") <= F.col("clip_to"))
+        .withColumn(
+            "snapshot_date",
+            F.explode(F.sequence(F.col("clip_from"), F.col("clip_to"))),
+        )
+        .select("product_id", "product_sk", "snapshot_date")
+    )
+    inv = inv.join(product_days, ["product_id", "snapshot_date"], "inner")
+
+    # ── 8. warehouse_key (5 rows → always broadcast) ───────────────────────────
+    inv = inv.join(
+        F.broadcast(
+            dim_warehouse.select(
+                F.col("warehouse_id").cast("int"),
+                F.col("warehouse_key").cast("smallint"),
+            )
+        ),
+        "warehouse_id",
+    )
+
+    # ── 9. date_key ──────────────────────────────────────────────────────────
+    inv = inv.withColumn(
+        "date_key", F.date_format("snapshot_date", "yyyyMMdd").cast("int")
+    )
+
+    # ── 10. Final select in warehouse/ddl.sql column order ──────────────────
+    return inv.select(
+        F.col("product_sk").cast("bigint"),
+        F.col("product_id").cast("bigint"),
+        F.col("date_key").cast("int"),
+        F.col("warehouse_key").cast("smallint"),
+        F.col("warehouse_id").cast("smallint"),
+        F.col("snapshot_date").cast("date"),
+        F.col("stock_on_hand").cast("int"),
+        F.col("reorder_point").cast("int"),
+        F.col("units_sold_that_day").cast("int"),
+        F.col("velocity_7d"),          # already float, NON-ADDITIVE
+        F.col("days_to_stockout"),     # float or NULL; CHECK ck_fid_dts enforces
+        "is_below_reorder",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -671,20 +847,89 @@ def write_fact(df, path, partition_col, sort_col):
 
 
 def load_postgres(tables):
-    """Step 6, owner Tin (W40). Load the Postgres star from the tables written above.
+    """Step 6, owner Tin (W40). Load the Postgres star from the DataFrames above.
 
-    The loading functions belong in serving/load_star_postgres.py; this step
-    calls them with the DataFrames read back from Parquet, so Parquet and
-    Postgres hold the same rows. Until they exist, run
-    python serving/load_star_postgres.py on its own: it loads the three small
-    dimensions.
+    Loading functions live in serving/load_star_postgres.py. The three small
+    dimensions (dim_date, dim_event_type, dim_warehouse) call the same functions
+    as `python serving/load_star_postgres.py` so both write identical rows.
+    The SCD2 dims and facts are loaded from the DataFrames read back from Parquet,
+    so Parquet and Postgres are byte-identical.
 
-    Trap: collecting a timestamp column into Python shifts it into the laptop's
-    time zone (+07 here), which moves every event_time by 7 hours and makes
-    fact_event's ck_fact_date reject the rows. Cast to timestamp_ntz, or render
-    it with date_format, before it leaves Spark.
+    Trap: collecting a TimestampType into Python shifts it into the local timezone
+    (+07 here), which moves event_time by 7 hours and breaks fact_event's
+    ck_fact_date CHECK. The fix: date_format(event_time.cast('timestamp_ntz'), ...)
+    renders a naive string in the Spark session's UTC view before leaving Spark.
     """
-    print(f"{'postgres':<25}not loaded yet (step 6: Tin, W40)")
+    import psycopg2
+    from serving.check_infra import read_env
+    import serving.load_star_postgres as pg
+
+    env = read_env()
+    if "POSTGRES_DB" not in env:
+        print(f"{'postgres':<25}SKIPPED — no .env.example found")
+        return
+    try:
+        conn = psycopg2.connect(
+            host=env["POSTGRES_HOST"], port=int(env["POSTGRES_PORT"]),
+            dbname=env["POSTGRES_DB"],
+            user=env["POSTGRES_USER"], password=env["POSTGRES_PASSWORD"],
+            connect_timeout=5,
+        )
+    except psycopg2.OperationalError as exc:
+        print(
+            f"{'postgres':<25}SKIPPED — cannot connect: {str(exc).strip()[:60]}\n"
+            "  Start Postgres: docker compose up -d --wait postgres"
+        )
+        return
+
+    try:
+        # 6a. Small dimensions: same functions as standalone load_star_postgres.py main().
+        pg.upsert_dim_date(conn)
+        pg.upsert_dim_event_type(conn)
+        pg.upsert_dim_warehouse(conn)
+
+        # 6b. SCD2 dims from Parquet.
+        # attributes is a Spark StructType; to_json() serialises it to the JSON string
+        # that Postgres jsonb requires. The CHECK constraint verifies jsonb_typeof = 'object'.
+        if tables.get("dim_product") is not None:
+            df_dp = tables["dim_product"].withColumn("attributes", F.to_json("attributes"))
+            n = pg.load_dim_product(conn, df_dp.toLocalIterator())
+            print(f"  {'dim_product':<23}{n:>10,} rows")
+
+        if tables.get("dim_user") is not None:
+            n = pg.load_dim_user(conn, tables["dim_user"].toLocalIterator())
+            print(f"  {'dim_user':<23}{n:>10,} rows")
+
+        # 6c. Facts: TRUNCATE + bulk insert (same result as Parquet overwrite).
+        # fact_event: render event_time as a naive string before collecting to avoid
+        # the +07 shift that TimestampType collection applies on this laptop.
+        if tables.get("fact_event") is not None:
+            df_fe = tables["fact_event"].withColumn(
+                "event_time",
+                F.date_format(
+                    F.col("event_time").cast("timestamp_ntz"),
+                    "yyyy-MM-dd HH:mm:ss",
+                ),
+            )
+            n = pg.load_fact_event(conn, df_fe.toLocalIterator())
+            print(f"  {'fact_event':<23}{n:>10,} rows")
+
+        if tables.get("fact_session_funnel") is not None:
+            n = pg.load_fact_session_funnel(conn, tables["fact_session_funnel"].toLocalIterator())
+            print(f"  {'fact_session_funnel':<23}{n:>10,} rows")
+        else:
+            print(f"  {'fact_session_funnel':<23}not built yet, skipped")
+
+        if tables.get("fact_inventory_daily") is not None:
+            n = pg.load_fact_inventory_daily(conn, tables["fact_inventory_daily"].toLocalIterator())
+            print(f"  {'fact_inventory_daily':<23}{n:>10,} rows")
+        else:
+            print(f"  {'fact_inventory_daily':<23}not built yet, skipped")
+
+    finally:
+        conn.close()
+
+    print(f"{'postgres':<25}loaded")
 
 
 def main():
