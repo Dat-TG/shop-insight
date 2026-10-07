@@ -2,7 +2,7 @@
 
 Owner: Dat. W38 skeleton and fixture wiring: Tin.
 
-CONTRACT FROZEN — see docs/API_CONTRACT.md.
+CONTRACT FROZEN — see docs/API_CONTRACT.md section 4.
 
 Endpoint
 --------
@@ -16,69 +16,98 @@ Response shape
 --------------
 {
   "data": [
-    {
-      "step":             "view" | "cart" | "purchase",
-      "count":            97489,
-      "session_count":    67320,
-      "conversion_rate":  1.0    // rate relative to first step (view)
-    },
-    ...
+    { "step": "view",     "count": 4451411, "session_count": 966143, "conversion_rate": 1.0 },
+    { "step": "cart",     "count": 213486,  "session_count": 131498, "conversion_rate": 0.1361 },
+    { "step": "purchase", "count": 64883,   "session_count": 54676,  "conversion_rate": 0.0566 }
   ],
-  "meta": {
-    "ms":         18.3,
-    "warehouse":  "Parquet",
-    "partitions": 30,
-    "rows":       3
-  }
+  "meta": { "ms": 16.1, "warehouse": "Parquet", "partitions": 30, "rows": 3 }
 }
 
-Storage mapping: Parquet -> data/gold/funnel_daily/
+Storage mapping: Parquet -> data/gold/funnel_daily/event_date=YYYY-MM-DD/
 Gold columns:    event_date, category_l1, views, carts, purchases,
-                 cr_view_to_cart, cr_cart_to_purchase
+                 cr_view_to_cart, cr_cart_to_purchase,
+                 view_events, cart_events, purchase_events
 
-funnel_stage source values (fact_session_funnel):
-    0 = session has no recorded events (not surfaced in API)
-    1 = furthest milestone is view
-    2 = furthest milestone is cart
-    3 = furthest milestone is purchase (= conversion)
+batch_gold.py builds funnel_daily from fact_session_funnel. event_date is the
+day the session started, in Vietnam time. views/carts/purchases count sessions
+whose funnel_stage reached the step (>= 1, >= 2, = 3); the *_events columns
+count raw events. category_l1 = "all" is a stored row, not a sum of the
+categories, because a session that touches two categories counts in both.
 
-Now:  returns fixture data from web/fixtures/br2-funnel-daily.json -> "default",
-      with meta.warehouse "Fixture" and partitions 0, because nothing was read
-      from storage (docs/API_CONTRACT.md section 1.2). The fixture file itself
-      carries the production meta shown above.
-Next: replace _load_fixture() with DuckDB over data/gold/funnel_daily/, then
-      set meta.warehouse to "Parquet" (API_CONTRACT section 2). Postgres never
-      serves a screen (SYSTEM_DESIGN section 12).
+For a date range the router SUMS the counts over the days and recomputes the
+rates from the sums. It never averages cr_view_to_cart or cr_cart_to_purchase:
+the mean of daily rates is not the rate of the range.
+
+    count           = *_events          (raw events at the step)
+    session_count   = views/carts/purchases
+    conversion_rate = session_count / view session_count, view = 1.0
+
+partitions is the number of event_date directories read. A malformed date,
+start_date after end_date, a range outside the data, or an unknown category
+returns HTTP 200 with data=[] (API_CONTRACT section 1.3).
 """
 
 from __future__ import annotations
 
-import json
 import time
+from datetime import date
 from pathlib import Path
-from typing import Any
 
+import duckdb
 from fastapi import APIRouter, Query
 
 from serving.api.models import ApiResponse, QueryMeta
 
 router = APIRouter(prefix="/api/br2", tags=["BR2 — Conversion Funnel"])
 
-# Path to the canonical fixture bundle (relative to the repository root).
 _REPO = Path(__file__).resolve().parents[3]
-_FIXTURE_PATH = _REPO / "web" / "fixtures" / "br2-funnel-daily.json"
+_GOLD_DIR = _REPO / "data" / "gold" / "funnel_daily"
+# Rates are recomputed from the summed counts below; cr_* is never averaged.
+_QUERY = """
+    SELECT sum(views) AS views, sum(carts) AS carts, sum(purchases) AS purchases,
+           sum(view_events) AS view_events, sum(cart_events) AS cart_events,
+           sum(purchase_events) AS purchase_events
+    FROM read_parquet($files)
+    WHERE category_l1 = $category_l1
+"""
 
 
-def _load_fixture(empty: bool = False) -> list[dict[str, Any]]:
-    """Return fixture data rows from the canonical bundle.
+def _partitions(start_date: str, end_date: str) -> list[Path]:
+    """The event_date directories inside [start_date, end_date], or [] for bad input."""
+    try:
+        start, end = date.fromisoformat(start_date), date.fromisoformat(end_date)
+    except ValueError:
+        return []
+    return [
+        path
+        for path in sorted(_GOLD_DIR.glob("event_date=*"))
+        if start <= date.fromisoformat(path.name.removeprefix("event_date=")) <= end
+    ]
 
-    Reads the "empty" scenario when empty=True, otherwise "default".
-    Next: swap this function body for DuckDB over data/gold/funnel_daily/.
-    """
-    with open(_FIXTURE_PATH) as fh:
-        bundle = json.load(fh)
-    scenario = "empty" if empty else "default"
-    return bundle[scenario]["data"]
+
+def _read_funnel(partitions: list[Path], category_l1: str) -> list[dict[str, object]]:
+    files = [str(path / "*.parquet") for path in partitions]
+    with duckdb.connect() as con:
+        cursor = con.execute(_QUERY, {"files": files, "category_l1": category_l1})
+        columns = [column[0] for column in cursor.description]
+        sums = dict(zip(columns, cursor.fetchone()))
+    views = sums["views"]
+    if not views:  # no row matched: an unknown category
+        return []
+    steps = [
+        ("view", "view_events", "views"),
+        ("cart", "cart_events", "carts"),
+        ("purchase", "purchase_events", "purchases"),
+    ]
+    return [
+        {
+            "step": step,
+            "count": sums[events],
+            "session_count": sums[sessions],
+            "conversion_rate": round(sums[sessions] / views, 4),
+        }
+        for step, events, sessions in steps
+    ]
 
 
 @router.get(
@@ -88,9 +117,9 @@ def _load_fixture(empty: bool = False) -> list[dict[str, Any]]:
     description=(
         "Returns the three-step funnel aggregated over the requested date range "
         "and optional category filter.  Each row carries the raw event count, the "
-        "session count, and the conversion rate relative to the view step.\n\n"
-        "**Now**: returns fixture data (warehouse=Fixture, partitions=0).  "
-        "**Next**: DuckDB over `data/gold/funnel_daily/`, then warehouse=Parquet."
+        "number of sessions that reached the step, and the session conversion rate "
+        "relative to the view step.\n\n"
+        "Reads `data/gold/funnel_daily/` with DuckDB (warehouse=Parquet)."
     ),
 )
 def get_funnel(
@@ -100,8 +129,8 @@ def get_funnel(
 ) -> ApiResponse:
     t0 = time.perf_counter()
 
-    # Fixture for now.  Next: DuckDB over data/gold/funnel_daily/.
-    data = _load_fixture(empty=False)
+    partitions = _partitions(start_date, end_date)
+    data = _read_funnel(partitions, category_l1) if partitions else []  # read_parquet([]) raises
 
     elapsed_ms = (time.perf_counter() - t0) * 1000
 
@@ -109,8 +138,8 @@ def get_funnel(
         data=data,
         meta=QueryMeta(
             ms=round(elapsed_ms, 2),
-            warehouse="Fixture",  # "Parquet" once DuckDB reads data/gold/funnel_daily/
-            partitions=0,
+            warehouse="Parquet",
+            partitions=len(partitions),
             rows=len(data),
         ),
     )

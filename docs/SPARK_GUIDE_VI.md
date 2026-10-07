@@ -1330,7 +1330,7 @@ dụng đúng bảy quy tắc của silver:
 - phải có `user_session`, vì đó là khoá của BR5.
 
 Quên dời giờ thì `gmv_by_minute` xếp một sự kiện lúc 17:00–24:00 UTC vào ngày UTC của nó,
-trong khi `funnel_daily` (dựng bằng batch, từ silver) xếp nó vào ngày hôm sau, và hai màn hình
+trong khi `funnel_daily` (dựng bằng batch, từ `fact_session_funnel`) xếp nó vào ngày hôm sau, và hai màn hình
 cãi nhau xem sự kiện thuộc ngày nào.
 
 Import một hàm không biến job streaming thành người ghi silver. Xem bẫy A bên dưới.

@@ -12,10 +12,25 @@ import {
   Filter as FilterIcon,
   RefreshCw,
 } from 'lucide-react';
-import type { ApiResponse, FunnelRow } from '../types/api';
+import type { ApiResponse, FunnelRow, QueryMeta as QueryMetaType } from '../types/api';
 import QueryMeta from '../components/QueryMeta';
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8000';
+
+// funnel_daily holds 31 session start dates (Vietnam time). 1 Dec is the last
+// seven hours of 30 Nov UTC, so it is a partial day; the default range leaves it out.
+const FIRST_DAY = '2019-11-01';
+const LAST_DAY = '2019-12-01';
+// The source file has almost no purchase between 15 Nov 01:09 and 16 Nov 15:32
+// Vietnam time (SYSTEM_DESIGN 3.1). It is in the data, not a pipeline bug.
+const HOLE_DAY = '2019-11-15';
+
+// Silver's 14 category_l1 values, busiest first, copied from BR1Page. 'all' is a
+// stored row in funnel_daily, not a sum made here.
+const CATEGORIES = [
+  'electronics', 'unknown', 'appliances', 'computers', 'apparel', 'furniture', 'auto',
+  'construction', 'kids', 'accessories', 'sport', 'medicine', 'country_yard', 'stationery',
+];
 
 // Apple-inspired restrained color scheme for data steps (Monochrome / Apple Blue / Slate)
 const STEP_CONFIG: Record<string, { label: string; icon: typeof Eye; color: string; tint: string }> = {
@@ -39,8 +54,59 @@ const STEP_CONFIG: Record<string, { label: string; icon: typeof Eye; color: stri
   },
 };
 
+// A rate with a zero denominator is "—", never NaN: a small category on one day
+// can have sessions that viewed and none that reached the cart.
+function pct(numerator: number, denominator: number) {
+  return denominator > 0 ? `${((numerator / denominator) * 100).toFixed(2)}%` : '—';
+}
+
+function sessionsAt(rows: FunnelRow[], step: FunnelRow['step']) {
+  return rows.find(r => r.step === step)?.session_count ?? 0;
+}
+
+async function fetchFunnel(
+  startDate: string, endDate: string, category: string, signal: AbortSignal,
+): Promise<ApiResponse<FunnelRow>> {
+  const query = new URLSearchParams({ start_date: startDate, end_date: endDate, category_l1: category });
+  const r = await fetch(`${API_BASE}/api/br2/funnel?${query}`, { signal });
+  if (!r.ok) {
+    const body = await r.json().catch(() => null);
+    throw new Error(body?.detail ?? `HTTP ${r.status}`);
+  }
+  return r.json() as Promise<ApiResponse<FunnelRow>>;
+}
+
+interface CategoryFunnel {
+  category: string;
+  rows: FunnelRow[];
+}
+
+interface CategoryTable {
+  entries: CategoryFunnel[];
+  meta: QueryMetaType;
+}
+
+// One request per category, as BR4 builds its heatmap: the contract returns the
+// three steps of one category, so the table is 15 calls to the same endpoint. The
+// footer shows the slowest call, the most partitions any call read, and all rows.
+function buildCategoryTable(responses: ApiResponse<FunnelRow>[], categories: string[]): CategoryTable {
+  const entries = responses.map((response, i) => ({ category: categories[i], rows: response.data }));
+  const [all, ...rest] = entries;
+  rest.sort((a, b) => sessionsAt(b.rows, 'view') - sessionsAt(a.rows, 'view'));
+  const metas = responses.map(response => response.meta);
+  return {
+    entries: [all, ...rest],
+    meta: {
+      ms: Math.max(...metas.map(meta => meta.ms)),
+      warehouse: metas[0].warehouse,
+      partitions: Math.max(...metas.map(meta => meta.partitions)),
+      rows: metas.reduce((sum, meta) => sum + meta.rows, 0),
+    },
+  };
+}
+
 export default function BR2Page() {
-  const [startDate, setStartDate] = useState('2019-11-01');
+  const [startDate, setStartDate] = useState(FIRST_DAY);
   const [endDate, setEndDate]     = useState('2019-11-30');
   const [category, setCategory]   = useState('all');
 
@@ -48,38 +114,59 @@ export default function BR2Page() {
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState<string | null>(null);
 
-  const fetchFunnel = () => {
+  const [byCategory, setByCategory]     = useState<CategoryTable | null>(null);
+  const [categoryError, setCategoryError] = useState<string | null>(null);
+
+  // The funnel for the selected category. A filter change aborts a request still
+  // in flight, so a late answer for the previous filter never lands on screen.
+  useEffect(() => {
+    const controller = new AbortController();
     setLoading(true);
     setError(null);
-    const url = `${API_BASE}/api/br2/funnel?start_date=${startDate}&end_date=${endDate}&category_l1=${category}`;
-    fetch(url)
-      .then(r => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.json() as Promise<ApiResponse<FunnelRow>>;
+    fetchFunnel(startDate, endDate, category, controller.signal)
+      .then(json => {
+        setResponse(json);
+        setLoading(false);
       })
-      .then(json => setResponse(json))
-      .catch(e => setError(String(e)))
-      .finally(() => setLoading(false));
-  };
+      .catch(e => {
+        if (e.name === 'AbortError') return;
+        setError(e.message ?? String(e));
+        setLoading(false);
+      });
+    return () => controller.abort();
+  }, [startDate, endDate, category]);
 
-  useEffect(() => { fetchFunnel(); }, [startDate, endDate, category]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The by-category table depends on the dates only.
+  useEffect(() => {
+    const controller = new AbortController();
+    const categories = ['all', ...CATEGORIES];
+    setByCategory(null);
+    setCategoryError(null);
+    Promise.all(categories.map(c => fetchFunnel(startDate, endDate, c, controller.signal)))
+      .then(responses => setByCategory(buildCategoryTable(responses, categories)))
+      .catch(e => {
+        if (e.name !== 'AbortError') setCategoryError(e.message ?? String(e));
+      });
+    return () => controller.abort();
+  }, [startDate, endDate]);
 
   const dataRows = response?.data ?? [];
 
-  const viewCount = dataRows.find(r => r.step === 'view')?.count ?? 0;
-  const cartCount = dataRows.find(r => r.step === 'cart')?.count ?? 0;
-  const purchaseCount = dataRows.find(r => r.step === 'purchase')?.count ?? 0;
+  // Sessions, not events, drive every rate: a session counts at every step up to
+  // the furthest it reached, so the bars always decrease. Event counts do not:
+  // on 1-7 Nov the file has more purchase events than cart events.
+  const viewSessions = sessionsAt(dataRows, 'view');
+  const cartSessions = sessionsAt(dataRows, 'cart');
+  const purchaseSessions = sessionsAt(dataRows, 'purchase');
 
-  const viewToCartPct = viewCount > 0 ? ((cartCount / viewCount) * 100).toFixed(2) : '0.00';
-  const cartToPurchasePct = cartCount > 0 ? ((purchaseCount / cartCount) * 100).toFixed(2) : '0.00';
-  const overallConvPct = viewCount > 0 ? ((purchaseCount / viewCount) * 100).toFixed(2) : '0.00';
+  const coversHole = startDate <= HOLE_DAY && HOLE_DAY <= endDate;
 
   const chartData = dataRows.map(row => {
     const config = STEP_CONFIG[row.step] ?? { label: row.step, color: '#86868b' };
     return {
       ...row,
       displayName: config.label,
-      pctOfViews: `${(row.conversion_rate * 100).toFixed(2)}%`,
+      pctOfSessions: `${(row.conversion_rate * 100).toFixed(2)}%`,
     };
   });
 
@@ -95,7 +182,7 @@ export default function BR2Page() {
           </div>
           <h1 className="page-header__title">Conversion Funnel</h1>
           <p className="page-header__description">
-            Analysis of customer progression and drop-off from item impression to checkout
+            Sessions that reached view, cart and purchase, by the day the session started (Vietnam time)
           </p>
         </div>
 
@@ -108,8 +195,8 @@ export default function BR2Page() {
               type="date"
               className="toolbar__input"
               value={startDate}
-              min="2019-11-01"
-              max="2019-11-30"
+              min={FIRST_DAY}
+              max={LAST_DAY}
               onChange={e => setStartDate(e.target.value)}
             />
           </div>
@@ -122,8 +209,8 @@ export default function BR2Page() {
               type="date"
               className="toolbar__input"
               value={endDate}
-              min="2019-11-01"
-              max="2019-11-30"
+              min={FIRST_DAY}
+              max={LAST_DAY}
               onChange={e => setEndDate(e.target.value)}
             />
           </div>
@@ -139,10 +226,9 @@ export default function BR2Page() {
               onChange={e => setCategory(e.target.value)}
             >
               <option value="all">All Categories</option>
-              <option value="electronics">Electronics</option>
-              <option value="appliances">Appliances</option>
-              <option value="computers">Computers</option>
-              <option value="furniture">Furniture</option>
+              {CATEGORIES.map(c => (
+                <option key={c} value={c}>{c}</option>
+              ))}
             </select>
           </div>
         </div>
@@ -166,10 +252,14 @@ export default function BR2Page() {
       {!loading && !error && response && dataRows.length === 0 && (
         <div className="empty-panel">
           <Search size={28} strokeWidth={1.5} className="empty-panel__icon" />
-          <h3 className="empty-panel__title">No Events Recorded</h3>
+          <h3 className="empty-panel__title">No Sessions Recorded</h3>
           <p className="empty-panel__desc">
-            No funnel records matched your selected date range and category filter.
+            No session started in this date range and category. funnel_daily holds
+            sessions that started from {FIRST_DAY} to {LAST_DAY}.
           </p>
+          <div className="panel__footer">
+            <QueryMeta meta={response.meta} />
+          </div>
         </div>
       )}
 
@@ -179,27 +269,27 @@ export default function BR2Page() {
           {/* ── Minimalist KPI Ribbon (Single unified strip of 4 cells) ── */}
           <div className="kpi-ribbon">
             <div className="kpi-ribbon__cell">
-              <span className="kpi-ribbon__label">Total Views</span>
-              <div className="kpi-ribbon__value">{viewCount.toLocaleString()}</div>
+              <span className="kpi-ribbon__label">Sessions</span>
+              <div className="kpi-ribbon__value">{viewSessions.toLocaleString()}</div>
               <span className="kpi-ribbon__hint">100% Top of Funnel</span>
             </div>
 
             <div className="kpi-ribbon__cell">
-              <span className="kpi-ribbon__label">Cart Additions</span>
-              <div className="kpi-ribbon__value">{cartCount.toLocaleString()}</div>
-              <span className="kpi-ribbon__hint">{viewToCartPct}% view-to-cart</span>
+              <span className="kpi-ribbon__label">Reached Cart</span>
+              <div className="kpi-ribbon__value">{cartSessions.toLocaleString()}</div>
+              <span className="kpi-ribbon__hint">{pct(cartSessions, viewSessions)} view-to-cart</span>
             </div>
 
             <div className="kpi-ribbon__cell">
-              <span className="kpi-ribbon__label">Purchases</span>
-              <div className="kpi-ribbon__value">{purchaseCount.toLocaleString()}</div>
-              <span className="kpi-ribbon__hint">{cartToPurchasePct}% cart-to-buy</span>
+              <span className="kpi-ribbon__label">Purchased</span>
+              <div className="kpi-ribbon__value">{purchaseSessions.toLocaleString()}</div>
+              <span className="kpi-ribbon__hint">{pct(purchaseSessions, cartSessions)} cart-to-buy</span>
             </div>
 
             <div className="kpi-ribbon__cell">
               <span className="kpi-ribbon__label">Overall Conversion</span>
-              <div className="kpi-ribbon__value">{overallConvPct}%</div>
-              <span className="kpi-ribbon__hint">End-to-end efficiency</span>
+              <div className="kpi-ribbon__value">{pct(purchaseSessions, viewSessions)}</div>
+              <span className="kpi-ribbon__hint">Purchased / sessions</span>
             </div>
           </div>
 
@@ -246,15 +336,21 @@ export default function BR2Page() {
                           <div className="chart-tooltip">
                             <div className="chart-tooltip__title">{data.displayName} Stage</div>
                             <div className="chart-tooltip__item">
-                              <span className="chart-tooltip__label">Volume:</span>
+                              <span className="chart-tooltip__label">Sessions:</span>
+                              <span className="chart-tooltip__value font-mono">
+                                {data.session_count.toLocaleString()}
+                              </span>
+                            </div>
+                            <div className="chart-tooltip__item">
+                              <span className="chart-tooltip__label">Events:</span>
                               <span className="chart-tooltip__value font-mono">
                                 {data.count.toLocaleString()}
                               </span>
                             </div>
                             <div className="chart-tooltip__item">
-                              <span className="chart-tooltip__label">Retention:</span>
+                              <span className="chart-tooltip__label">Of sessions:</span>
                               <span className="chart-tooltip__value font-mono">
-                                {data.pctOfViews}
+                                {data.pctOfSessions}
                               </span>
                             </div>
                           </div>
@@ -263,7 +359,7 @@ export default function BR2Page() {
                       return null;
                     }}
                   />
-                  <Bar dataKey="count" radius={[0, 4, 4, 0]} barSize={26}>
+                  <Bar dataKey="session_count" radius={[0, 4, 4, 0]} barSize={26} isAnimationActive={false}>
                     {chartData.map(row => (
                       <Cell
                         key={row.step}
@@ -281,9 +377,9 @@ export default function BR2Page() {
                 <thead>
                   <tr>
                     <th>Funnel Stage</th>
-                    <th>Events Count</th>
-                    <th>Unique Sessions</th>
-                    <th>Stage Retention</th>
+                    <th>Sessions</th>
+                    <th>Events</th>
+                    <th>Of Sessions</th>
                     <th>Drop-off</th>
                   </tr>
                 </thead>
@@ -291,10 +387,10 @@ export default function BR2Page() {
                   {dataRows.map((row, idx) => {
                     const stepCfg = STEP_CONFIG[row.step];
                     const StepIcon = stepCfg?.icon ?? Eye;
-                    const prevCount = idx > 0 ? dataRows[idx - 1].count : row.count;
-                    const dropOffPct = idx === 0
-                      ? '0.00%'
-                      : `${(((prevCount - row.count) / prevCount) * 100).toFixed(2)}%`;
+                    const previous = idx > 0 ? dataRows[idx - 1].session_count : 0;
+                    const dropOff = previous > 0
+                      ? `-${(((previous - row.session_count) / previous) * 100).toFixed(2)}%`
+                      : '—';
 
                     return (
                       <tr key={row.step}>
@@ -306,17 +402,17 @@ export default function BR2Page() {
                           <StepIcon size={14} strokeWidth={1.75} className="data-table__step-icon" />
                           <span className="data-table__step-name">{stepCfg?.label ?? row.step}</span>
                         </td>
-                        <td className="data-table__numeric font-mono">
-                          {row.count.toLocaleString()}
-                        </td>
-                        <td className="data-table__numeric font-mono text-secondary">
+                        <td className="data-table__numeric font-mono text-emphasis">
                           {row.session_count.toLocaleString()}
                         </td>
-                        <td className="data-table__numeric font-mono text-emphasis">
+                        <td className="data-table__numeric font-mono text-secondary">
+                          {row.count.toLocaleString()}
+                        </td>
+                        <td className="data-table__numeric font-mono">
                           {(row.conversion_rate * 100).toFixed(2)}%
                         </td>
                         <td className="data-table__numeric font-mono text-muted">
-                          {idx === 0 ? '—' : `-${dropOffPct}`}
+                          {dropOff}
                         </td>
                       </tr>
                     );
@@ -325,6 +421,16 @@ export default function BR2Page() {
               </table>
             </div>
 
+            <p className="panel__note">
+              A session counts at every step up to the furthest one it reached, so a
+              purchase with no cart event still counts as reaching the cart. Events are
+              shown for reference.
+              {coversHole && (
+                <> The source file has almost no purchase from 15 Nov 01:09 to 16 Nov 15:32
+                  (Vietnam time), so 15 Nov converts at almost zero.</>
+              )}
+            </p>
+
             {/* ── Telemetry Footer ───────────────────────────── */}
             <div className="panel__footer">
               <QueryMeta meta={response.meta} />
@@ -332,7 +438,77 @@ export default function BR2Page() {
           </div>
         </div>
       )}
+
+      {/* ── By-category conversion table ───────────────────── */}
+      {categoryError && (
+        <div className="status-banner status-banner--error">
+          <span>Failed to query the category table: {categoryError}</span>
+        </div>
+      )}
+
+      {byCategory && (
+        <div className="panel">
+          <div className="panel__header">
+            <div className="panel__title-group">
+              <h2 className="panel__title">Conversion by Category</h2>
+              <span className="panel__subtitle">
+                {startDate} — {endDate} · select a row to filter the funnel
+              </span>
+            </div>
+          </div>
+
+          <div className="panel__table-wrapper">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Category</th>
+                  <th>Sessions</th>
+                  <th>Reached Cart</th>
+                  <th>Purchased</th>
+                  <th>View → Cart</th>
+                  <th>Cart → Purchase</th>
+                </tr>
+              </thead>
+              <tbody>
+                {byCategory.entries.map(entry => {
+                  const views = sessionsAt(entry.rows, 'view');
+                  const carts = sessionsAt(entry.rows, 'cart');
+                  const purchases = sessionsAt(entry.rows, 'purchase');
+                  const selected = entry.category === category;
+                  return (
+                    <tr key={entry.category} className={selected ? 'data-table__row--selected' : undefined}>
+                      <td>
+                        <button
+                          type="button"
+                          className="category-button"
+                          aria-pressed={selected}
+                          onClick={() => setCategory(entry.category)}
+                        >
+                          {entry.category === 'all' ? 'All Categories' : entry.category}
+                        </button>
+                      </td>
+                      <td className="font-mono text-emphasis">{entry.rows.length ? views.toLocaleString() : '—'}</td>
+                      <td className="font-mono">{entry.rows.length ? carts.toLocaleString() : '—'}</td>
+                      <td className="font-mono">{entry.rows.length ? purchases.toLocaleString() : '—'}</td>
+                      <td className="font-mono">{pct(carts, views)}</td>
+                      <td className="font-mono">{pct(purchases, carts)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <p className="panel__note">
+            A session that touches two categories counts in both, at the step it reached
+            in each, so the category rows do not add up to All Categories.
+          </p>
+
+          <div className="panel__footer">
+            <QueryMeta meta={byCategory.meta} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
-

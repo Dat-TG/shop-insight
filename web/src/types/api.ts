@@ -94,7 +94,9 @@ export interface GmvRow {
 // =============================================================================
 // BR2 — Conversion Funnel  (Parquet: funnel_daily)
 // Gold columns: event_date, category_l1, views, carts, purchases,
-//               cr_view_to_cart, cr_cart_to_purchase
+//               cr_view_to_cart, cr_cart_to_purchase,
+//               view_events, cart_events, purchase_events
+// views/carts/purchases count sessions, *_events count raw events (contract 4).
 // =============================================================================
 /**
  * One row of the three-stage conversion funnel API response.
@@ -106,7 +108,9 @@ export interface GmvRow {
  *   3 = furthest stage is purchase (= conversion)
  *
  * The API returns exactly 3 rows per request, one per funnel step.
- * conversion_rate is relative to the "view" step (view = 1.0).
+ * count is the *_events sum, session_count the views/carts/purchases sum,
+ * over the requested days. conversion_rate is session_count relative to the
+ * "view" step (view = 1.0), recomputed from those sums, never averaged.
  */
 export interface FunnelRow {
   /** Funnel stage: "view" | "cart" | "purchase" */
