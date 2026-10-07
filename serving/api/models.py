@@ -24,7 +24,7 @@ Shape (TypeScript equivalent in web/src/types/api.ts):
 
 Storage mapping (frozen):
     BR1 -> Cassandra  -> gmv_by_minute
-    BR2 -> Parquet    -> funnel_daily  (derived from fact_session_funnel)
+    BR2 -> Parquet    -> funnel_daily  (fact_session_funnel; category rows via fact_event + dim_product)
     BR3 -> Cassandra  -> trending_products
     BR4 -> Parquet    -> rfm_segments  (projection of dim_user WHERE is_current)
     BR5 -> Cassandra  -> abandoned_carts
@@ -136,7 +136,9 @@ class GmvRow(BaseModel):
 # ---------------------------------------------------------------------------
 # BR2 — Conversion Funnel (Parquet: funnel_daily)
 # Gold table columns: event_date, category_l1, views, carts, purchases,
-#                     cr_view_to_cart, cr_cart_to_purchase
+#                     cr_view_to_cart, cr_cart_to_purchase,
+#                     view_events, cart_events, purchase_events
+# views/carts/purchases count sessions, *_events count raw events (contract 4).
 # API row shape — three rows per request, one per funnel step.
 # ---------------------------------------------------------------------------
 class FunnelRow(BaseModel):
@@ -153,7 +155,9 @@ class FunnelRow(BaseModel):
         step="cart"     -> funnel_stage IN (2, 3)
         step="purchase" -> funnel_stage = 3
 
-    conversion_rate is relative to the "view" step (view = 1.0).
+    count is the *_events sum, session_count the views/carts/purchases sum,
+    over the requested days. conversion_rate is session_count relative to the
+    "view" step (view = 1.0), recomputed from those sums, never averaged.
     """
 
     step: Literal["view", "cart", "purchase"] = Field(
