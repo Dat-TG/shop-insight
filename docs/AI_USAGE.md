@@ -2041,3 +2041,45 @@ Carried forward:
   contract calls fabricated meta; raise it in his review.
 - For Khang's report: the 1-7 Nov purchases without a cart, and BR2's 15 Nov (131 purchase sessions of 53,553).
 - The Gate 2a screenshot of `/br2` with its footer goes to the group chat (Dat).
+
+## Session 22 — 9 October 2026 (W41)
+
+**Tool:** Claude Code (Opus 5.5).
+**Scope:** report section 4.2, Cassandra (tracker row 74): partition and clustering keys, keys designed backwards
+from the screen's question, and the three tables that leave stale rows. Branch `w41-khang-report-4-2`.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| `docs/REPORT.md` 4.2 — keys on `gmv_by_minute` and `trending_products`, the contrast with the star, the cost of BR3's "newest window" in four measured sizes, the stale-row paragraph (`stockout_risk`, `trending_products`, `abandoned_carts`) | AI-drafted, numbers measured or quoted from `docs/evidence/` |
+| `docs/REPORT.md` "Nguồn số liệu của mục 4" — one command per number | AI-drafted |
+| `docs/evidence/cassandra_describe_gmv_by_minute.png`, `docs/evidence/cassandra_describe_trending_products.png` | Taken by Khang with `cqlsh` |
+| `docs/AI_USAGE.md` — this session | AI-drafted |
+
+### How it was checked
+
+| Claim | How it was measured |
+|---|---|
+| Every key in 4.2 | The same text in `serving/cassandra_schema.cql`, `SYSTEM_DESIGN.md` 6 and 6.1, and the two `DESCRIBE TABLE` screenshots (`trending_products` shows the default `rank ASC`) |
+| BR3, newest window, at 19,669 windows | Khang's machine, 9 October, the table left by the replays of 1-3 October (17 Nov 14:46 to 1 Dec 06:34): `uvicorn` on a spare port, 15 calls to `GET /api/br3/trending`, median `meta.ms` 159.2, `partitions` 19,670, `rows` 20 |
+| BR3, one window | 15 calls with `window_start=2019-11-17T21:19:00+07:00`: median 2.26 ms, 1 partition, 20 rows |
+| BR1, 1 partition, 120 rows, 5.7 ms | Quoted from `docs/evidence/gate1a_br1_run.txt` (Dat's machine, Gate 1a); 4.2's source table says so |
+| 394, 1,440 and 43,200 windows (a scratch table with the same schema); the delete inside a batch; 7,600 of 7,600 rows; no duplicates after a restart | Quoted from `docs/evidence/gate1b_br3_run.txt`, not re-measured |
+| Which tables hold rows now | `SELECT count(*)`: `gmv_by_minute` 165,481, `trending_products` 393,121, `abandoned_carts`, `stockout_risk` and `order_velocity_alerts` 0. So BR5 and BR6 are described from the design, not measured |
+
+### What the AI got wrong, and was corrected on
+
+- It planned to quote 320 ms for the default BR3 call at about 19,670 windows: a single reading on 3 October,
+  never committed. The median of 15 calls is 159 ms; 4.2 uses the median and gives the command.
+
+### Judgement that stayed with the team
+
+Khang decided: take the two `DESCRIBE TABLE` screenshots himself. The tracker points to Nguyen's W39 screenshots in
+`docs/evidence/`, but `main` holds none.
+
+Made by AI, flagged for review:
+- **"Khoá phân vùng"**, not the tracker's "khoá phân mảnh": 4.1 and every screen footer already say "phân vùng".
+- **BR5 and BR6 are written from `SYSTEM_DESIGN.md` 6.1.** `start_br5` is still a stub and BR6's writer is in
+  Tin's #23, so 4.2 states their keys and clean-up rule and quotes no number for them. Nguyen and Tin: check the
+  two bullets against your code when it lands.
