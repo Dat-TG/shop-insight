@@ -1,0 +1,11 @@
+        index_name        |  size   |  bytes   
+--------------------------+---------+----------
+ ix_dim_product_attrs_ops | 9672 kB |  9904128
+ ix_dim_product_attrs     | 11 MB   | 11599872
+(2 rows)
+
+ table_size 
+------------
+ 91 MB
+(1 row)
+

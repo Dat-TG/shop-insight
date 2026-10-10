@@ -1,0 +1,23 @@
+Now Tracing is enabled
+
+ pk | ck | v
+----+----+---
+  2 |  1 | b
+
+(1 rows)
+
+Tracing session: d8d4a010-c2d2-11f1-a894-4380fdcbdb6f
+
+ activity                                                                                  | timestamp                  | source     | source_elapsed | client
+-------------------------------------------------------------------------------------------+----------------------------+------------+----------------+-----------
+                                                                        Execute CQL3 query | 2026-10-08 04:43:46.193000 | 172.18.0.3 |              0 | 127.0.0.1
+ Parsing SELECT * FROM shopinsight.bloom_demo WHERE pk = 2; [Native-Transport-Requests-15] | 2026-10-08 04:43:46.193001 | 172.18.0.3 |            264 | 127.0.0.1
+                                        Preparing statement [Native-Transport-Requests-15] | 2026-10-08 04:43:46.194000 | 172.18.0.3 |            403 | 127.0.0.1
+                              Executing single-partition query on bloom_demo [ReadStage-2] | 2026-10-08 04:43:46.194001 | 172.18.0.3 |            727 | 127.0.0.1
+                                                Acquiring sstable references [ReadStage-2] | 2026-10-08 04:43:46.194002 | 172.18.0.3 |            806 | 127.0.0.1
+   Skipped 0/1 non-slice-intersecting sstables, included 0 due to tombstones [ReadStage-2] | 2026-10-08 04:43:46.194003 | 172.18.0.3 |            913 | 127.0.0.1
+                          Partition index with 0 entries found for sstable 2 [ReadStage-2] | 2026-10-08 04:43:46.194004 | 172.18.0.3 |           1198 | 127.0.0.1
+                                   Merged data from memtables and 1 sstables [ReadStage-2] | 2026-10-08 04:43:46.195000 | 172.18.0.3 |           1401 | 127.0.0.1
+                                      Read 1 live rows and 0 tombstone cells [ReadStage-2] | 2026-10-08 04:43:46.195001 | 172.18.0.3 |           1469 | 127.0.0.1
+                                                                          Request complete | 2026-10-08 04:43:46.194685 | 172.18.0.3 |           1685 | 127.0.0.1
+
