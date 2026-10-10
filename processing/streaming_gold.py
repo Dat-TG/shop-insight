@@ -129,6 +129,12 @@ ALL_CATEGORIES = "all"
 TRENDING_TOP = 20
 
 
+# BR5 only: rows per UNLOGGED batch. A micro-batch that catches up can close
+# hundreds of sessions of the same day, and Cassandra refuses a batch above its
+# size limit (50 KB by default). Every batch still stays inside one partition.
+BR5_BATCH_ROWS = 30
+
+
 # ---------------------------------------------------------------------------
 # BR1 (Dat) - GMV and order count per minute, per category -> gmv_by_minute
 # The reference implementation. BR3, BR5 and BR8 copy this shape.
@@ -331,18 +337,87 @@ def start_br3(events, cassandra):
 
 
 def start_br5(events, cassandra):
-    """BR5 (Nguyen, W41): sessions with a cart and no purchase 30 minutes later.
+    """Sessions that added to cart and had no purchase in the 30 minutes after their last event.
 
-    Sink: abandoned_carts, key ((event_date), user_session).
-    Trap: NEVER delete from this table inside write_batch. (The only exception
-    is --fresh emptying it before any query starts.) It accumulates all day;
-    deleting the event_date partition erases every cart found by earlier
-    micro-batches and the screen empties itself mid-demo. The key has no
-    cart_value in it, so a plain INSERT of the same session overwrites its own
-    row: already idempotent.
-    Checkpoint: data/checkpoints/br5_abandoned_carts/.
+    One row per session in abandoned_carts, key ((event_date), user_session), with
+    cart_value a plain column. Writing the same session again overwrites its own
+    row: an upsert, already idempotent. NEVER delete or truncate this table in
+    write_batch: it accumulates all day, and deleting the event_date partition
+    would erase every cart found by earlier micro-batches (the BR5 screen would
+    empty itself mid-demo). The only reset is --fresh, before any query starts.
+
+    events: the cleaned, watermarked stream built in main(). clean() has already
+    run all seven rules, including the UTC+7 shift, event_date recomputed, and
+    the drop of rows with no user_session (the clustering key of this table,
+    which Cassandra refuses to take as null). Returns the running StreamingQuery.
     """
-    return None
+    insert = cassandra.prepare(
+        "INSERT INTO abandoned_carts "
+        "(event_date, user_session, cart_value, user_id, item_count, last_event_at) "
+        "VALUES (?, ?, ?, ?, ?, ?)"
+    )
+
+    def write_batch(batch, batch_id):
+        """Runs once per micro-batch, on the driver. batch is a plain static DataFrame."""
+        started = time.monotonic()
+        # Append mode hands over only the sessions the watermark has closed in this
+        # micro-batch: a handful at a time, hundreds at most when catching up.
+        rows = batch.select(
+            "event_date", "user_session", "cart_value", "user_id", "item_count", "last_event_at",
+        ).collect()
+        rows.sort(key=lambda row: row.event_date)
+        partitions = 0
+        for _, same_day in itertools.groupby(rows, key=lambda row: row.event_date):
+            same_day = list(same_day)
+            partitions += 1
+            for start in range(0, len(same_day), BR5_BATCH_ROWS):
+                statement = BatchStatement(batch_type=BatchType.UNLOGGED)  # one partition per batch
+                for row in same_day[start:start + BR5_BATCH_ROWS]:
+                    statement.add(insert, (row.event_date, row.user_session, row.cart_value,
+                                           row.user_id, row.item_count, row.last_event_at))
+                cassandra.execute(statement)
+        if rows:
+            print(f"[br5_abandoned_carts] batch {batch_id}: upserted {len(rows)} carts into abandoned_carts "
+                  f"({partitions} partitions) in {(time.monotonic() - started) * 1000:.0f} ms", flush=True)
+        else:
+            # Append mode writes only the sessions the watermark has closed.
+            print(f"[br5_abandoned_carts] batch {batch_id}: no session closed yet", flush=True)
+
+    is_cart = F.col("event_type") == "cart"
+    is_purchase = F.col("event_type") == "purchase"
+    abandoned_carts = (
+        events
+        # No explode: that is BR1's alone. A session window per user_session: Spark
+        # closes it once the watermark passes its last event + 30 minutes. That
+        # comparison (last event against the stream's own clock) is the whole "no
+        # purchase after 30 minutes" rule, so there is no timestamp test of our own.
+        .groupBy(F.session_window("event_time", "30 minutes"), "user_session")
+        .agg(
+            F.max(F.when(is_cart, 1).otherwise(0)).alias("has_cart"),
+            F.max(F.when(is_purchase, 1).otherwise(0)).alias("has_purchase"),  # the purchase flag
+            F.sum(F.when(is_cart, F.col("price")).otherwise(0)).alias("cart_value"),
+            # count(distinct) is not allowed on a stream; collect_set is.
+            F.size(F.collect_set(F.when(is_cart, F.col("product_id")))).alias("item_count"),
+            F.max("user_id").alias("user_id"),
+            F.max("event_time").alias("last_event_at"),
+        )
+        .where((F.col("has_cart") == 1) & (F.col("has_purchase") == 0))
+        # event_date of the LAST event (Vietnam time, clean() shifted event_time).
+        .withColumn("event_date", F.to_date("last_event_at"))
+    )
+    return (
+        abandoned_carts.writeStream
+        .queryName("br5_abandoned_carts")
+        # append, as the question needs: a session is abandoned only once 30 minutes
+        # have passed with no purchase, and only the watermark can say that. A
+        # session shows up about 40 minutes of event time after its last event (30
+        # gap + 10 watermark): at --speed 60, about 40 seconds of wall clock.
+        .outputMode("append")
+        .foreachBatch(write_batch)
+        .option("checkpointLocation", str(CHECKPOINT_DIR / "br5_abandoned_carts"))
+        .trigger(processingTime=TRIGGER)
+        .start()
+    )
 
 
 def start_br8(events, cassandra):
