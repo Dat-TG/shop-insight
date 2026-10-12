@@ -350,9 +350,9 @@ def start_br8(events, cassandra):
 
     Counts purchase events and their total_value per (user_id, 5-minute window).
     Labels each (window, user) row as low / medium / high based on order_count:
-        low    : 1  (expected range — every purchase triggers one row)
-        medium : 2–4
-        high   : >= 5
+        low    : 1–2 orders (within expected range)
+        medium : 3–9 orders (moderately above baseline)
+        high   : >= 10 orders (flagged for manual review)
 
     Sink: order_velocity_alerts, key ((event_date), window_start, user_id).
     The primary key never changes for a (window, user) pair, so a plain INSERT
@@ -360,9 +360,9 @@ def start_br8(events, cassandra):
 
     Checkpoint: data/checkpoints/br8_order_velocity_alerts/.
     """
-    # Severity thresholds (frozen — matches API_CONTRACT section 10).
-    MED_THRESHOLD = 2   # order_count >= 2 → medium
-    HIGH_THRESHOLD = 5  # order_count >= 5 → high
+    # Severity thresholds (frozen — matches API_CONTRACT section 10 & canonical fixture).
+    MED_THRESHOLD = 3   # order_count >= 3 → medium (3–9)
+    HIGH_THRESHOLD = 10  # order_count >= 10 → high (≥10)
 
     insert = cassandra.prepare(
         "INSERT INTO order_velocity_alerts "

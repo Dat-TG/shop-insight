@@ -893,6 +893,63 @@ body {
   gap: 5px;
 }
 
+/* ── BR8 Alert Row Expansion ─────────────────────────────────────────── */
+.data-table__row--clickable {
+  cursor: pointer;
+}
+.data-table__expand-row td {
+  background: rgba(0, 0, 0, 0.28) !important;
+  padding: 1rem 1.25rem !important;
+  text-align: left !important;
+}
+.br8-alert-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.br8-alert-detail__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.84rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.br8-alert-detail__stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.75rem;
+}
+.br8-alert-detail__stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.6rem 0.75rem;
+  background: var(--bg-surface-elev);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+.br8-alert-detail__label {
+  font-size: 0.68rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.br8-alert-detail__value {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+}
+.br8-alert-detail__note {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  padding: 0.65rem 0.85rem;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 6px;
+  border-left: 3px solid var(--accent-apple);
+}
+
 /* ── Animation Utilities ──────────────────────────────────────────────── */
 
 @keyframes spin {

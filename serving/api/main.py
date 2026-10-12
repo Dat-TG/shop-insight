@@ -14,15 +14,8 @@ Adding a new BR:
     3. app.include_router(br<N>.router)
 """
 
-try:
-    from cassandra import OperationTimedOut
-    from cassandra.cluster import NoHostAvailable
-except ImportError:
-    class OperationTimedOut(Exception):
-        pass
-
-    class NoHostAvailable(Exception):
-        pass
+from cassandra import OperationTimedOut
+from cassandra.cluster import NoHostAvailable
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse

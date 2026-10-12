@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import {
   AlertTriangle,
   Calendar,
+  ChevronDown,
+  ChevronRight,
   Filter as FilterIcon,
   RefreshCw,
   ShieldAlert,
@@ -33,6 +35,7 @@ const money = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximum
 export default function BR8Page() {
   const [eventDate, setEventDate] = useState(DEMO_DATE);
   const [severity, setSeverity]   = useState('all');
+  const [expandedKey, setExpandedKey] = useState<string | null>(null);
 
   const [response, setResponse]   = useState<ApiResponse<VelocityAlertRow> | null>(null);
   const [loading, setLoading]     = useState(false);
@@ -199,6 +202,7 @@ export default function BR8Page() {
               <table className="data-table">
                 <thead>
                   <tr>
+                    <th style={{ width: '28px', textAlign: 'center' }}></th>
                     <th>Window</th>
                     <th>User ID</th>
                     <th>Orders</th>
@@ -209,23 +213,82 @@ export default function BR8Page() {
                 <tbody>
                   {rows.map((row, i) => {
                     const sev = SEVERITY_CONFIG[row.severity as keyof typeof SEVERITY_CONFIG];
-                    const rowClass = row.severity === 'high'
+                    const rowKey = `${row.window_start}-${row.user_id}-${i}`;
+                    const isExpanded = expandedKey === rowKey;
+                    const rowClass = `${row.severity === 'high'
                       ? 'data-table__row--danger'
                       : row.severity === 'medium'
                         ? 'data-table__row--warning'
-                        : '';
+                        : ''} data-table__row--clickable`;
                     return (
-                      <tr key={`${row.window_start}-${row.user_id}-${i}`} className={rowClass}>
-                        <td className="font-mono text-secondary">{hhmm(toMs(row.window_start))}</td>
-                        <td className="data-table__numeric font-mono text-emphasis">{row.user_id}</td>
-                        <td className="data-table__numeric font-mono">{row.order_count}</td>
-                        <td className="data-table__numeric font-mono">${money.format(row.total_value)}</td>
-                        <td>
-                          <span className={sev?.badge ?? 'badge'}>
-                            {sev?.label ?? row.severity}
-                          </span>
-                        </td>
-                      </tr>
+                      <>
+                        <tr
+                          key={rowKey}
+                          className={rowClass}
+                          onClick={() => setExpandedKey(isExpanded ? null : rowKey)}
+                          title="Click to view alert details"
+                        >
+                          <td style={{ textAlign: 'center', cursor: 'pointer', paddingRight: 0 }}>
+                            {isExpanded ? (
+                              <ChevronDown size={14} className="text-secondary" />
+                            ) : (
+                              <ChevronRight size={14} className="text-secondary" />
+                            )}
+                          </td>
+                          <td className="font-mono text-secondary">{hhmm(toMs(row.window_start))}</td>
+                          <td className="data-table__numeric font-mono text-emphasis">{row.user_id}</td>
+                          <td className="data-table__numeric font-mono">{row.order_count}</td>
+                          <td className="data-table__numeric font-mono">${money.format(row.total_value)}</td>
+                          <td>
+                            <span className={sev?.badge ?? 'badge'}>
+                              {sev?.label ?? row.severity}
+                            </span>
+                          </td>
+                        </tr>
+                        {isExpanded && (
+                          <tr key={`${rowKey}-detail`} className="data-table__expand-row">
+                            <td colSpan={6}>
+                              <div className="br8-alert-detail">
+                                <div className="br8-alert-detail__header">
+                                  <strong>Alert Details · User #{row.user_id}</strong>
+                                  <span className="text-secondary font-mono">
+                                    Window: {hhmm(toMs(row.window_start))} – {hhmm(toMs(row.window_start) + 5 * 60 * 1000)} (5-min burst)
+                                  </span>
+                                </div>
+                                <div className="br8-alert-detail__stats">
+                                  <div className="br8-alert-detail__stat">
+                                    <span className="br8-alert-detail__label">Orders in Window</span>
+                                    <span className="br8-alert-detail__value">{row.order_count} orders</span>
+                                  </div>
+                                  <div className="br8-alert-detail__stat">
+                                    <span className="br8-alert-detail__label">Total Transaction Value</span>
+                                    <span className="br8-alert-detail__value">${money.format(row.total_value)}</span>
+                                  </div>
+                                  <div className="br8-alert-detail__stat">
+                                    <span className="br8-alert-detail__label">Average Order Value</span>
+                                    <span className="br8-alert-detail__value">${money.format(row.total_value / Math.max(row.order_count, 1))}</span>
+                                  </div>
+                                  <div className="br8-alert-detail__stat">
+                                    <span className="br8-alert-detail__label">Alert Severity</span>
+                                    <span className="br8-alert-detail__value">{sev?.label ?? row.severity}</span>
+                                  </div>
+                                </div>
+                                <div className="br8-alert-detail__note">
+                                  {row.severity === 'high' && (
+                                    <span>⚠️ <strong>Critical velocity spike (≥10 orders in 5 min):</strong> User initiated rapid repeated orders exceeding automated thresholds. Flagged for fraud prevention review.</span>
+                                  )}
+                                  {row.severity === 'medium' && (
+                                    <span>⚡ <strong>Elevated purchasing activity (3–9 orders in 5 min):</strong> Velocity moderately above normal baseline. Monitored for bulk re-ordering or automated purchasing.</span>
+                                  )}
+                                  {row.severity === 'low' && (
+                                    <span>✓ <strong>Standard purchasing velocity (1–2 orders in 5 min):</strong> Order volume is within normal consumer behavior.</span>
+                                  )}
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </>
                     );
                   })}
                 </tbody>

@@ -431,15 +431,15 @@ def build_fact_session_funnel(events):
 def build_fact_inventory_daily(spark, dim_product, dim_warehouse):
     """Periodic snapshot, owner Tin (W40). One row per purchased SKU x warehouse x day.
 
-    Grain: 12,659 purchased SKUs × 5 warehouses × 30 November days = 1,898,850 rows
+    Grain: 12,731 purchased SKUs × 5 warehouses × 30 November days = 1,909,650 rows
     (SYSTEM_DESIGN.md 5.5).  Only products with at least one purchase appear.
 
     product_sk lookup without a range-join (banned — see module docstring):
         Expand each dim_product version to one row per covered day, clipped to
         the November window, then equi-join on (product_id, snapshot_date).
-        A product with no version before its first event day simply does not appear
-        in fact rows for those early days — the fact is dense within the purchased
-        universe but not outside it.
+        The days before a product's first dim_product version receive that first
+        version (clip_from is set to 1 Nov for version_no = 1), so the periodic
+        snapshot is dense across all 30 November days.
 
     units_sold_that_day is re-derived from silver using the same warehouse
     assignment rule as gen_inventory.py: warehouse_id = 1 + pmod(xxhash64(user_id), 5).
@@ -452,7 +452,7 @@ def build_fact_inventory_daily(spark, dim_product, dim_warehouse):
     from datetime import date as _date
 
     INVENTORY_DIR = REPO / "data" / "inventory"
-    if not list(INVENTORY_DIR.glob("*.parquet")):
+    if not list(INVENTORY_DIR.glob("snapshot_date=*")):
         print(f"  {INVENTORY_DIR} is empty — run python ingestion/gen_inventory.py first")
         return None
 
@@ -527,10 +527,15 @@ def build_fact_inventory_daily(spark, dim_product, dim_warehouse):
         .select(
             "product_id",
             F.col("product_sk").cast("bigint"),
+            "version_no",
             F.col("valid_from"),
             F.date_sub("valid_to", 1).alias("valid_to_incl"),
         )
-        .withColumn("clip_from", F.greatest("valid_from", F.lit(FIRST_SNAP)))
+        .withColumn(
+            "clip_from",
+            F.when(F.col("version_no") == 1, F.lit(FIRST_SNAP))
+            .otherwise(F.greatest("valid_from", F.lit(FIRST_SNAP))),
+        )
         .withColumn("clip_to",   F.least("valid_to_incl", F.lit(LAST_SNAP)))
         .where(F.col("clip_from") <= F.col("clip_to"))
         .withColumn(

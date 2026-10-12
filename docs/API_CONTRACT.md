@@ -578,11 +578,11 @@ CREATE TABLE order_velocity_alerts (
 
 **Severity vocabulary (frozen):**
 
-| Value | Meaning |
-|---|---|
-| `"low"` | Within expected range |
-| `"medium"` | Moderately above baseline |
-| `"high"` | Flagged for manual review |
+| Value | Meaning | Threshold (5-minute window) |
+|---|---|---|
+| `"low"` | Within expected range | 1–2 orders |
+| `"medium"` | Moderately above baseline | 3–9 orders |
+| `"high"` | Flagged for manual review | ≥ 10 orders |
 
 **Response row fields:**
 

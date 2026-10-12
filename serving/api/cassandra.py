@@ -19,13 +19,8 @@ imported: that would pull pyspark into the API and pin its process to UTC.
 
 import functools
 
-try:
-    from cassandra.cluster import EXEC_PROFILE_DEFAULT, Cluster, ExecutionProfile, NoHostAvailable
-    from cassandra.policies import DCAwareRoundRobinPolicy
-except ImportError:
-    class NoHostAvailable(Exception):
-        pass
-    Cluster = None
+from cassandra.cluster import EXEC_PROFILE_DEFAULT, Cluster, ExecutionProfile, NoHostAvailable
+from cassandra.policies import DCAwareRoundRobinPolicy
 from fastapi import HTTPException
 
 from serving.check_infra import read_env
@@ -36,8 +31,6 @@ DATA_CENTER = "datacenter1"  # the node's own name (check_infra.py prints it)
 @functools.cache
 def session():
     """A session on the shopinsight keyspace."""
-    if Cluster is None:
-        raise HTTPException(503, "cassandra-driver is not installed. Run pip install cassandra-driver.")
     env = read_env()
     host, port, keyspace = env["CASSANDRA_HOST"], int(env["CASSANDRA_PORT"]), env["CASSANDRA_KEYSPACE"]
     profile = ExecutionProfile(load_balancing_policy=DCAwareRoundRobinPolicy(local_dc=DATA_CENTER))
