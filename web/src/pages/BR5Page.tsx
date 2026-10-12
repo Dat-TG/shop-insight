@@ -6,7 +6,8 @@ import QueryMeta from '../components/QueryMeta';
 const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8000';
 
 const REFRESH_MS = 10_000;
-// A day can hold a few thousand abandoned carts. The table draws the highest 200;
+// A whole day can hold up to about 18,300 abandoned carts (15 Nov); the demo replay of
+// 17 Nov from 15:00 holds at most 3,965. The table draws the highest 200;
 // the cards and the campaign always count every cart the filter lets through.
 const MAX_ROWS = 200;
 

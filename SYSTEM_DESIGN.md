@@ -759,8 +759,10 @@ The key above therefore drops `cart_value` out of the primary key entirely:
 idempotent — same session, same row, new value — and no delete is needed at all.
 
 The cost is real and must be stated: the rows are no longer stored sorted by cart
-value, so "the 50 highest-value carts today" is a partition read plus a sort of
-at most a few thousand rows in the API. That trade — give up on-disk ordering to
+value, so "the 50 highest-value carts today" is a partition read plus a sort in
+the API: measured on silver with the 30-minute rule, 1,609 rows on the median day,
+8,774 on 17 Nov (3,965 of them in the demo replay from 15:00), about 18,300 on
+15 Nov, the busiest. That trade — give up on-disk ordering to
 get idempotent writes — is itself good report material, and it is a more honest
 BR5 key-design story than the original one, which did not survive contact with
 the delete semantics.

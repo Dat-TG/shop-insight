@@ -15,8 +15,10 @@ Reads Cassandra abandoned_carts, written by processing/streaming_gold.py
 (start_br5), with one query on one partition, (event_date). The key is
 ((event_date), user_session): cart_value is a plain column, which is what makes
 the stream's upsert idempotent, so Cassandra cannot order by it. This endpoint
-reads the day's partition (a few thousand rows at most) and sorts by
-cart_value DESC itself.
+reads the day's whole partition and sorts by cart_value DESC itself. Measured on
+silver with the stream's 30-minute rule: at most 3,965 carts for the demo replay
+(17 Nov from 15:00), 8,774 for all of 17 Nov, about 18,300 on 15 Nov, the
+busiest day.
 
 Without event_date the latest date is found by listing the partition keys. That
 is one extra query over a handful of keys, and it is counted in meta.partitions.

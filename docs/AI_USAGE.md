@@ -2041,3 +2041,63 @@ Carried forward:
   contract calls fabricated meta; raise it in his review.
 - For Khang's report: the 1-7 Nov purchases without a cart, and BR2's 15 Nov (131 purchase sessions of 53,553).
 - The Gate 2a screenshot of `/br2` with its footer goes to the group chat (Dat).
+
+## Session 22 — 12 October 2026 (W42)
+
+**Tool:** Claude Code (Opus 5.5).
+**Scope:** Dat's review of Nguyen's PR #26 (BR5 end to end), then a run of BR5 on the PR head and small fixes on
+`w41-nguyen` before the merge. No query, endpoint or screen logic was changed: Nguyen's code is as Nguyen pushed it.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| Review of #26 — read-only, against CLAUDE.md, SYSTEM_DESIGN 6.1, API_CONTRACT §7, `STREAMING_PATTERN.md` and the Spark trap list; no blocking finding. Not posted (Dat's decision below) | Human-approved |
+| `=` — the empty file at the repo root that came in with 2e38359, removed | Run and verified (nothing reads it) |
+| `processing/streaming_gold.py` — docstring status line: BR5 `done (W41)` | Comment only |
+| `serving/api/routers/br5.py`, `web/src/pages/BR5Page.tsx` — "a few thousand rows at most" replaced with the measured partition sizes; final newline added | Comment only |
+| `SYSTEM_DESIGN.md` §6.1 — the same claim replaced with the measured sizes | AI-drafted |
+| `CLAUDE.md` and `README.md` status — BR5 live, `GET /api/br5/carts` reads Cassandra, Gate 2a open only for BR8 and BR6 | AI-drafted |
+| `docs/evidence/gate2a_br5_run.txt` (new) — text copy of the run below | Captured from the run |
+| `docs/AI_USAGE.md` — this session | AI-drafted |
+
+### How it was checked
+
+| Claim | How it was measured |
+|---|---|
+| BR5's stream runs and writes | Dat's machine, branch `w41-nguyen` at 2e38359: `python processing/streaming_gold.py --fresh` (`READY: 3 of 4 jobs`), then `python ingestion/replayer.py --speed 60 --start "2019-11-17 08:00:00"` for 78 files (15:00-21:30 Vietnam time, 187,468 rows). First carts in batch 9; 70 batches upserted 2,621 carts; no exception; Ctrl-C stopped cleanly |
+| The stream's rows are right | Scratch script (not committed): `abandoned_carts` for 2019-11-17 read with cassandra-driver against DuckDB on silver over the same hours, sessions split at 30-minute gaps, cart and no purchase, last event + 30 min <= the final watermark 21:19:59, the latest split per session kept. 2,600 rows both sides, 2,600 identical in value, items, user and time, 0 only on one side; Σ`cart_value` 1,411,565.93 both |
+| The API returns them sorted, with measured meta | `uvicorn` + curl: `?event_date=2019-11-17` 13.6 ms, 1 partition, 2,600 rows; no parameters 2 partitions (the `DISTINCT` listing + the day); `min_value=500` 721 rows, lowest 501.03; `2019-11-16` 200 with `data []`. Each sorted by `cart_value` descending, `meta.rows == len(data)` |
+| The screen compiles | `cd web && npx tsc -p tsconfig.app.json --noEmit`: exit 0. Not rendered in a browser |
+| Partition sizes in the comments and §6.1 | DuckDB on all of silver, the same 30-minute rule, grouped by the date of the last event: median 1,609; 17 Nov 8,774, of which 3,965 with the last event from 15:00; 15 Nov 18,303 or 18,304 between runs |
+| `cart_value` means what the star means | `processing/batch_warehouse.py:348`: `fact_session_funnel.cart_value` is also `sum(price)` over cart events |
+
+### What the AI got wrong, and was corrected on
+
+- **The first measurement queries globbed `data/silver/*/*.parquet`.** Silver is partitioned by `event_date` and
+  `event_type`, so they found no file. Rerun with `**/*.parquet` and `hive_partitioning=true`.
+- **The busiest-day count was first reported as exactly 18,303.** A rerun gave 18,304: ties in `event_time` make
+  the 30-minute split differ by one between runs. The docs say "about 18,300".
+- **The replayer was stopped with SIGTERM, not Ctrl-C,** so `replayer.log` ends in a Java `Connection reset`
+  trace. It is a stop artefact, not a fault; the evidence file says it was stopped after file 78.
+- **The stop command's `pgrep -f` matched its own shell** and sent that shell SIGINT too. The stream got its
+  SIGINT as well and stopped cleanly ("stopped; the checkpoints keep the progress", exit 0).
+
+### Judgement that stayed with the team
+
+Dat decided (12 October, in this session): no review comment on #26; fix what the review found, then merge.
+
+Made by AI, flagged for review:
+- **The fixes went onto Nguyen's branch** as a new commit (no force-push), and #26 is squash-merged, so the `=`
+  file never enters `main`'s history. Nguyen keeps authorship of the BR5 code.
+- **`cart_value` counts every cart event,** so one product added 32 times in 9 minutes makes the largest cart,
+  53,157.63 with `item_count` 1. It matches `fact_session_funnel.cart_value`, and nothing was changed. Nguyen to
+  say whether the BR5 list should keep it.
+- **One row per (day, session) keeps only the latest abandoned split:** 21 of 2,621 upserts in the run
+  overwrote an earlier one. That is the key SYSTEM_DESIGN 6.1 chose.
+
+Carried forward:
+- The Gate 2a screenshot of `/br5` with its footer goes to the group chat (Nguyen).
+- The BR5 numbers above are gate evidence, not evaluation results: the ≥99% correctness comparison and Gate 2b
+  timings stay with their owners in PLAN.md.
+- Session 21's carried-forward list is unchanged; nothing in it was touched here.

@@ -14,7 +14,7 @@ has the same walk-through in Vietnamese.
 
     BR1  Dat     1-minute windows              gmv_by_minute            done (W40)
     BR3  Khang   15-minute window, 1-min slide trending_products        done (W41)
-    BR5  Nguyen  cart, no purchase in 30 min   abandoned_carts          stub (W41)
+    BR5  Nguyen  cart, no purchase in 30 min   abandoned_carts          done (W41)
     BR8  Tin     5-minute windows per user     order_velocity_alerts    stub (W41)
 
 THIS JOB NEVER WRITES data/silver/. Silver has exactly one writer,
