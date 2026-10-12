@@ -168,16 +168,18 @@ batch_warehouse), `ingestion/gen_inventory.py`, `checks/scd2_integrity.py`,
 `data/stream_landing/`, one JSON file every 5 s), `processing/source.py` (the only
 source reader) and `processing/streaming_gold.py`, where BR1 writes `gmv_by_minute`
 (plus a `category_l1 = 'all'` total row per window), BR3 writes the top 20 of each
-15-minute window to `trending_products`, and BR5 and BR8 are stubs for
-W41. `docs/STREAMING_PATTERN.md` walks through it
+15-minute window to `trending_products`, BR5 writes one row per session that carted and
+did not buy within a 30-minute `session_window` to `abandoned_carts` (upsert, no delete),
+and BR8 is a stub for W41. `docs/STREAMING_PATTERN.md` walks through it
 block by block, and `docs/SPARK_GUIDE_VI.md` Phần 10 is its Vietnamese twin (keep the
-two in step). The FastAPI + React skeleton serves fixtures, except BR1, BR2, BR3, BR4 and
-BR7, which are live end to end: `GET /api/br1/realtime` and `GET /api/br3/trending` read
-Cassandra through `serving/api/cassandra.py` (the one session every Cassandra router
-imports), and their screens refresh every 10 s; `processing/batch_gold.py` projects BR4's
-`rfm_segments` from `dim_user` and aggregates BR2's `funnel_daily` (465 rows: session start
-date x 14 categories + `'all'`) from `fact_session_funnel`, the category rows through
-`fact_event` and `dim_product` on `product_sk`, and `GET /api/br4/segments` and
+two in step). The FastAPI + React skeleton serves fixtures, except BR1, BR2, BR3, BR4, BR5
+and BR7, which are live end to end: `GET /api/br1/realtime`, `GET /api/br3/trending` and
+`GET /api/br5/carts` read Cassandra through `serving/api/cassandra.py` (the one session
+every Cassandra router imports), and their screens refresh every 10 s;
+`processing/batch_gold.py` projects BR4's `rfm_segments` from `dim_user` and aggregates
+BR2's `funnel_daily` (465 rows: session start date x 14 categories + `'all'`) from
+`fact_session_funnel`, the category rows through `fact_event` and `dim_product` on
+`product_sk`, and `GET /api/br4/segments` and
 `GET /api/br2/funnel` read them with DuckDB; `processing/gold_br7.py` builds BR7's
 `product_affinity`, which `GET /api/br7/affinity` reads with DuckDB. The
 project runs W38-W46 (14 Sep - 15 Nov). W38 is a combined week: kickoff and
@@ -190,10 +192,10 @@ repo. So: write the setup down instead of explaining it, comment the reference
 implementation instead of walking someone through it, and make every gate produce
 an artefact someone can look at on their own time.
 
-Next task: Gate 2a (end of W41, all 8 BRs demonstrable). BR2's evidence is
-`docs/evidence/gate2a_br2_run.txt`. Still open: BR5 and BR8, whose owners fill the stubs
-in `processing/streaming_gold.py` following `docs/STREAMING_PATTERN.md` and copy
-`serving/api/routers/br1.py` for their endpoint, and BR6. The remaining stubs in
-`processing/batch_warehouse.py` stay with their owners: `dim_date`, `dim_warehouse` and
-step 6 (Tin), and `fact_inventory_daily` (W40). Replace the body, keep the signature,
-write through `write_dim`/`write_fact`.
+Next task: Gate 2a (end of W41, all 8 BRs demonstrable). BR2's and BR5's evidence is
+`docs/evidence/gate2a_br2_run.txt` and `docs/evidence/gate2a_br5_run.txt`. Still open: BR8,
+whose owner fills the stub in `processing/streaming_gold.py` following
+`docs/STREAMING_PATTERN.md` and copies `serving/api/routers/br1.py` for the endpoint, and
+BR6. The remaining stubs in `processing/batch_warehouse.py` stay with their owners:
+`dim_date`, `dim_warehouse` and step 6 (Tin), and `fact_inventory_daily` (W40). Replace the
+body, keep the signature, write through `write_dim`/`write_fact`.
