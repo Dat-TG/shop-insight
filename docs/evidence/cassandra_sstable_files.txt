@@ -1,0 +1,4 @@
+-rw-r--r-- 1 cassandra cassandra 84275 Oct  8 04:11 nb-1-big-Data.db
+-rw-r--r-- 1 cassandra cassandra    48 Oct  8 04:11 nb-1-big-Filter.db
+-rw-r--r-- 1 cassandra cassandra   719 Oct  8 04:11 nb-1-big-Index.db
+-rw-r--r-- 1 cassandra cassandra   108 Oct  8 04:11 nb-1-big-Summary.db
