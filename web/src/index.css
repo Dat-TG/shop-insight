@@ -1055,3 +1055,37 @@ body {
   font-size: 0.74rem;
   color: var(--text-secondary);
 }
+
+/* ── BR2 Conversion Funnel ────────────────────────────────────────────── */
+.panel__note {
+  padding: 0.65rem 1.5rem;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 0.76rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+/* A category name that filters the funnel when chosen. */
+.category-button {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+}
+
+.category-button:hover {
+  color: var(--accent-apple);
+}
+
+.category-button:focus-visible {
+  outline: 2px solid var(--accent-apple);
+  outline-offset: 2px;
+}
+
+.data-table tbody tr.data-table__row--selected {
+  background: var(--accent-tint);
+}

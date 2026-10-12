@@ -1945,3 +1945,159 @@ Made by AI, flagged for review:
 - **The events are not counted twice.** `check_fact_event()` already runs `user_scd2.check_events()`.
 - **`dim_user.py` run alone now prints its six SCD2 counts before the three event counts.** The counts and the
   pass rule are unchanged.
+
+## Session 21 — 6-7 October 2026 (W41)
+
+**Tool:** Claude Code (Opus 5.5).
+**Scope:** BR2 end to end (tracker row 68), branch `w41-br2-slice`. `batch_gold.py` builds `funnel_daily` from
+`fact_session_funnel`; `GET /api/br2/funnel` reads it with DuckDB; the BR2 screen shows real numbers and a
+by-category table. Planning was a read-only workflow: three agents mapped the data, the code and the project's
+rules, three Plan agents designed it from different angles, one merged them and two critics reviewed the merge.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| `processing/batch_gold.py` — `furthest_stage()`, `build_session_categories()`, `funnel_measures()`, `build_funnel_daily()`, `session_category_checks()`, `funnel_daily_stats()`, `run_funnel_daily()`; `main()` checks four `_SUCCESS` files and runs BR4 and BR2 independently | Run and verified (below) |
+| `serving/api/routers/br2.py` — `_load_fixture()` replaced by `_partitions()` + `_read_funnel()` (DuckDB over the `event_date` directories in range); `warehouse="Parquet"`, `partitions` = directories read; docstring rewritten | Run and verified |
+| `web/src/pages/BR2Page.tsx` — KPIs, bars and drop-off on `session_count`, rates guarded against 0, the 14 categories copied from `BR1Page.tsx`, dates up to 2019-12-01, a 15-call "Conversion by Category" table with its own footer, notes on the counting rule and 15 Nov; `web/src/index.css` — `.panel__note`, `.category-button`, the selected row | Built and driven in headless Chromium |
+| `docs/API_CONTRACT.md` §4 — the three `*_events` gold columns, sources, definitions, empty cases, a measured example; response fields unchanged | AI-drafted, team sign-off pending |
+| `web/fixtures/br2-funnel-daily.json` — the measured default response and metadata; `serving/api/models.py`, `web/src/types/api.ts` — comments only | AI-drafted |
+| `SYSTEM_DESIGN.md` §3.1 (purchases without a cart, 1-7 Nov) and §7 (columns, the `'all'` row, BR1 vs BR2 per day); `CLAUDE.md` and `README.md` status; one phrase in `docs/STREAMING_PATTERN.md` and `docs/SPARK_GUIDE_VI.md` | AI-drafted |
+| `docs/evidence/gate2a_br2_run.txt` (new) — text copy of the run below | Captured from the run |
+| `docs/AI_USAGE.md` — this session | AI-drafted |
+
+### How it was checked
+
+| Claim | How it was measured |
+|---|---|
+| The gold job passes and agrees with its inputs | `python processing/batch_gold.py` on Dat's machine, 29 s: `RFM_SEGMENTS OK`; pre-write checks 0 events lost, 0 without a category, 0 sessions whose best category stage differs from `funnel_stage`; 465 rows, 31 partitions, 15 categories incl. `all`; `all` sessions 970,797 / 132,002 / 54,904 equal `fact_session_funnel`; `all` and category events both 4,474,579 / 214,286 / 65,150 equal `fact_event` per `event_type_key`; 0 rows where sessions rise; `FUNNEL_DAILY OK`, `GOLD OK` |
+| Gold equals the star | One-off DuckDB recompute from `fact_session_funnel`, `fact_event`, `dim_product`: `EXCEPT` 0 rows both ways on 465 rows; `cr_*` equal the ratios on all 465 (NULL on the 50 with `carts = 0`) |
+| No range join | `grep -nE "valid_from\|valid_to\|BETWEEN" processing/batch_gold.py serving/api/routers/br2.py`: no match |
+| The API returns the gold, under 2 s | `uvicorn` + curl, slowest of 3 warm: defaults 16.36 ms, 30 partitions, sessions 966,143 / 131,498 / 54,676, rates 1.0 / 0.1361 / 0.0566; 15 Nov 1 partition; 11-01..12-01 31 partitions. Bad date, start > end, October, unknown category: 200 and `data []` |
+| Contract and types | `python tests/test_fixtures.py`: all 8 bundles pass; `cd web && npx tsc -b && npm run build`: passes |
+| The screen works | Built app driven over the Chrome DevTools Protocol (scratch script, not committed): the category select, both dates and a table row change the KPIs and the footer's partition count; stationery on 1 Nov shows "—", no NaN; 1-7 Nov still decreases |
+| 8,845 purchases without a cart, 6,649 on 1-7 Nov, 695 sessions without a view | DuckDB on `fact_session_funnel`: `count_if(purchase_count>0 and cart_count=0)`, the same with `session_start_date <= '2019-11-07'`, `count_if(view_count=0)` |
+| 117,396 sessions touch more than one category | DuckDB: `fact_event JOIN dim_product USING (product_sk)`, `group by user_session having count(distinct category_l1) > 1` |
+| 7,433 sessions cross midnight; 17 Nov purchases 11,991 (BR2) vs 11,736 (BR1) | DuckDB on `fact_event` (`count(distinct event_date) > 1` per session) and `sum(purchase_count)` on `fact_session_funnel` vs `count(*)` of purchase events with `event_date = '2019-11-17'` |
+
+### What the AI got wrong, and was corrected on
+
+- **The chart had no bars.** The first headless screenshot showed axes only: Recharts' entry animation never ran
+  under the headless clock, and nothing proved it would in a recording. Fixed with `isAnimationActive={false}`,
+  as BR1's chart already does.
+- **The plan made the category table optional.** A critic found that `br-slice-auditor` checks the screen
+  against br-slice section 4, which lists the table, so an optional table could fail the gate. It became
+  must-ship (Dat's decision below).
+- **The plan's code comment named the tokens its own grep guard bans** (`valid_from`, `valid_to`, `BETWEEN`), so
+  the guard could never pass. The comment says "a range join on the SCD2 validity dates" instead.
+- **The first KPI label was "Sessions with a view".** 695 sessions reach the view step with no view event, so it
+  is "Sessions".
+- **The planned drop-off divided by zero.** Stationery on 1 Nov has 0 cart sessions; the column now shows "—".
+- **The plan rewrote SYSTEM_DESIGN 8 step 4 and section 10 to "BR4 and BR2".** Those lines describe the design,
+  and Tin's branch adds BR6 to `batch_gold.py` this week; they were left alone.
+- **The data-measuring agent returned nothing.** Its numbers came from the code-map agent, and every number in
+  the docs was measured again in this session before it went in.
+- **The new status text gave `funnel_daily` only half its lineage.** CLAUDE.md said "from `fact_session_funnel`",
+  and SYSTEM_DESIGN §7's older first line now contradicted the new paragraph under it; the category rows come
+  through `fact_event` + `dim_product`. Found by the review workflow's contract reviewer. Fixed in CLAUDE.md,
+  SYSTEM_DESIGN §5.2's "Serves" row and §7, README, `models.py`'s storage map, BR_SCOPE and the br-slice skill.
+- **README declared BR7 live, but its run order never ran `processing/gold_br7.py`.** On this machine
+  `data/gold/product_affinity` does not exist and `/api/br7/*` answers 500. Found by the same reviewer; the run
+  order now has the step. BR7's gold itself was not built here.
+
+### Judgement that stayed with the team
+
+Dat decided (7 October, in this session):
+- **D1.** `views`/`carts`/`purchases` become session counts, and gold gains `view_events`, `cart_events` and
+  `purchase_events`; the response is unchanged. This answers tracker row 46's note, "đổi cột gold hay đổi hợp đồng".
+- **D4.** The by-category table is built from 15 calls to the existing endpoint, as BR4 builds its heatmap. No
+  contract change; it ships with the slice.
+
+Needs all four before merge: the gold column names are frozen (API_CONTRACT §4, SYSTEM_DESIGN 7, PLAN.md), so D1
+goes to the group in Dat's Wednesday checkpoint. Not yet agreed.
+
+Made by AI, flagged for review:
+- **Reaching a step is `funnel_stage` >= 1 / >= 2 / = 3**, as `models.py` already said, not a non-null milestone
+  timestamp: with timestamps, 1-7 Nov shows more sessions at purchase than at cart.
+- **`conversion_rate` is a session ratio**, recomputed from the summed counts; the W38 fixture used an event
+  ratio. Event counts rise from cart to purchase on 1-7 Nov, which would break BR_SCOPE's "counts decrease".
+- **A category row stages each session on that category's events alone.** Giving every touched category the
+  session's own `funnel_stage` would count 63,351 purchases against 54,904 sessions that bought.
+- **Bad input returns 200 and `data []`**, as BR4 does and contract §1.3 says, not BR1's 422.
+- **The date inputs allow 2019-12-01**, the 31st partition; the defaults stay 11-01..11-30.
+- **CLAUDE.md and README now say BR7 is live too.** `br7.py` reads Parquet and its screen fetches it (Nguyen to
+  confirm).
+
+Closed here: `funnel_daily` has no session count (Sessions 8, 9, 10: lines 728, 860, 997); BR2's gold column or
+contract (Session 11, line 1098); `funnel_daily` needs `category_l1` (Session 18, line 1807).
+
+Carried forward:
+- `FunnelCategoryRow` in `models.py` and `api.ts` still has no route, fixture or contract section (Tin, 1d93340).
+  The screen does not use it.
+- SYSTEM_DESIGN 5.2's star still links `fact_session_funnel` to `dim_product` (Session 11, line 1103).
+- Tin's `origin/w41-tin-merge-br6` rewrites `batch_gold.py`'s `main()` (argparse, "BATCH GOLD OK"): whoever merges
+  second wires in the other's run function. His `br4.py` fallback labels fixture data `"Parquet"`, which the
+  contract calls fabricated meta; raise it in his review.
+- For Khang's report: the 1-7 Nov purchases without a cart, and BR2's 15 Nov (131 purchase sessions of 53,553).
+- The Gate 2a screenshot of `/br2` with its footer goes to the group chat (Dat).
+
+## Session 22 — 12 October 2026 (W42)
+
+**Tool:** Claude Code (Opus 5.5).
+**Scope:** Dat's review of Nguyen's PR #26 (BR5 end to end), then a run of BR5 on the PR head and small fixes on
+`w41-nguyen` before the merge. No query, endpoint or screen logic was changed: Nguyen's code is as Nguyen pushed it.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| Review of #26 — read-only, against CLAUDE.md, SYSTEM_DESIGN 6.1, API_CONTRACT §7, `STREAMING_PATTERN.md` and the Spark trap list; no blocking finding. Not posted (Dat's decision below) | Human-approved |
+| `=` — the empty file at the repo root that came in with 2e38359, removed | Run and verified (nothing reads it) |
+| `processing/streaming_gold.py` — docstring status line: BR5 `done (W41)` | Comment only |
+| `serving/api/routers/br5.py`, `web/src/pages/BR5Page.tsx` — "a few thousand rows at most" replaced with the measured partition sizes; final newline added | Comment only |
+| `SYSTEM_DESIGN.md` §6.1 — the same claim replaced with the measured sizes | AI-drafted |
+| `CLAUDE.md` and `README.md` status — BR5 live, `GET /api/br5/carts` reads Cassandra, Gate 2a open only for BR8 and BR6 | AI-drafted |
+| `docs/evidence/gate2a_br5_run.txt` (new) — text copy of the run below | Captured from the run |
+| `docs/AI_USAGE.md` — this session | AI-drafted |
+
+### How it was checked
+
+| Claim | How it was measured |
+|---|---|
+| BR5's stream runs and writes | Dat's machine, branch `w41-nguyen` at 2e38359: `python processing/streaming_gold.py --fresh` (`READY: 3 of 4 jobs`), then `python ingestion/replayer.py --speed 60 --start "2019-11-17 08:00:00"` for 78 files (15:00-21:30 Vietnam time, 187,468 rows). First carts in batch 9; 70 batches upserted 2,621 carts; no exception; Ctrl-C stopped cleanly |
+| The stream's rows are right | Scratch script (not committed): `abandoned_carts` for 2019-11-17 read with cassandra-driver against DuckDB on silver over the same hours, sessions split at 30-minute gaps, cart and no purchase, last event + 30 min <= the final watermark 21:19:59, the latest split per session kept. 2,600 rows both sides, 2,600 identical in value, items, user and time, 0 only on one side; Σ`cart_value` 1,411,565.93 both |
+| The API returns them sorted, with measured meta | `uvicorn` + curl: `?event_date=2019-11-17` 13.6 ms, 1 partition, 2,600 rows; no parameters 2 partitions (the `DISTINCT` listing + the day); `min_value=500` 721 rows, lowest 501.03; `2019-11-16` 200 with `data []`. Each sorted by `cart_value` descending, `meta.rows == len(data)` |
+| The screen compiles | `cd web && npx tsc -p tsconfig.app.json --noEmit`: exit 0. Not rendered in a browser |
+| Partition sizes in the comments and §6.1 | DuckDB on all of silver, the same 30-minute rule, grouped by the date of the last event: median 1,609; 17 Nov 8,774, of which 3,965 with the last event from 15:00; 15 Nov 18,303 or 18,304 between runs |
+| `cart_value` means what the star means | `processing/batch_warehouse.py:348`: `fact_session_funnel.cart_value` is also `sum(price)` over cart events |
+
+### What the AI got wrong, and was corrected on
+
+- **The first measurement queries globbed `data/silver/*/*.parquet`.** Silver is partitioned by `event_date` and
+  `event_type`, so they found no file. Rerun with `**/*.parquet` and `hive_partitioning=true`.
+- **The busiest-day count was first reported as exactly 18,303.** A rerun gave 18,304: ties in `event_time` make
+  the 30-minute split differ by one between runs. The docs say "about 18,300".
+- **The replayer was stopped with SIGTERM, not Ctrl-C,** so `replayer.log` ends in a Java `Connection reset`
+  trace. It is a stop artefact, not a fault; the evidence file says it was stopped after file 78.
+- **The stop command's `pgrep -f` matched its own shell** and sent that shell SIGINT too. The stream got its
+  SIGINT as well and stopped cleanly ("stopped; the checkpoints keep the progress", exit 0).
+
+### Judgement that stayed with the team
+
+Dat decided (12 October, in this session): no review comment on #26; fix what the review found, then merge.
+
+Made by AI, flagged for review:
+- **The fixes went onto Nguyen's branch** as a new commit (no force-push), and #26 is squash-merged, so the `=`
+  file never enters `main`'s history. Nguyen keeps authorship of the BR5 code.
+- **`cart_value` counts every cart event,** so one product added 32 times in 9 minutes makes the largest cart,
+  53,157.63 with `item_count` 1. It matches `fact_session_funnel.cart_value`, and nothing was changed. Nguyen to
+  say whether the BR5 list should keep it.
+- **One row per (day, session) keeps only the latest abandoned split:** 21 of 2,621 upserts in the run
+  overwrote an earlier one. That is the key SYSTEM_DESIGN 6.1 chose.
+
+Carried forward:
+- The Gate 2a screenshot of `/br5` with its footer goes to the group chat (Nguyen).
+- The BR5 numbers above are gate evidence, not evaluation results: the ≥99% correctness comparison and Gate 2b
+  timings stay with their owners in PLAN.md.
+- Session 21's carried-forward list is unchanged; nothing in it was touched here.

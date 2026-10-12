@@ -171,7 +171,7 @@ applies exactly silver's seven rules:
 - `user_session` present. It is BR5's key.
 
 Forget the shift and `gmv_by_minute` files a 17:00–24:00 UTC event under its UTC date, while
-`funnel_daily` (built in batch, from silver) files it under the next day, so two screens
+`funnel_daily` (built in batch, from `fact_session_funnel`) files it under the next day, so two screens
 disagree about which day it belongs to.
 
 Importing `clean()` does not make this job a silver writer. See trap A below.

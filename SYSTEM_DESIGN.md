@@ -124,6 +124,15 @@ Measured on the full file with
 after), and per Vietnam date with a `groupBy("event_date").pivot("event_type")` on
 silver.
 
+**Purchases with no cart event, mostly in the first week.** 8,845 of the 54,904
+sessions that bought have no `cart` event, and 695 sessions have no `view`; 6,649
+of those 8,845 started on 1-7 Nov. Sessions that started on those days hold more
+purchase events than cart events (9,228 cart, 11,511 purchase; by event date,
+9,134 and 11,436). It is in the source. BR2 counts a session as reaching a step when its
+`funnel_stage` is at least that step, so its *session* funnel still decreases;
+an *event* funnel would not. Measured on `fact_session_funnel` with DuckDB:
+`count_if(purchase_count > 0 AND cart_count = 0)` and `count_if(view_count = 0)`.
+
 ### 3.2 Holiday calendar (committed to git)
 
 `seed/holidays_2019.csv`. This is the one new artefact that must travel through
@@ -291,7 +300,7 @@ Three facts, one per Kimball fact type, sharing five conformed dimensions:
 | Rows (measured) | 4,754,015 | 970,797 | 1,909,650 |
 | Measures | `price` | milestone lags, counts, values | stock, velocity, days to stock-out |
 | Degenerate dim | `user_session` | — | — |
-| Serves | BR1, BR3, BR8 | BR2, BR5 | BR6 |
+| Serves | BR1, BR2 (by category), BR3, BR7, BR8 | BR2, BR5 | BR6 |
 
 **The contrast the report has to make.** The star schema is *normalised around a
 grain and queried many ways*: one `fact_event` answers BR1, BR3, BR8, BR9 and
@@ -750,8 +759,10 @@ The key above therefore drops `cart_value` out of the primary key entirely:
 idempotent — same session, same row, new value — and no delete is needed at all.
 
 The cost is real and must be stated: the rows are no longer stored sorted by cart
-value, so "the 50 highest-value carts today" is a partition read plus a sort of
-at most a few thousand rows in the API. That trade — give up on-disk ordering to
+value, so "the 50 highest-value carts today" is a partition read plus a sort in
+the API: measured on silver with the 30-minute rule, 1,609 rows on the median day,
+8,774 on 17 Nov (3,965 of them in the demo replay from 15:00), about 18,300 on
+15 Nov, the busiest. That trade — give up on-disk ordering to
 get idempotent writes — is itself good report material, and it is a more honest
 BR5 key-design story than the original one, which did not survive contact with
 the delete semantics.
@@ -773,7 +784,8 @@ The report states that BR6 only ranks SKUs with movement.
 ```
 gold/funnel_daily/event_date=2019-11-01/
     event_date, category_l1, views, carts, purchases,
-    cr_view_to_cart, cr_cart_to_purchase
+    cr_view_to_cart, cr_cart_to_purchase,
+    view_events, cart_events, purchase_events
 
 gold/rfm_segments/snapshot_date=2019-11-30/
     user_id, recency_days, frequency, monetary,
@@ -783,9 +795,24 @@ gold/product_affinity/
     product_a, product_b, co_count, support, lift
 ```
 
-`funnel_daily` is now an aggregation of `fact_session_funnel`, and `rfm_segments`
+`funnel_daily` is now an aggregation of the star (`fact_session_funnel`, plus
+`fact_event` and `dim_product` for the category rows), and `rfm_segments`
 is a projection of `dim_user` where `is_current`. Neither recomputes anything
 from silver.
+
+`funnel_daily` has one row per session start date and `category_l1`, plus a
+stored `'all'` row per date: 465 rows, 31 dates x (14 categories + `'all'`).
+`views`/`carts`/`purchases` count sessions whose `funnel_stage` reached the step
+(>= 1, >= 2, = 3); `*_events` count raw events. `'all'` comes straight from
+`fact_session_funnel`. A category row takes the furthest step the session reached
+on that category's products alone, through `fact_event` and an equality join to
+`dim_product` on `product_sk`. 117,396 sessions (12.1%) touch more than one
+category, so the categories add up to more sessions than `'all'` and are never
+summed into it. API contract section 4 has the definitions.
+
+Its `event_date` is the day the **session started**, while BR1 counts each event on
+its own date. 7,433 sessions cross midnight, so the two screens differ slightly per
+day: 17 Nov has 11,991 purchase events in BR2 and 11,736 in BR1.
 
 ## 8. Life of an event
 

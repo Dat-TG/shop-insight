@@ -1,0 +1,53 @@
+                                                                               QUERY PLAN                                                                               
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Finalize Aggregate  (cost=8987.59..8987.60 rows=1 width=8) (actual time=22.282..24.498 rows=1 loops=1)
+   Buffers: shared hit=4640
+   ->  Gather  (cost=8987.37..8987.58 rows=2 width=8) (actual time=22.153..24.493 rows=3 loops=1)
+         Workers Planned: 2
+         Workers Launched: 2
+         Buffers: shared hit=4640
+         ->  Partial Aggregate  (cost=7987.37..7987.38 rows=1 width=8) (actual time=19.622..19.627 rows=1 loops=3)
+               Buffers: shared hit=4640
+               ->  Parallel Append  (cost=0.00..7600.20 rows=154870 width=0) (actual time=0.057..14.561 rows=123873 loops=3)
+                     Buffers: shared hit=4640
+                     ->  Seq Scan on fact_event_20191101 fact_event_1  (cost=0.00..0.00 rows=1 width=0) (actual time=0.009..0.009 rows=0 loops=1)
+                     ->  Seq Scan on fact_event_20191102 fact_event_2  (cost=0.00..0.00 rows=1 width=0) (actual time=0.006..0.006 rows=0 loops=1)
+                     ->  Seq Scan on fact_event_20191103 fact_event_3  (cost=0.00..0.00 rows=1 width=0) (actual time=0.003..0.004 rows=0 loops=1)
+                     ->  Seq Scan on fact_event_20191104 fact_event_4  (cost=0.00..0.00 rows=1 width=0) (actual time=0.004..0.004 rows=0 loops=1)
+                     ->  Seq Scan on fact_event_20191105 fact_event_5  (cost=0.00..0.00 rows=1 width=0) (actual time=0.004..0.004 rows=0 loops=1)
+                     ->  Seq Scan on fact_event_20191106 fact_event_6  (cost=0.00..0.00 rows=1 width=0) (actual time=0.005..0.005 rows=0 loops=1)
+                     ->  Seq Scan on fact_event_20191107 fact_event_7  (cost=0.00..0.00 rows=1 width=0) (actual time=0.004..0.004 rows=0 loops=1)
+                     ->  Seq Scan on fact_event_20191108 fact_event_8  (cost=0.00..0.00 rows=1 width=0) (actual time=0.009..0.009 rows=0 loops=1)
+                     ->  Seq Scan on fact_event_20191109 fact_event_9  (cost=0.00..0.00 rows=1 width=0) (actual time=0.004..0.004 rows=0 loops=1)
+                     ->  Seq Scan on fact_event_20191110 fact_event_10  (cost=0.00..0.00 rows=1 width=0) (actual time=0.003..0.003 rows=0 loops=1)
+                     ->  Seq Scan on fact_event_20191111 fact_event_11  (cost=0.00..0.00 rows=1 width=0) (actual time=0.006..0.006 rows=0 loops=1)
+                     ->  Seq Scan on fact_event_20191112 fact_event_12  (cost=0.00..0.00 rows=1 width=0) (actual time=0.006..0.006 rows=0 loops=1)
+                     ->  Seq Scan on fact_event_20191113 fact_event_13  (cost=0.00..0.00 rows=1 width=0) (actual time=0.004..0.004 rows=0 loops=1)
+                     ->  Seq Scan on fact_event_20191114 fact_event_14  (cost=0.00..0.00 rows=1 width=0) (actual time=0.004..0.004 rows=0 loops=1)
+                     ->  Seq Scan on fact_event_20191115 fact_event_15  (cost=0.00..0.00 rows=1 width=0) (actual time=0.004..0.004 rows=0 loops=1)
+                     ->  Seq Scan on fact_event_20191116 fact_event_16  (cost=0.00..0.00 rows=1 width=0) (actual time=0.004..0.004 rows=0 loops=1)
+                     ->  Seq Scan on fact_event_20191117 fact_event_17  (cost=0.00..0.00 rows=1 width=0) (actual time=0.005..0.005 rows=0 loops=1)
+                     ->  Seq Scan on fact_event_20191118 fact_event_18  (cost=0.00..0.00 rows=1 width=0) (actual time=0.004..0.004 rows=0 loops=1)
+                     ->  Seq Scan on fact_event_20191119 fact_event_19  (cost=0.00..0.00 rows=1 width=0) (actual time=0.005..0.005 rows=0 loops=1)
+                     ->  Seq Scan on fact_event_20191120 fact_event_20  (cost=0.00..0.00 rows=1 width=0) (actual time=0.006..0.006 rows=0 loops=1)
+                     ->  Seq Scan on fact_event_20191121 fact_event_21  (cost=0.00..0.00 rows=1 width=0) (actual time=0.004..0.004 rows=0 loops=1)
+                     ->  Seq Scan on fact_event_20191122 fact_event_22  (cost=0.00..0.00 rows=1 width=0) (actual time=0.004..0.004 rows=0 loops=1)
+                     ->  Seq Scan on fact_event_20191123 fact_event_23  (cost=0.00..0.00 rows=1 width=0) (actual time=0.004..0.004 rows=0 loops=1)
+                     ->  Seq Scan on fact_event_20191124 fact_event_24  (cost=0.00..0.00 rows=1 width=0) (actual time=0.004..0.004 rows=0 loops=1)
+                     ->  Seq Scan on fact_event_20191125 fact_event_25  (cost=0.00..0.00 rows=1 width=0) (actual time=0.004..0.004 rows=0 loops=1)
+                     ->  Seq Scan on fact_event_20191126 fact_event_26  (cost=0.00..0.00 rows=1 width=0) (actual time=0.004..0.004 rows=0 loops=1)
+                     ->  Seq Scan on fact_event_20191127 fact_event_27  (cost=0.00..0.00 rows=1 width=0) (actual time=0.006..0.006 rows=0 loops=1)
+                     ->  Seq Scan on fact_event_20191201 fact_event_31  (cost=0.00..0.00 rows=1 width=0) (actual time=0.005..0.005 rows=0 loops=1)
+                     ->  Seq Scan on fact_event_default fact_event_32  (cost=0.00..0.00 rows=1 width=0) (actual time=0.004..0.004 rows=0 loops=1)
+                     ->  Parallel Seq Scan on fact_event_20191129 fact_event_29  (cost=0.00..2415.27 rows=77527 width=0) (actual time=0.008..3.127 rows=43932 loops=3)
+                           Buffers: shared hit=1640
+                     ->  Parallel Seq Scan on fact_event_20191130 fact_event_30  (cost=0.00..2272.10 rows=72810 width=0) (actual time=0.007..4.225 rows=61888 loops=2)
+                           Buffers: shared hit=1544
+                     ->  Parallel Seq Scan on fact_event_20191128 fact_event_28  (cost=0.00..2138.62 rows=68262 width=0) (actual time=0.007..7.665 rows=116045 loops=1)
+                           Buffers: shared hit=1456
+ Planning:
+   Buffers: shared hit=3079
+ Planning Time: 5.278 ms
+ Execution Time: 24.684 ms
+(49 rows)
+

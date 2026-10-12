@@ -1,0 +1,6 @@
+
+ bloom_filter_fp_chance | compaction
+------------------------+---------------------------------------------------------------------------------------------------------------------------
+                   0.01 | {'class': 'org.apache.cassandra.db.compaction.SizeTieredCompactionStrategy', 'max_threshold': '32', 'min_threshold': '4'}
+
+(1 rows)
