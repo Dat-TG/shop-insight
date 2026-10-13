@@ -2101,3 +2101,61 @@ Carried forward:
 - The BR5 numbers above are gate evidence, not evaluation results: the ≥99% correctness comparison and Gate 2b
   timings stay with their owners in PLAN.md.
 - Session 21's carried-forward list is unchanged; nothing in it was touched here.
+
+## Session 23 — 13 October 2026 (W42)
+
+**Tool:** Claude Code (Opus 5.5).
+**Scope:** Dat's re-review of Tin's PR #23 (BR6 + BR8 + warehouse step 6) at 48b62de, then a fix for its two blocking
+findings on `w41-tin-merge-br6`, local test steps for the whole PR, and the pre-merge status docs. Tin's BR6 and BR8
+query, endpoint and screen code is as Tin pushed it; only the Postgres load of `fact_session_funnel` changed.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| Re-review of #23 — Khang's four points and the four must-fix items, the team decision, the questions and the nits from the 11 Oct review, each marked addressed or not; two new blocking findings in the `fact_session_funnel` load. Not posted (Dat's decision below) | Superseded by the fix |
+| `serving/load_star_postgres.py` — `load_fact_session_funnel()` now inserts `last_event_at` and `purchase_value`; its docstring no longer calls `cart_value` nullable | Run and verified (14235bd) |
+| `processing/batch_warehouse.py` — `load_postgres()` renders `fact_session_funnel`'s five timestamps with `date_format` before `toLocalIterator()`, as `fact_event`'s `event_time` already was | Run and verified (14235bd) |
+| Local test steps for the whole PR: `gen_inventory.py`, `batch_warehouse.py` with Postgres up, Postgres row counts, `batch_gold.py --br6`, the BR6 and BR8 curls, the BR8 stream with the replayer, both screens | Run by Dat, reported OK |
+| `CLAUDE.md` and `README.md` status — all nine tables and `WAREHOUSE OK`, step 6 loads Postgres, BR6 and BR8 live, next task Gate 2b, open items | AI-drafted |
+| `docs/AI_USAGE.md` — this session | AI-drafted |
+
+### How it was checked
+
+| Claim | How it was measured |
+|---|---|
+| Step 6 stopped whenever Postgres was up | `warehouse/ddl.sql`: `fact_session_funnel.last_event_at` and `.purchase_value` are `NOT NULL` with no default; the loader listed 17 of the table's 19 columns. Read from the DDL, not reproduced on the old code |
+| The old load shifted timestamps by 7 hours | `.venv/lib/python3.14/site-packages/pyspark/sql/types.py`: `TimestampType.fromInternal` calls `datetime.fromtimestamp` (local time); `date +%z` → `+0700`; `conf/spark-defaults.conf` → `spark.sql.session.timeZone UTC`. Reproduced: session -9223038402290496650 (`session_start_date` 2019-11-17) is collected as 2019-11-18 05:45:11 and rendered by the fix as 2019-11-17 22:45:11 |
+| The fixed load is right | Scratch database `scratch_pr23` with `warehouse/ddl.sql` applied; scratch script (not committed) runs the real `load_postgres()` on `fact_session_funnel` for 2019-11-17, `read_env` patched to the scratch database. Postgres vs Parquet: 71,594 rows both; 31,938 starting at 17:00 or later both; 0 rows where `session_start_at::date <> session_start_date`; min start 2019-11-17 00:00:07, max `last_event_at` 2019-11-23 13:02:13 and Σ`purchase_value` 3,799,654.81 equal. Database dropped afterwards |
+| The whole PR runs | Dat's machine, branch at 14235bd: the local test steps 1-7, reported "Run ok" by Dat. No log was captured in this session; that is what Tin's evidence files are for |
+| `fact_inventory_daily` 1,909,650 and `BR6 OK` 63,655 in CLAUDE.md and README | The expected values printed in the test steps (12,731 purchased SKUs x 5 warehouses x 30 days; 12,731 x 5 for the last day), which Dat's run reported OK against. Not re-measured by AI |
+| `dim_product` 210,454 and `dim_user` 319,426 (expected values in the test steps) | DuckDB `count(*)` over `data/warehouse/dim_product/*.parquet` and `data/warehouse/dim_user/*.parquet` on Dat's machine |
+| The earlier points are addressed | `git diff ab616d3 pr/23` (1db318b, 48b62de); `git diff --quiet main pr/23 -- serving/api/routers/br4.py serving/api/cassandra.py serving/check_infra.py` → identical; `gh pr view 23` → MERGEABLE, CLEAN; `git merge-tree --write-tree main pr/23` → no conflict |
+
+### What the AI got wrong, and was corrected on
+
+- **The 11 Oct review told Tin to bring `serving/load_star_postgres.py` over from `w40-tin-br6` without checking its
+  loaders against `warehouse/ddl.sql`.** That branch already left out `last_event_at` and `purchase_value`
+  (`git show origin/w40-tin-br6:serving/load_star_postgres.py`, line 540), so following the advice carried the
+  crash into #23. This re-review compared every loader's column list with the DDL and the Parquet builders.
+- **The message of commit 14235bd says the full `batch_warehouse.py` run passes on Dat's machine.** It was written
+  before Dat said which test "Run ok" covered. Dat then confirmed the full steps 1-7, so the claim stands, but it
+  went into a pushed commit before it was confirmed.
+
+### Judgement that stayed with the team
+
+Dat decided (13 October, in this session): fix the two findings on Tin's branch instead of posting the review and
+waiting; commit and push 14235bd to `w41-tin-merge-br6` (no force-push); update CLAUDE.md, README and this log
+before the merge; leave the Gate 2a evidence files to Tin in a follow-up PR; then squash-merge #23.
+
+Made by AI, flagged for review:
+- **CLAUDE.md's next task is now Gate 2b** (W42 in PLAN.md), with Gate 2a counted as met in code and its BR6 and
+  BR8 evidence still owed.
+- **A squash merge keeps Tin as the author** of the BR6, BR8 and step 6 code on `main`; Dat's fix commit is folded in.
+
+Carried forward:
+- Tin: `docs/evidence/gate2a_br6_run.txt` and `gate2a_br8_run.txt`, laid out like `gate2a_br5_run.txt`. They should
+  show the 1,909,650 and 63,655 above.
+- Team: `docs/BR_SCOPE.md` says BR8's demo opens an alert to its list of orders; the screen expands an alert to its
+  window totals, and `order_velocity_alerts` stores no orders. Tin proposes the wording, the team agrees.
+- Session 22's carried-forward list is unchanged; nothing in it was touched here.
