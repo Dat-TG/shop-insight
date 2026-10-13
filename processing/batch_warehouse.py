@@ -919,8 +919,15 @@ def load_postgres(tables):
             n = pg.load_fact_event(conn, df_fe.toLocalIterator())
             print(f"  {'fact_event':<23}{n:>10,} rows")
 
+        # fact_session_funnel: the same trap on all five of its timestamps.
+        # date_format keeps a NULL milestone NULL.
         if tables.get("fact_session_funnel") is not None:
-            n = pg.load_fact_session_funnel(conn, tables["fact_session_funnel"].toLocalIterator())
+            df_fsf = tables["fact_session_funnel"]
+            for c in ("session_start_at", "first_view_at", "first_cart_at", "purchase_at", "last_event_at"):
+                df_fsf = df_fsf.withColumn(
+                    c, F.date_format(F.col(c).cast("timestamp_ntz"), "yyyy-MM-dd HH:mm:ss")
+                )
+            n = pg.load_fact_session_funnel(conn, df_fsf.toLocalIterator())
             print(f"  {'fact_session_funnel':<23}{n:>10,} rows")
         else:
             print(f"  {'fact_session_funnel':<23}not built yet, skipped")
