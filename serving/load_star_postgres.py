@@ -362,6 +362,261 @@ def upsert_dim_warehouse(conn) -> int:
     return len(DIM_WAREHOUSE_ROWS)
 
 
+# ── Step 6 loaders (called by processing/batch_warehouse.py:load_postgres) ─────
+#
+# Each function accepts a Spark toLocalIterator() — a lazy row iterator — so
+# only PAGE rows live in Python memory at one time. This matters for fact_event
+# (4.7 M rows). They all assume the iterator delivers Spark Row objects whose
+# fields match the DataFrames built in batch_warehouse.py.
+#
+# Dimensions use ON CONFLICT DO UPDATE (idempotent upsert).
+# Facts use TRUNCATE + INSERT (matches the Parquet "overwrite" semantics and
+# avoids the ON CONFLICT overhead on 4.7 M rows).
+#
+# execute_values builds one multi-value INSERT per page, roughly 50× faster
+# than execute_batch for large tables.
+
+_PAGE = 5_000   # rows per execute_values call
+
+
+def load_dim_product(conn, rows_iter) -> int:
+    """ON CONFLICT upsert of dim_product from the Parquet star.
+
+    attributes arrives as a JSON *string* (to_json() applied in batch_warehouse.py
+    before collection). Postgres jsonb accepts a JSON string directly; the CHECK
+    constraint verifies jsonb_typeof(attributes) = 'object' on every row.
+
+    ON CONFLICT target is (product_sk) PRIMARY KEY, not the UNIQUE on
+    (product_id, valid_from), so a surrogate-key collision replaces everything.
+    """
+    sql = """
+        INSERT INTO dim_product (
+            product_sk, product_id, version_no, price, brand,
+            category_id, category_code, category_l1, category_l2, category_l3,
+            attributes, valid_from, valid_to, is_current
+        ) VALUES %s
+        ON CONFLICT (product_sk) DO UPDATE SET
+            product_id    = EXCLUDED.product_id,
+            version_no    = EXCLUDED.version_no,
+            price         = EXCLUDED.price,
+            brand         = EXCLUDED.brand,
+            category_id   = EXCLUDED.category_id,
+            category_code = EXCLUDED.category_code,
+            category_l1   = EXCLUDED.category_l1,
+            category_l2   = EXCLUDED.category_l2,
+            category_l3   = EXCLUDED.category_l3,
+            attributes    = EXCLUDED.attributes,
+            valid_from    = EXCLUDED.valid_from,
+            valid_to      = EXCLUDED.valid_to,
+            is_current    = EXCLUDED.is_current
+    """
+    batch, n = [], 0
+    with conn.cursor() as cur:
+        for row in rows_iter:
+            batch.append((
+                row.product_sk, row.product_id, row.version_no,
+                float(row.price), row.brand,
+                row.category_id, row.category_code,
+                row.category_l1, row.category_l2, row.category_l3,
+                row.attributes,           # JSON string from F.to_json()
+                row.valid_from,           # Python date from Spark DateType
+                row.valid_to,
+                row.is_current,
+            ))
+            if len(batch) >= _PAGE:
+                psycopg2.extras.execute_values(cur, sql, batch)
+                n += len(batch)
+                batch = []
+        if batch:
+            psycopg2.extras.execute_values(cur, sql, batch)
+            n += len(batch)
+    conn.commit()
+    return n
+
+
+def load_dim_user(conn, rows_iter) -> int:
+    """ON CONFLICT upsert of dim_user from the Parquet star.
+
+    Nullable RFM fields (recency_days, r_score, f_score, m_score, rfm_cell) are
+    preserved as None / NULL — do not substitute 0. Spark Row returns Python None
+    for NULL columns, which psycopg2 inserts as SQL NULL.
+    """
+    sql = """
+        INSERT INTO dim_user (
+            user_sk, user_id, version_no, snapshot_date,
+            recency_days, frequency, monetary,
+            r_score, f_score, m_score, rfm_cell, segment,
+            valid_from, valid_to, is_current
+        ) VALUES %s
+        ON CONFLICT (user_sk) DO UPDATE SET
+            user_id      = EXCLUDED.user_id,
+            version_no   = EXCLUDED.version_no,
+            snapshot_date= EXCLUDED.snapshot_date,
+            recency_days = EXCLUDED.recency_days,
+            frequency    = EXCLUDED.frequency,
+            monetary     = EXCLUDED.monetary,
+            r_score      = EXCLUDED.r_score,
+            f_score      = EXCLUDED.f_score,
+            m_score      = EXCLUDED.m_score,
+            rfm_cell     = EXCLUDED.rfm_cell,
+            segment      = EXCLUDED.segment,
+            valid_from   = EXCLUDED.valid_from,
+            valid_to     = EXCLUDED.valid_to,
+            is_current   = EXCLUDED.is_current
+    """
+    batch, n = [], 0
+    with conn.cursor() as cur:
+        for row in rows_iter:
+            batch.append((
+                row.user_sk, row.user_id, row.version_no, row.snapshot_date,
+                row.recency_days, row.frequency, float(row.monetary),
+                row.r_score, row.f_score, row.m_score, row.rfm_cell, row.segment,
+                row.valid_from, row.valid_to, row.is_current,
+            ))
+            if len(batch) >= _PAGE:
+                psycopg2.extras.execute_values(cur, sql, batch)
+                n += len(batch)
+                batch = []
+        if batch:
+            psycopg2.extras.execute_values(cur, sql, batch)
+            n += len(batch)
+    conn.commit()
+    return n
+
+
+def load_fact_event(conn, rows_iter) -> int:
+    """TRUNCATE + bulk-insert fact_event from the Parquet star.
+
+    TRUNCATE cascades to all 31 day-partitions + the DEFAULT partition,
+    matching the Parquet 'overwrite' semantics.
+
+    event_time arrives as a naive string (rendered with date_format in
+    batch_warehouse.py before collection) so psycopg2 inserts it into
+    TIMESTAMP WITHOUT TIME ZONE without any shift.
+
+    Postgres routes each row to the correct day-partition automatically.
+    """
+    sql = """
+        INSERT INTO fact_event (
+            event_sk, product_sk, user_sk, event_time, user_session,
+            price, date_key, event_type_key, event_date
+        ) VALUES %s
+    """
+    batch, n = [], 0
+    with conn.cursor() as cur:
+        cur.execute("TRUNCATE TABLE fact_event")
+        for row in rows_iter:
+            batch.append((
+                row.event_sk, row.product_sk, row.user_sk,
+                row.event_time,           # naive string, e.g. "2019-11-17 15:04:12"
+                row.user_session,
+                float(row.price),
+                row.date_key,
+                row.event_type_key,
+                row.event_date,           # Python date
+            ))
+            if len(batch) >= _PAGE:
+                psycopg2.extras.execute_values(cur, sql, batch)
+                n += len(batch)
+                batch = []
+        if batch:
+            psycopg2.extras.execute_values(cur, sql, batch)
+            n += len(batch)
+    conn.commit()
+    return n
+
+
+def load_fact_session_funnel(conn, rows_iter) -> int:
+    """TRUNCATE + bulk-insert fact_session_funnel from the Parquet star.
+
+    Called only when build_fact_session_funnel() returns a non-None DataFrame.
+    Partitioned by session_start_date (RANGE); Postgres routes rows automatically.
+    session_sk is a bigint surrogate generated by Spark.
+    Nullable milestones (first_view_at, first_cart_at, purchase_at,
+    view_to_cart_sec, cart_to_purchase_sec) are None / NULL for sessions that
+    never reached that stage.
+
+    The five timestamps arrive as naive strings, like fact_event's event_time
+    (rendered with date_format in batch_warehouse.py before collection), so
+    nothing shifts by the laptop's time zone.
+
+    Every ddl.sql column is listed: last_event_at and purchase_value are
+    NOT NULL with no default, so leaving one out fails the whole load.
+    """
+    sql = """
+        INSERT INTO fact_session_funnel (
+            session_sk, user_sk, user_id, user_session,
+            session_start_at, session_start_date, first_view_at, first_cart_at,
+            purchase_at, last_event_at, funnel_stage, is_abandoned,
+            cart_value, purchase_value,
+            view_count, cart_count, purchase_count,
+            view_to_cart_sec, cart_to_purchase_sec
+        ) VALUES %s
+    """
+    batch, n = [], 0
+    with conn.cursor() as cur:
+        cur.execute("TRUNCATE TABLE fact_session_funnel")
+        for row in rows_iter:
+            batch.append((
+                row.session_sk, row.user_sk, row.user_id, row.user_session,
+                row.session_start_at, row.session_start_date,
+                row.first_view_at, row.first_cart_at, row.purchase_at,
+                row.last_event_at,        # naive strings, e.g. "2019-11-17 20:04:12"
+                row.funnel_stage, row.is_abandoned,
+                float(row.cart_value) if row.cart_value is not None else None,
+                float(row.purchase_value),  # NOT NULL: Spark coalesces it to 0
+                row.view_count, row.cart_count, row.purchase_count,
+                row.view_to_cart_sec, row.cart_to_purchase_sec,
+            ))
+            if len(batch) >= _PAGE:
+                psycopg2.extras.execute_values(cur, sql, batch)
+                n += len(batch)
+                batch = []
+        if batch:
+            psycopg2.extras.execute_values(cur, sql, batch)
+            n += len(batch)
+    conn.commit()
+    return n
+
+
+def load_fact_inventory_daily(conn, rows_iter) -> int:
+    """TRUNCATE + bulk-insert fact_inventory_daily from the Parquet star.
+
+    Partitioned by warehouse_id (LIST, 5 values); Postgres routes automatically.
+    days_to_stockout is NULL when velocity_7d = 0 (CHECK ck_fid_dts); psycopg2
+    maps Python None to SQL NULL correctly.
+    """
+    sql = """
+        INSERT INTO fact_inventory_daily (
+            product_sk, product_id, date_key, warehouse_key, warehouse_id,
+            snapshot_date, stock_on_hand, reorder_point, units_sold_that_day,
+            velocity_7d, days_to_stockout, is_below_reorder
+        ) VALUES %s
+    """
+    batch, n = [], 0
+    with conn.cursor() as cur:
+        cur.execute("TRUNCATE TABLE fact_inventory_daily")
+        for row in rows_iter:
+            batch.append((
+                row.product_sk, row.product_id,
+                row.date_key, row.warehouse_key, row.warehouse_id,
+                row.snapshot_date,
+                row.stock_on_hand, row.reorder_point, row.units_sold_that_day,
+                float(row.velocity_7d),
+                float(row.days_to_stockout) if row.days_to_stockout is not None else None,
+                row.is_below_reorder,
+            ))
+            if len(batch) >= _PAGE:
+                psycopg2.extras.execute_values(cur, sql, batch)
+                n += len(batch)
+                batch = []
+        if batch:
+            psycopg2.extras.execute_values(cur, sql, batch)
+            n += len(batch)
+    conn.commit()
+    return n
+
+
 # ── Verification ──────────────────────────────────────────────────────────────
 
 # Child tables per partitioned fact: warehouse/ddl.sql creates 31 days + DEFAULT

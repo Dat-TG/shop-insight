@@ -423,11 +423,96 @@ def start_br5(events, cassandra):
 def start_br8(events, cassandra):
     """BR8 (Tin, W41): purchases per user in 5-minute windows, with a severity label.
 
-    Sink: order_velocity_alerts, key ((event_date), window_start, user_id). The
-    key never changes for a (window, user), so an upsert is enough, as in BR1.
+    Counts purchase events and their total_value per (user_id, 5-minute window).
+    Labels each (window, user) row as low / medium / high based on order_count:
+        low    : 1–2 orders (within expected range)
+        medium : 3–9 orders (moderately above baseline)
+        high   : >= 10 orders (flagged for manual review)
+
+    Sink: order_velocity_alerts, key ((event_date), window_start, user_id).
+    The primary key never changes for a (window, user) pair, so a plain INSERT
+    (upsert) is safe — same as BR1. No delete needed.
+
     Checkpoint: data/checkpoints/br8_order_velocity_alerts/.
     """
-    return None
+    # Severity thresholds (frozen — matches API_CONTRACT section 10 & canonical fixture).
+    MED_THRESHOLD = 3   # order_count >= 3 → medium (3–9)
+    HIGH_THRESHOLD = 10  # order_count >= 10 → high (≥10)
+
+    insert = cassandra.prepare(
+        "INSERT INTO order_velocity_alerts "
+        "(event_date, window_start, user_id, order_count, total_value, severity) "
+        "VALUES (?, ?, ?, ?, ?, ?)"
+    )
+
+    def write_batch(batch, batch_id):
+        """Runs once per micro-batch, on the driver. batch is a plain static DataFrame."""
+        started = time.monotonic()
+        # Collect: at most a few hundred (user, window) pairs per micro-batch at
+        # --speed 60. Update mode passes only the (user, window) pairs whose
+        # counts changed in this micro-batch.
+        rows = batch.select(
+            "event_date",
+            F.col("window.start").alias("window_start"),
+            "user_id",
+            "order_count",
+            "total_value",
+        ).collect()
+
+        rows.sort(key=lambda row: row.event_date)
+        partitions = 0
+        for event_date, same_partition in itertools.groupby(rows, key=lambda row: row.event_date):
+            statement = BatchStatement(batch_type=BatchType.UNLOGGED)
+            for row in same_partition:
+                if row.order_count >= HIGH_THRESHOLD:
+                    severity = "high"
+                elif row.order_count >= MED_THRESHOLD:
+                    severity = "medium"
+                else:
+                    severity = "low"
+                statement.add(insert, (
+                    row.event_date,
+                    row.window_start,
+                    row.user_id,
+                    row.order_count,
+                    row.total_value,
+                    severity,
+                ))
+            cassandra.execute(statement)
+            partitions += 1
+        if rows:
+            high_count = sum(1 for row in rows if row.order_count >= HIGH_THRESHOLD)
+            print(f"[br8_order_velocity_alerts] batch {batch_id}: upserted {len(rows)} rows into "
+                  f"order_velocity_alerts ({partitions} partitions, {high_count} high-severity) "
+                  f"in {(time.monotonic() - started) * 1000:.0f} ms", flush=True)
+        else:
+            print(f"[br8_order_velocity_alerts] batch {batch_id}: no window changed (watermark moved on)",
+                  flush=True)
+
+    is_purchase = F.col("event_type") == "purchase"
+    alerts = (
+        events
+        # Only purchase events contribute to order velocity.
+        .where(is_purchase)
+        # 5-minute tumbling window, not sliding: each purchase lands in exactly
+        # one window, so the count is the true number of orders in that slot.
+        .groupBy(F.window("event_time", "5 minutes"), "event_date", "user_id")
+        .agg(
+            F.count("*").alias("order_count"),
+            F.sum("price").alias("total_value"),
+        )
+    )
+    return (
+        alerts.writeStream
+        .queryName("br8_order_velocity_alerts")
+        # update: emit every (window, user) whose count changed in this micro-batch,
+        # with the running total. The screen sees each window grow as events arrive.
+        .outputMode("update")
+        .foreachBatch(write_batch)
+        .option("checkpointLocation", str(CHECKPOINT_DIR / "br8_order_velocity_alerts"))
+        .trigger(processingTime=TRIGGER)
+        .start()
+    )
 
 
 # ---------------------------------------------------------------------------
