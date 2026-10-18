@@ -2159,3 +2159,53 @@ Carried forward:
 - Team: `docs/BR_SCOPE.md` says BR8's demo opens an alert to its list of orders; the screen expands an alert to its
   window totals, and `order_velocity_alerts` stores no orders. Tin proposes the wording, the team agrees.
 - Session 22's carried-forward list is unchanged; nothing in it was touched here.
+
+## Session 24 — 9 and 18 October 2026 (W41-W42)
+
+**Tool:** Claude Code (Opus 5.5).
+**Scope:** report section 4.2, Cassandra (tracker row 74): partition and clustering keys, keys designed backwards
+from the screen's question, and the three tables that leave stale rows. Branch `w41-khang-report-4-2`. On 18
+October, after #23 and #26 merged, `main` was merged into the branch (this entry was Session 22 until then; the
+12 October session took that number) and the BR5 and BR6 bullets were checked against the code that landed.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| `docs/REPORT.md` 4.2 — keys on `gmv_by_minute` and `trending_products`, the contrast with the star, the cost of BR3's "newest window" in four measured sizes, the stale-row paragraph (`stockout_risk`, `trending_products`, `abandoned_carts`) | AI-drafted, numbers measured or quoted from `docs/evidence/` |
+| `docs/REPORT.md` "Nguồn số liệu của mục 4" — one command per number | AI-drafted |
+| `docs/REPORT.md` 4.2, 18 October — one sentence with BR5's measured cost of sorting in the API; the source table's BR5 and BR6 row points to the code instead of `SYSTEM_DESIGN.md` 6.1 | AI-drafted, number quoted from `docs/evidence/gate2a_br5_run.txt` |
+| `docs/evidence/cassandra_describe_gmv_by_minute.png`, `docs/evidence/cassandra_describe_trending_products.png` | Taken by Khang with `cqlsh` |
+| `docs/AI_USAGE.md` — this session | AI-drafted |
+
+### How it was checked
+
+| Claim | How it was measured |
+|---|---|
+| Every key in 4.2 | The same text in `serving/cassandra_schema.cql`, `SYSTEM_DESIGN.md` 6 and 6.1, and the two `DESCRIBE TABLE` screenshots (`trending_products` shows the default `rank ASC`) |
+| BR3, newest window, at 19,669 windows | Khang's machine, 9 October, the table left by the replays of 1-3 October (17 Nov 14:46 to 1 Dec 06:34): `uvicorn` on a spare port, 15 calls to `GET /api/br3/trending`, median `meta.ms` 159.2, `partitions` 19,670, `rows` 20 |
+| BR3, one window | 15 calls with `window_start=2019-11-17T21:19:00+07:00`: median 2.26 ms, 1 partition, 20 rows |
+| BR1, 1 partition, 120 rows, 5.7 ms | Quoted from `docs/evidence/gate1a_br1_run.txt` (Dat's machine, Gate 1a); 4.2's source table says so |
+| 394, 1,440 and 43,200 windows (a scratch table with the same schema); the delete inside a batch; 7,600 of 7,600 rows; no duplicates after a restart | Quoted from `docs/evidence/gate1b_br3_run.txt`, not re-measured |
+| Which tables hold rows now | `SELECT count(*)`: `gmv_by_minute` 165,481, `trending_products` 393,121, `abandoned_carts`, `stockout_risk` and `order_velocity_alerts` 0. So BR5 and BR6 are described from the design, not measured |
+| The BR5 and BR6 bullets match the code (18 October, `main` at 03394c9) | `serving/cassandra_schema.cql`: `abandoned_carts` `((event_date), user_session)`, `stockout_risk` `((warehouse_id), days_to_stockout, product_id)`; `run_br6` in `processing/batch_gold.py` runs `DELETE FROM stockout_risk WHERE warehouse_id = ?` per warehouse, then inserts; `start_br5` in `processing/streaming_gold.py` only inserts; `serving/api/routers/br5.py` sorts by `cart_value` descending. The text of both bullets stands |
+| BR5, one day: 1 partition, 2,600 carts, 13.6 ms | Quoted from `docs/evidence/gate2a_br5_run.txt` (Dat's machine, Gate 2a, `?event_date=2019-11-17`), not re-measured |
+
+### What the AI got wrong, and was corrected on
+
+- It planned to quote 320 ms for the default BR3 call at about 19,670 windows: a single reading on 3 October,
+  never committed. The median of 15 calls is 159 ms; 4.2 uses the median and gives the command.
+
+### Judgement that stayed with the team
+
+Khang decided: take the two `DESCRIBE TABLE` screenshots himself. The tracker points to Nguyen's W39 screenshots in
+`docs/evidence/`, but `main` holds none.
+
+Made by AI, flagged for review:
+- **"Khoá phân vùng"**, not the tracker's "khoá phân mảnh": 4.1 and every screen footer already say "phân vùng".
+- **BR5 and BR6 were written from `SYSTEM_DESIGN.md` 6.1 on 9 October,** when `start_br5` was a stub and BR6's
+  writer was in Tin's #23. On 18 October both bullets were checked against the merged code and stand unchanged;
+  BR5 now has one number, quoted from Gate 2a. Nguyen and Tin: say if the wording misdescribes your code.
+
+Carried forward:
+- Session 23's carried-forward list is unchanged; nothing in it was touched here.
