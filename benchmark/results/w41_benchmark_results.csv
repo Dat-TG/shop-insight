@@ -1,0 +1,9 @@
+system,query,p50_ms,p95_ms,runs,notes
+postgres_flat_no_index,count(*) WHERE event_date='2019-11-29',22.282,26.1,10,Parallel Append trên 31 partition; không có index trên event_date
+postgres_flat_with_index,count(*) WHERE event_date='2019-11-29',21.514,24.3,10,Bitmap Index Scan trên fact_event_20191129; 1640 shared-hit buffers
+postgres_flat_with_index,revenue by category (star join + index),31.372,35.8,10,Bitmap Index Scan + Index Scan dim_product; 2252 rows matched
+postgres_star,revenue by category_l1 one day,31.372,35.8,10,Nested Loop: fact_event_20191129 x dim_product; 2252 join rows; source: docs/evidence/explain_star_join.txt
+cassandra_right_key,SELECT * WHERE event_date AND category_l1 LIMIT 60,1.531,1.8,10,Single-partition read; 60 rows từ 1 sstable; source: docs/evidence/cassandra_right_key_trace.txt
+cassandra_wrong_key,SELECT * WHERE pk=2 (không qua partition key đúng),1.685,2.1,10,Partition index với 0 entries; vẫn cần đọc sstable; source: docs/evidence/cassandra_bloom_trace.txt
+duckdb_star_parquet,sum(price) WHERE event_time 1 hour window,10120.0,11500.0,10,TABLE_SCAN 31 files; 7087 rows; không có zone-map hit trên event_time; source: docs/evidence/duckdb_zonemap.txt
+duckdb_star_parquet,sum(price) WHERE event_date partition filter,1580.0,1850.0,10,Hive partition pruning; chỉ đọc thư mục event_date=2019-11-29; source: docs/evidence/duckdb_zonemap.txt
