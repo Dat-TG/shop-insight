@@ -1,0 +1,34 @@
+=== WITH GIN (jsonb_path_ops) ===
+DROP INDEX
+                                                               QUERY PLAN                                                                
+-----------------------------------------------------------------------------------------------------------------------------------------
+ Bitmap Heap Scan on dim_product  (cost=131.49..12525.74 rows=17080 width=15) (actual time=18.242..47.441 rows=21078 loops=1)
+   Recheck Cond: (attributes @> '{"color": "crimson_red"}'::jsonb)
+   Heap Blocks: exact=7646
+   Buffers: shared hit=7656
+   ->  Bitmap Index Scan on ix_dim_product_attrs  (cost=0.00..127.22 rows=17080 width=0) (actual time=13.458..13.459 rows=21078 loops=1)
+         Index Cond: (attributes @> '{"color": "crimson_red"}'::jsonb)
+         Buffers: shared hit=10
+ Planning:
+   Buffers: shared hit=149 dirtied=4
+ Planning Time: 2.466 ms
+ Execution Time: 48.903 ms
+(11 rows)
+
+=== SEQ SCAN (GIN disabled) ===
+SET
+SET
+                                                    QUERY PLAN                                                     
+-------------------------------------------------------------------------------------------------------------------
+ Seq Scan on dim_product  (cost=0.00..14238.67 rows=17080 width=15) (actual time=0.005..58.934 rows=21078 loops=1)
+   Filter: (attributes @> '{"color": "crimson_red"}'::jsonb)
+   Rows Removed by Filter: 189376
+   Buffers: shared hit=11608
+ Planning:
+   Buffers: shared hit=1
+ Planning Time: 0.111 ms
+ Execution Time: 59.584 ms
+(8 rows)
+
+RESET
+RESET

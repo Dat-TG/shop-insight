@@ -1,0 +1,77 @@
+Gate 2a, BR5: evidence captured 2026-10-12 on Dat's machine (branch w41-nguyen, 2e38359),
+while reviewing PR #26. Text copies of the logs; no screenshot was taken.
+
+== Commands, in this order ==
+docker compose up -d --wait; python serving/check_infra.py      -> INFRA OK
+python serving/apply_schema.py                                  -> APPLY_SCHEMA OK
+python processing/streaming_gold.py --fresh                     # terminal 1, wait for READY
+python ingestion/replayer.py --speed 60 --start "2019-11-17 08:00:00"   # terminal 2
+uvicorn serving.api.main:app --port 8000                        # then the curls below
+cd web && npx tsc -p tsconfig.app.json --noEmit                 -> exit 0 (BR5Page.tsx type-checks)
+
+== Terminal 2, replayer (first files) ==
+file 000001  2019-11-17 08:00 .. 08:05 UTC  (Vietnam 11-17 15:00)   1,804 rows  total 1,804
+file 000002  2019-11-17 08:05 .. 08:10 UTC  (Vietnam 11-17 15:05)   2,011 rows  total 3,815
+file 000003  2019-11-17 08:10 .. 08:15 UTC  (Vietnam 11-17 15:10)   1,878 rows  total 5,693
+...
+file 000078  2019-11-17 14:25 .. 14:30 UTC  (Vietnam 11-17 21:25)   2,899 rows  total 187,468
+Stopped after file 78: 187,468 rows, 15:00-21:30 Vietnam time.
+
+== Terminal 1, streaming_gold.py (BR5's lines; BR1's and BR3's are interleaved) ==
+--fresh: removed 1 checkpoint directories and 143 landed files, emptied gmv_by_minute, trending_products, abandoned_carts, order_velocity_alerts
+READY: 3 of 4 jobs running (br1_gmv_by_minute, br3_trending_products, br5_abandoned_carts), watching /home/dat/shop-insight/data/stream_landing
+READY: now start python ingestion/replayer.py --speed 60
+[br5_abandoned_carts] batch 0: no session closed yet
+[br5_abandoned_carts] batch 0: 1,791 events after cleaning, watermark none yet, 3,775 ms
+...
+[br5_abandoned_carts] batch 8: no session closed yet
+[br5_abandoned_carts] batch 8: 1,943 events after cleaning, watermark 2019-11-17 15:29:59, 549 ms
+[br5_abandoned_carts] batch 9: upserted 18 carts into abandoned_carts (1 partitions) in 316 ms
+[br5_abandoned_carts] batch 9: 2,051 events after cleaning, watermark 2019-11-17 15:34:59, 616 ms
+[br5_abandoned_carts] batch 10: upserted 35 carts into abandoned_carts (1 partitions) in 246 ms
+[br5_abandoned_carts] batch 10: 1,908 events after cleaning, watermark 2019-11-17 15:39:59, 461 ms
+...
+[br5_abandoned_carts] batch 77: upserted 48 carts into abandoned_carts (1 partitions) in 207 ms
+[br5_abandoned_carts] batch 77: 2,889 events after cleaning, watermark 2019-11-17 21:14:59, 412 ms
+[br5_abandoned_carts] batch 78: upserted 36 carts into abandoned_carts (1 partitions) in 128 ms
+Ctrl-C: stopping after the running micro-batch (Ctrl-C again to quit now)
+stopped; the checkpoints keep the progress
+
+The first carts land in batch 9, 45 s after the replayer started: a session closes once the
+watermark (10 min behind) passes its last event + 30 min, about 40 minutes of event time.
+Batch 78 is the no-data batch Spark runs when the watermark moves to 21:19:59 after the last
+file; it closes the sessions whose last event was by 20:49:59.
+70 batches upserted 2,621 carts in total. Write time 128-316 ms (median 217), trigger
+354-3,775 ms (median 441, the 3,775 ms is batch 0's start-up). No exception in the log.
+
+== Cassandra against silver: the same rule recomputed with DuckDB ==
+Silver events from 17 Nov 15:00 to 21:30 (Vietnam), each user_session split at 30-minute
+gaps, kept when the split has a cart, no purchase, and last event + 30 min <= 21:19:59; the
+latest split per session wins, as the upsert does.
+stream rows (17 Nov)                   2,600
+silver rows, same rule                 2,600
+sessions in both                       2,600
+  identical value, items, user, time   2,600
+only in stream                             0
+only in silver                             0
+sum cart_value  stream   1,411,565.93   silver   1,411,565.93
+sum item_count  stream          2,900   silver          2,900
+2,621 upserts for 2,600 rows: 21 sessions had a second abandoned split the same day, and
+the later one overwrote the earlier, as the key ((event_date), user_session) intends.
+
+cart_value sums price over the session's cart events, like fact_session_funnel.cart_value
+(batch_warehouse.py). The largest cart, 53,157.63 with item_count 1, is one product at
+1,661 added 32 times in 9 minutes (session 14ed07dd-..., 18:40-18:49).
+
+== GET /api/br5/carts ==
+?event_date=2019-11-17                 {"ms": 13.563, "warehouse": "Cassandra", "partitions": 1, "rows": 2600}
+(no parameters: latest date)           {"ms": 12.888, "warehouse": "Cassandra", "partitions": 2, "rows": 2600}
+?event_date=2019-11-17&min_value=500   {"ms": 9.497, "warehouse": "Cassandra", "partitions": 1, "rows": 721}
+?event_date=2019-11-16                 {"ms": 2.311, "warehouse": "Cassandra", "partitions": 1, "rows": 0}
+Every response: cart_value descending, meta.rows == len(data); min_value=500 lowest row 501.03.
+First row: {"event_date": "2019-11-17", "user_session": "14ed07dd-4bcd-46b4-b01a-3eaa2241b33d",
+"cart_value": 53157.63, "user_id": 563730244, "item_count": 1, "last_event_at": "2019-11-17T18:49:03+07:00"}
+
+== Size of a partition (DuckDB on all of silver, same 30-minute rule) ==
+median day 1,609 carts; 17 Nov 8,774 (3,965 with the last event from 15:00); 15 Nov,
+the busiest, about 18,300. Ties in event_time move these by 1 between runs.

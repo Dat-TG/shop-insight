@@ -153,31 +153,40 @@ cleaning rules in `clean()`, which the streaming job imports). So does the
 infrastructure: `docker-compose.yml` (cassandra:4.1.12 + postgres:16.15, pinned to the
 patch), `.env.example` and `serving/check_infra.py` (prints `INFRA OK`); the Docker
 install is `docs/SETUP_SPARK.md` step 9. The warehouse layer: the Postgres star DDL
-`warehouse/ddl.sql` and its small-dimension loader `serving/load_star_postgres.py`;
+`warehouse/ddl.sql` and its loader `serving/load_star_postgres.py` (the three small
+dimensions when run on its own, every star table when step 6 calls it);
 `processing/batch_warehouse.py`, the 5.6 build order, which imports
 `processing/dim_product.py` (`dim_product` SCD2 + `product_sk`) and `processing/dim_user.py`
-(`stg_rfm_snapshot` + `dim_user` SCD2 + `user_sk`) and builds `dim_event_type`,
-`dim_product`, `stg_rfm_snapshot`, `dim_user`, `fact_event` (4,754,015 rows, 31 date
-directories) and `fact_session_funnel` (970,797 rows, one per silver `user_session`,
-checked against `ck_fsf_stage` and `ck_fsf_lags`), so it prints `WAREHOUSE PARTIAL: 6 of
-9 tables built`. Still stubs: `dim_date`, `dim_warehouse` and Postgres step 6 (Tin), and
-`fact_inventory_daily` (W40). Inputs and checks: `ingestion/gen_catalog.py` (run before
-batch_warehouse), `ingestion/gen_inventory.py`, `checks/scd2_integrity.py`,
+(`stg_rfm_snapshot` + `dim_user` SCD2 + `user_sk`) and builds all nine tables: `dim_date`,
+`dim_event_type`, `dim_warehouse`, `dim_product`, `stg_rfm_snapshot`, `dim_user`,
+`fact_event` (4,754,015 rows, 31 date directories), `fact_session_funnel` (970,797 rows,
+one per silver `user_session`, checked against `ck_fsf_stage` and `ck_fsf_lags`) and
+`fact_inventory_daily` (1,909,650 rows: 12,731 purchased SKUs x 5 warehouses x 30 days,
+dense). Step 6 then loads them into Postgres when it is up, and the script prints
+`WAREHOUSE OK`. Inputs and checks: `ingestion/gen_catalog.py` and
+`ingestion/gen_inventory.py` (both run before batch_warehouse), `checks/scd2_integrity.py`,
 `checks/fact_event_spot.py`. Cassandra: `serving/cassandra_schema.cql` +
 `serving/apply_schema.py`. The streaming foundation: `ingestion/replayer.py` (bronze ->
 `data/stream_landing/`, one JSON file every 5 s), `processing/source.py` (the only
 source reader) and `processing/streaming_gold.py`, where BR1 writes `gmv_by_minute`
 (plus a `category_l1 = 'all'` total row per window), BR3 writes the top 20 of each
-15-minute window to `trending_products`, and BR5 and BR8 are stubs for
-W41. `docs/STREAMING_PATTERN.md` walks through it
+15-minute window to `trending_products`, BR5 writes one row per session that carted and
+did not buy within a 30-minute `session_window` to `abandoned_carts` (upsert, no delete),
+and BR8 writes one row per 5-minute window and user with a purchase to
+`order_velocity_alerts`, labelled low / medium / high at 1-2 / 3-9 / >= 10 orders
+(API_CONTRACT section 10; upsert, no delete). `docs/STREAMING_PATTERN.md` walks through it
 block by block, and `docs/SPARK_GUIDE_VI.md` Phần 10 is its Vietnamese twin (keep the
-two in step). The FastAPI + React skeleton serves fixtures, except BR1, BR2, BR3, BR4 and
-BR7, which are live end to end: `GET /api/br1/realtime` and `GET /api/br3/trending` read
-Cassandra through `serving/api/cassandra.py` (the one session every Cassandra router
-imports), and their screens refresh every 10 s; `processing/batch_gold.py` projects BR4's
-`rfm_segments` from `dim_user` and aggregates BR2's `funnel_daily` (465 rows: session start
-date x 14 categories + `'all'`) from `fact_session_funnel`, the category rows through
-`fact_event` and `dim_product` on `product_sk`, and `GET /api/br4/segments` and
+two in step). All eight BRs are live end to end: `GET /api/br1/realtime`,
+`GET /api/br3/trending`, `GET /api/br5/carts`, `GET /api/br6/stockout` (one query per
+warehouse partition, at most 100 rows each) and `GET /api/br8/alerts` read Cassandra
+through `serving/api/cassandra.py` (the one session every Cassandra router imports), and
+the BR1, BR3, BR5 and BR8 screens refresh every 10 s;
+`processing/batch_gold.py` writes BR6's `stockout_risk` from the last day of
+`fact_inventory_daily` (delete each warehouse partition, then insert, 9999.0 for a NULL
+`days_to_stockout`), projects BR4's `rfm_segments` from `dim_user` and aggregates
+BR2's `funnel_daily` (465 rows: session start date x 14 categories + `'all'`) from
+`fact_session_funnel`, the category rows through `fact_event` and `dim_product` on
+`product_sk`, and `GET /api/br4/segments` and
 `GET /api/br2/funnel` read them with DuckDB; `processing/gold_br7.py` builds BR7's
 `product_affinity`, which `GET /api/br7/affinity` reads with DuckDB. The
 project runs W38-W46 (14 Sep - 15 Nov). W38 is a combined week: kickoff and
@@ -190,10 +199,9 @@ repo. So: write the setup down instead of explaining it, comment the reference
 implementation instead of walking someone through it, and make every gate produce
 an artefact someone can look at on their own time.
 
-Next task: Gate 2a (end of W41, all 8 BRs demonstrable). BR2's evidence is
-`docs/evidence/gate2a_br2_run.txt`. Still open: BR5 and BR8, whose owners fill the stubs
-in `processing/streaming_gold.py` following `docs/STREAMING_PATTERN.md` and copy
-`serving/api/routers/br1.py` for their endpoint, and BR6. The remaining stubs in
-`processing/batch_warehouse.py` stay with their owners: `dim_date`, `dim_warehouse` and
-step 6 (Tin), and `fact_inventory_daily` (W40). Replace the body, keep the signature,
-write through `write_dim`/`write_fact`.
+Next task: Gate 2b (W42, code freeze): every screen measured under 2 s through its
+QueryMeta footer. Gate 2a (all 8 BRs demonstrable) is met in code since #23. Its evidence
+is `docs/evidence/gate2a_br2_run.txt` and `docs/evidence/gate2a_br5_run.txt`, and Tin still
+owes `gate2a_br6_run.txt` and `gate2a_br8_run.txt`. One team decision is open:
+`docs/BR_SCOPE.md` says BR8's demo opens an alert to its list of orders, but the screen
+expands an alert to its window totals, and `order_velocity_alerts` stores no orders.

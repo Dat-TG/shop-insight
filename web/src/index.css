@@ -780,7 +780,178 @@ body {
   letter-spacing: 0.04em;
 }
 
+/* ── BR6 Stockout Risk ─────────────────────────────────────────────────── */
+/* Badge: small inline label with urgency colouring, used by stockout table. */
+.badge {
+  display: inline-block;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  font-family: var(--font-mono);
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+.badge--danger  { background: rgba(255, 69, 58, 0.18); color: #ff6b6b; }
+.badge--warning { background: rgba(245, 166, 35, 0.18); color: #f5a623; }
+.badge--success { background: rgba(48, 209, 88, 0.18);  color: var(--success-subtle); }
+.badge--neutral { background: rgba(255, 255, 255, 0.06); color: var(--text-secondary); }
+
+/* Toolbar button: small action button inside the filter toolbar. */
+.toolbar__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.6rem;
+  border-radius: 5px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-size: 0.75rem;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+.toolbar__btn:hover:not(:disabled) {
+  background: var(--bg-glass);
+  border-color: var(--border-default);
+}
+.toolbar__btn:disabled { opacity: 0.4; cursor: default; }
+.toolbar__btn--ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-secondary);
+}
+.toolbar__btn--ghost:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: transparent;
+  color: var(--text-primary);
+}
+
+/* Coloured table rows (urgency bands, BR6 stockout risk table). */
+.data-table__row--danger td   { background: rgba(255, 69, 58, 0.08); }
+.data-table__row--warning td  { background: rgba(245, 166, 35, 0.07); }
+
+
+/* ── BR8 / BR6 Summary Cards ─────────────────────────────────────────────── */
+.br8-summary {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.br8-summary__card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 1rem 1.5rem;
+  background: var(--bg-surface-elev);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  min-width: 90px;
+  color: var(--text-secondary);
+  flex: 1;
+}
+
+.br8-summary__card--high {
+  border-color: rgba(255, 59, 48, 0.35);
+  background: rgba(255, 59, 48, 0.06);
+  color: #ff3b30;
+}
+
+.br8-summary__card--medium {
+  border-color: rgba(255, 159, 10, 0.35);
+  background: rgba(255, 159, 10, 0.06);
+  color: #ff9f0a;
+}
+
+.br8-summary__count {
+  font-family: var(--font-mono);
+  font-size: 1.65rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.br8-summary__card--high   .br8-summary__count { color: #ff3b30; }
+.br8-summary__card--medium .br8-summary__count { color: #ff9f0a; }
+
+.br8-summary__label {
+  font-size: 0.73rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+}
+
+/* Muted toolbar item (e.g. "Updated X s ago"). */
+.toolbar__item--muted {
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  gap: 5px;
+}
+
+/* ── BR8 Alert Row Expansion ─────────────────────────────────────────── */
+.data-table__row--clickable {
+  cursor: pointer;
+}
+.data-table__expand-row td {
+  background: rgba(0, 0, 0, 0.28) !important;
+  padding: 1rem 1.25rem !important;
+  text-align: left !important;
+}
+.br8-alert-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.br8-alert-detail__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.84rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.br8-alert-detail__stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.75rem;
+}
+.br8-alert-detail__stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.6rem 0.75rem;
+  background: var(--bg-surface-elev);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+.br8-alert-detail__label {
+  font-size: 0.68rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.br8-alert-detail__value {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+}
+.br8-alert-detail__note {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  padding: 0.65rem 0.85rem;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 6px;
+  border-left: 3px solid var(--accent-apple);
+}
+
 /* ── Animation Utilities ──────────────────────────────────────────────── */
+
 @keyframes spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }

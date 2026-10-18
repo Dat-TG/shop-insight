@@ -2042,11 +2042,131 @@ Carried forward:
 - For Khang's report: the 1-7 Nov purchases without a cart, and BR2's 15 Nov (131 purchase sessions of 53,553).
 - The Gate 2a screenshot of `/br2` with its footer goes to the group chat (Dat).
 
-## Session 22 — 9 October 2026 (W41)
+## Session 22 — 12 October 2026 (W42)
+
+**Tool:** Claude Code (Opus 5.5).
+**Scope:** Dat's review of Nguyen's PR #26 (BR5 end to end), then a run of BR5 on the PR head and small fixes on
+`w41-nguyen` before the merge. No query, endpoint or screen logic was changed: Nguyen's code is as Nguyen pushed it.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| Review of #26 — read-only, against CLAUDE.md, SYSTEM_DESIGN 6.1, API_CONTRACT §7, `STREAMING_PATTERN.md` and the Spark trap list; no blocking finding. Not posted (Dat's decision below) | Human-approved |
+| `=` — the empty file at the repo root that came in with 2e38359, removed | Run and verified (nothing reads it) |
+| `processing/streaming_gold.py` — docstring status line: BR5 `done (W41)` | Comment only |
+| `serving/api/routers/br5.py`, `web/src/pages/BR5Page.tsx` — "a few thousand rows at most" replaced with the measured partition sizes; final newline added | Comment only |
+| `SYSTEM_DESIGN.md` §6.1 — the same claim replaced with the measured sizes | AI-drafted |
+| `CLAUDE.md` and `README.md` status — BR5 live, `GET /api/br5/carts` reads Cassandra, Gate 2a open only for BR8 and BR6 | AI-drafted |
+| `docs/evidence/gate2a_br5_run.txt` (new) — text copy of the run below | Captured from the run |
+| `docs/AI_USAGE.md` — this session | AI-drafted |
+
+### How it was checked
+
+| Claim | How it was measured |
+|---|---|
+| BR5's stream runs and writes | Dat's machine, branch `w41-nguyen` at 2e38359: `python processing/streaming_gold.py --fresh` (`READY: 3 of 4 jobs`), then `python ingestion/replayer.py --speed 60 --start "2019-11-17 08:00:00"` for 78 files (15:00-21:30 Vietnam time, 187,468 rows). First carts in batch 9; 70 batches upserted 2,621 carts; no exception; Ctrl-C stopped cleanly |
+| The stream's rows are right | Scratch script (not committed): `abandoned_carts` for 2019-11-17 read with cassandra-driver against DuckDB on silver over the same hours, sessions split at 30-minute gaps, cart and no purchase, last event + 30 min <= the final watermark 21:19:59, the latest split per session kept. 2,600 rows both sides, 2,600 identical in value, items, user and time, 0 only on one side; Σ`cart_value` 1,411,565.93 both |
+| The API returns them sorted, with measured meta | `uvicorn` + curl: `?event_date=2019-11-17` 13.6 ms, 1 partition, 2,600 rows; no parameters 2 partitions (the `DISTINCT` listing + the day); `min_value=500` 721 rows, lowest 501.03; `2019-11-16` 200 with `data []`. Each sorted by `cart_value` descending, `meta.rows == len(data)` |
+| The screen compiles | `cd web && npx tsc -p tsconfig.app.json --noEmit`: exit 0. Not rendered in a browser |
+| Partition sizes in the comments and §6.1 | DuckDB on all of silver, the same 30-minute rule, grouped by the date of the last event: median 1,609; 17 Nov 8,774, of which 3,965 with the last event from 15:00; 15 Nov 18,303 or 18,304 between runs |
+| `cart_value` means what the star means | `processing/batch_warehouse.py:348`: `fact_session_funnel.cart_value` is also `sum(price)` over cart events |
+
+### What the AI got wrong, and was corrected on
+
+- **The first measurement queries globbed `data/silver/*/*.parquet`.** Silver is partitioned by `event_date` and
+  `event_type`, so they found no file. Rerun with `**/*.parquet` and `hive_partitioning=true`.
+- **The busiest-day count was first reported as exactly 18,303.** A rerun gave 18,304: ties in `event_time` make
+  the 30-minute split differ by one between runs. The docs say "about 18,300".
+- **The replayer was stopped with SIGTERM, not Ctrl-C,** so `replayer.log` ends in a Java `Connection reset`
+  trace. It is a stop artefact, not a fault; the evidence file says it was stopped after file 78.
+- **The stop command's `pgrep -f` matched its own shell** and sent that shell SIGINT too. The stream got its
+  SIGINT as well and stopped cleanly ("stopped; the checkpoints keep the progress", exit 0).
+
+### Judgement that stayed with the team
+
+Dat decided (12 October, in this session): no review comment on #26; fix what the review found, then merge.
+
+Made by AI, flagged for review:
+- **The fixes went onto Nguyen's branch** as a new commit (no force-push), and #26 is squash-merged, so the `=`
+  file never enters `main`'s history. Nguyen keeps authorship of the BR5 code.
+- **`cart_value` counts every cart event,** so one product added 32 times in 9 minutes makes the largest cart,
+  53,157.63 with `item_count` 1. It matches `fact_session_funnel.cart_value`, and nothing was changed. Nguyen to
+  say whether the BR5 list should keep it.
+- **One row per (day, session) keeps only the latest abandoned split:** 21 of 2,621 upserts in the run
+  overwrote an earlier one. That is the key SYSTEM_DESIGN 6.1 chose.
+
+Carried forward:
+- The Gate 2a screenshot of `/br5` with its footer goes to the group chat (Nguyen).
+- The BR5 numbers above are gate evidence, not evaluation results: the ≥99% correctness comparison and Gate 2b
+  timings stay with their owners in PLAN.md.
+- Session 21's carried-forward list is unchanged; nothing in it was touched here.
+
+## Session 23 — 13 October 2026 (W42)
+
+**Tool:** Claude Code (Opus 5.5).
+**Scope:** Dat's re-review of Tin's PR #23 (BR6 + BR8 + warehouse step 6) at 48b62de, then a fix for its two blocking
+findings on `w41-tin-merge-br6`, local test steps for the whole PR, and the pre-merge status docs. Tin's BR6 and BR8
+query, endpoint and screen code is as Tin pushed it; only the Postgres load of `fact_session_funnel` changed.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| Re-review of #23 — Khang's four points and the four must-fix items, the team decision, the questions and the nits from the 11 Oct review, each marked addressed or not; two new blocking findings in the `fact_session_funnel` load. Not posted (Dat's decision below) | Superseded by the fix |
+| `serving/load_star_postgres.py` — `load_fact_session_funnel()` now inserts `last_event_at` and `purchase_value`; its docstring no longer calls `cart_value` nullable | Run and verified (14235bd) |
+| `processing/batch_warehouse.py` — `load_postgres()` renders `fact_session_funnel`'s five timestamps with `date_format` before `toLocalIterator()`, as `fact_event`'s `event_time` already was | Run and verified (14235bd) |
+| Local test steps for the whole PR: `gen_inventory.py`, `batch_warehouse.py` with Postgres up, Postgres row counts, `batch_gold.py --br6`, the BR6 and BR8 curls, the BR8 stream with the replayer, both screens | Run by Dat, reported OK |
+| `CLAUDE.md` and `README.md` status — all nine tables and `WAREHOUSE OK`, step 6 loads Postgres, BR6 and BR8 live, next task Gate 2b, open items | AI-drafted |
+| `docs/AI_USAGE.md` — this session | AI-drafted |
+
+### How it was checked
+
+| Claim | How it was measured |
+|---|---|
+| Step 6 stopped whenever Postgres was up | `warehouse/ddl.sql`: `fact_session_funnel.last_event_at` and `.purchase_value` are `NOT NULL` with no default; the loader listed 17 of the table's 19 columns. Read from the DDL, not reproduced on the old code |
+| The old load shifted timestamps by 7 hours | `.venv/lib/python3.14/site-packages/pyspark/sql/types.py`: `TimestampType.fromInternal` calls `datetime.fromtimestamp` (local time); `date +%z` → `+0700`; `conf/spark-defaults.conf` → `spark.sql.session.timeZone UTC`. Reproduced: session -9223038402290496650 (`session_start_date` 2019-11-17) is collected as 2019-11-18 05:45:11 and rendered by the fix as 2019-11-17 22:45:11 |
+| The fixed load is right | Scratch database `scratch_pr23` with `warehouse/ddl.sql` applied; scratch script (not committed) runs the real `load_postgres()` on `fact_session_funnel` for 2019-11-17, `read_env` patched to the scratch database. Postgres vs Parquet: 71,594 rows both; 31,938 starting at 17:00 or later both; 0 rows where `session_start_at::date <> session_start_date`; min start 2019-11-17 00:00:07, max `last_event_at` 2019-11-23 13:02:13 and Σ`purchase_value` 3,799,654.81 equal. Database dropped afterwards |
+| The whole PR runs | Dat's machine, branch at 14235bd: the local test steps 1-7, reported "Run ok" by Dat. No log was captured in this session; that is what Tin's evidence files are for |
+| `fact_inventory_daily` 1,909,650 and `BR6 OK` 63,655 in CLAUDE.md and README | The expected values printed in the test steps (12,731 purchased SKUs x 5 warehouses x 30 days; 12,731 x 5 for the last day), which Dat's run reported OK against. Not re-measured by AI |
+| `dim_product` 210,454 and `dim_user` 319,426 (expected values in the test steps) | DuckDB `count(*)` over `data/warehouse/dim_product/*.parquet` and `data/warehouse/dim_user/*.parquet` on Dat's machine |
+| The earlier points are addressed | `git diff ab616d3 pr/23` (1db318b, 48b62de); `git diff --quiet main pr/23 -- serving/api/routers/br4.py serving/api/cassandra.py serving/check_infra.py` → identical; `gh pr view 23` → MERGEABLE, CLEAN; `git merge-tree --write-tree main pr/23` → no conflict |
+
+### What the AI got wrong, and was corrected on
+
+- **The 11 Oct review told Tin to bring `serving/load_star_postgres.py` over from `w40-tin-br6` without checking its
+  loaders against `warehouse/ddl.sql`.** That branch already left out `last_event_at` and `purchase_value`
+  (`git show origin/w40-tin-br6:serving/load_star_postgres.py`, line 540), so following the advice carried the
+  crash into #23. This re-review compared every loader's column list with the DDL and the Parquet builders.
+- **The message of commit 14235bd says the full `batch_warehouse.py` run passes on Dat's machine.** It was written
+  before Dat said which test "Run ok" covered. Dat then confirmed the full steps 1-7, so the claim stands, but it
+  went into a pushed commit before it was confirmed.
+
+### Judgement that stayed with the team
+
+Dat decided (13 October, in this session): fix the two findings on Tin's branch instead of posting the review and
+waiting; commit and push 14235bd to `w41-tin-merge-br6` (no force-push); update CLAUDE.md, README and this log
+before the merge; leave the Gate 2a evidence files to Tin in a follow-up PR; then squash-merge #23.
+
+Made by AI, flagged for review:
+- **CLAUDE.md's next task is now Gate 2b** (W42 in PLAN.md), with Gate 2a counted as met in code and its BR6 and
+  BR8 evidence still owed.
+- **A squash merge keeps Tin as the author** of the BR6, BR8 and step 6 code on `main`; Dat's fix commit is folded in.
+
+Carried forward:
+- Tin: `docs/evidence/gate2a_br6_run.txt` and `gate2a_br8_run.txt`, laid out like `gate2a_br5_run.txt`. They should
+  show the 1,909,650 and 63,655 above.
+- Team: `docs/BR_SCOPE.md` says BR8's demo opens an alert to its list of orders; the screen expands an alert to its
+  window totals, and `order_velocity_alerts` stores no orders. Tin proposes the wording, the team agrees.
+- Session 22's carried-forward list is unchanged; nothing in it was touched here.
+
+## Session 24 — 9 and 18 October 2026 (W41-W42)
 
 **Tool:** Claude Code (Opus 5.5).
 **Scope:** report section 4.2, Cassandra (tracker row 74): partition and clustering keys, keys designed backwards
-from the screen's question, and the three tables that leave stale rows. Branch `w41-khang-report-4-2`.
+from the screen's question, and the three tables that leave stale rows. Branch `w41-khang-report-4-2`. On 18
+October, after #23 and #26 merged, `main` was merged into the branch (this entry was Session 22 until then; the
+12 October session took that number) and the BR5 and BR6 bullets were checked against the code that landed.
 
 ### What the AI produced
 
@@ -2054,6 +2174,7 @@ from the screen's question, and the three tables that leave stale rows. Branch `
 |---|---|
 | `docs/REPORT.md` 4.2 — keys on `gmv_by_minute` and `trending_products`, the contrast with the star, the cost of BR3's "newest window" in four measured sizes, the stale-row paragraph (`stockout_risk`, `trending_products`, `abandoned_carts`) | AI-drafted, numbers measured or quoted from `docs/evidence/` |
 | `docs/REPORT.md` "Nguồn số liệu của mục 4" — one command per number | AI-drafted |
+| `docs/REPORT.md` 4.2, 18 October — one sentence with BR5's measured cost of sorting in the API; the source table's BR5 and BR6 row points to the code instead of `SYSTEM_DESIGN.md` 6.1 | AI-drafted, number quoted from `docs/evidence/gate2a_br5_run.txt` |
 | `docs/evidence/cassandra_describe_gmv_by_minute.png`, `docs/evidence/cassandra_describe_trending_products.png` | Taken by Khang with `cqlsh` |
 | `docs/AI_USAGE.md` — this session | AI-drafted |
 
@@ -2067,6 +2188,8 @@ from the screen's question, and the three tables that leave stale rows. Branch `
 | BR1, 1 partition, 120 rows, 5.7 ms | Quoted from `docs/evidence/gate1a_br1_run.txt` (Dat's machine, Gate 1a); 4.2's source table says so |
 | 394, 1,440 and 43,200 windows (a scratch table with the same schema); the delete inside a batch; 7,600 of 7,600 rows; no duplicates after a restart | Quoted from `docs/evidence/gate1b_br3_run.txt`, not re-measured |
 | Which tables hold rows now | `SELECT count(*)`: `gmv_by_minute` 165,481, `trending_products` 393,121, `abandoned_carts`, `stockout_risk` and `order_velocity_alerts` 0. So BR5 and BR6 are described from the design, not measured |
+| The BR5 and BR6 bullets match the code (18 October, `main` at 03394c9) | `serving/cassandra_schema.cql`: `abandoned_carts` `((event_date), user_session)`, `stockout_risk` `((warehouse_id), days_to_stockout, product_id)`; `run_br6` in `processing/batch_gold.py` runs `DELETE FROM stockout_risk WHERE warehouse_id = ?` per warehouse, then inserts; `start_br5` in `processing/streaming_gold.py` only inserts; `serving/api/routers/br5.py` sorts by `cart_value` descending. The text of both bullets stands |
+| BR5, one day: 1 partition, 2,600 carts, 13.6 ms | Quoted from `docs/evidence/gate2a_br5_run.txt` (Dat's machine, Gate 2a, `?event_date=2019-11-17`), not re-measured |
 
 ### What the AI got wrong, and was corrected on
 
@@ -2080,6 +2203,9 @@ Khang decided: take the two `DESCRIBE TABLE` screenshots himself. The tracker po
 
 Made by AI, flagged for review:
 - **"Khoá phân vùng"**, not the tracker's "khoá phân mảnh": 4.1 and every screen footer already say "phân vùng".
-- **BR5 and BR6 are written from `SYSTEM_DESIGN.md` 6.1.** `start_br5` is still a stub and BR6's writer is in
-  Tin's #23, so 4.2 states their keys and clean-up rule and quotes no number for them. Nguyen and Tin: check the
-  two bullets against your code when it lands.
+- **BR5 and BR6 were written from `SYSTEM_DESIGN.md` 6.1 on 9 October,** when `start_br5` was a stub and BR6's
+  writer was in Tin's #23. On 18 October both bullets were checked against the merged code and stand unchanged;
+  BR5 now has one number, quoted from Gate 2a. Nguyen and Tin: say if the wording misdescribes your code.
+
+Carried forward:
+- Session 23's carried-forward list is unchanged; nothing in it was touched here.

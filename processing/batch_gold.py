@@ -1,5 +1,35 @@
+"""batch_gold.py — reads the star schema Parquet and writes to Cassandra + gold Parquet.
+
+Owners per BR:
+  BR2  funnel_daily (Parquet)       — Dat   (W41)
+  BR4  rfm_segments (Parquet)       — Khang (W40)
+  BR6  stockout_risk (Cassandra)    — Tin   (W40)
+
+Run AFTER batch_warehouse.py has populated data/warehouse/:
+    python processing/batch_gold.py          # all available BRs
+    python processing/batch_gold.py --br6    # BR6 only
+    python processing/batch_gold.py --rfm    # BR4 only
+    python processing/batch_gold.py --funnel # BR2 only
+
+BR6 contract (SYSTEM_DESIGN.md section 6.1 and cassandra_schema.cql):
+  Table: stockout_risk
+    PRIMARY KEY ((warehouse_id), days_to_stockout, product_id)
+  Idempotency: DELETE the whole partition (WHERE warehouse_id = ?) then INSERT
+  the new rows. This is the only safe way since the clustering key changes when
+  velocity changes — an upsert would leave orphan rows with the old
+  days_to_stockout value.
+
+  Sentinel: fact_inventory_daily stores NULL when velocity_7d = 0 (Postgres
+  CHECK ck_fid_dts). Cassandra clustering columns cannot be NULL, so this
+  script substitutes 9999.0 before writing (SYSTEM_DESIGN.md note at 6.1).
+"""
+
+from __future__ import annotations
+
+import argparse
 import os
 import sys
+import time
 from datetime import date
 from pathlib import Path
 
@@ -7,8 +37,13 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
 os.environ["SPARK_CONF_DIR"] = str(REPO / "conf")
 
+from cassandra.cluster import Cluster
+from cassandra.policies import DCAwareRoundRobinPolicy
+from cassandra.query import BatchStatement, BatchType
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
+
+from serving.check_infra import read_env
 
 DIM_USER_DIR = REPO / "data" / "warehouse" / "dim_user"
 RFM_SEGMENTS_DIR = REPO / "data" / "gold" / "rfm_segments"
@@ -21,6 +56,8 @@ FACT_SESSION_FUNNEL_DIR = REPO / "data" / "warehouse" / "fact_session_funnel"
 FACT_EVENT_DIR = REPO / "data" / "warehouse" / "fact_event"
 DIM_PRODUCT_DIR = REPO / "data" / "warehouse" / "dim_product"
 FUNNEL_DAILY_DIR = REPO / "data" / "gold" / "funnel_daily"
+FACT_INVENTORY_DIR = REPO / "data" / "warehouse" / "fact_inventory_daily"
+
 ALL_CATEGORIES = "all"  # a stored total row per day, never a sum of the categories (as BR1's 'all')
 VIEW_KEY, CART_KEY, PURCHASE_KEY = 1, 2, 3  # dim_event_type.event_type_key
 # views/carts/purchases count SESSIONS that reached the step (funnel_stage >= 1 / >= 2 / = 3);
@@ -30,6 +67,8 @@ FUNNEL_GOLD_COLUMNS = [
     "view_events", "cart_events", "purchase_events",
 ]
 
+
+# ── BR4: RFM Segments (Khang) ─────────────────────────────────────────────────
 
 def build_rfm_segments(dim):
     return dim.where("is_current").select(*RFM_GOLD_COLUMNS).withColumn("snapshot_date", F.lit(LAST_SNAPSHOT))
@@ -75,6 +114,8 @@ def run_rfm_segments(spark):
     print("RFM_SEGMENTS OK" if ok else "RFM_SEGMENTS MISMATCH")
     return ok
 
+
+# ── BR2: Funnel Daily (Dat) ───────────────────────────────────────────────────
 
 def furthest_stage(view_events, cart_events, purchase_events):
     """The rule build_fact_session_funnel() in batch_warehouse.py uses for funnel_stage."""
@@ -244,15 +285,149 @@ def run_funnel_daily(spark):
     return ok
 
 
+# ── BR6: Stockout Risk → Cassandra:stockout_risk (Tin) ─────────────────────────
+
+def get_cassandra_session():
+    """Open a cassandra-driver session on keyspace shopinsight."""
+    env = read_env()
+    host = env.get("CASSANDRA_HOST", "127.0.0.1")
+    port = int(env.get("CASSANDRA_PORT", "9042"))
+    keyspace = env.get("CASSANDRA_KEYSPACE", "shopinsight")
+    dc = env.get("CASSANDRA_DC", "datacenter1")
+
+    cluster = Cluster(
+        [host],
+        port=port,
+        load_balancing_policy=DCAwareRoundRobinPolicy(local_dc=dc),
+        protocol_version=5,
+    )
+    session = cluster.connect(keyspace)
+    return cluster, session
+
+
+def run_br6(spark: SparkSession) -> bool:
+    """Read fact_inventory_daily Parquet and write stockout_risk to Cassandra.
+
+    Owner: Tin (W40).
+
+    Steps per warehouse (SYSTEM_DESIGN.md 6.1):
+    1. Filter fact_inventory_daily to the most recent snapshot_date in that
+       partition (semi-additive stock_on_hand: only one date makes sense).
+    2. Substitute days_to_stockout NULL -> 9999.0 (Cassandra sentinel).
+    3. DELETE FROM stockout_risk WHERE warehouse_id = ? (whole partition).
+    4. INSERT rows in UNLOGGED batches using prepared statements.
+    """
+    if not FACT_INVENTORY_DIR.exists() or not list(FACT_INVENTORY_DIR.glob("snapshot_date=*")):
+        print(f"{FACT_INVENTORY_DIR} is missing. Run python processing/batch_warehouse.py first.")
+        return False
+
+    t0 = time.perf_counter()
+    print("reading fact_inventory_daily ...")
+    df = spark.read.parquet(str(FACT_INVENTORY_DIR))
+
+    # Keep only the latest snapshot_date per warehouse (semi-additive: SYSTEM_DESIGN 5.5)
+    latest_dates = df.groupBy("warehouse_id").agg(F.max("snapshot_date").alias("snapshot_date"))
+    latest = df.join(latest_dates, ["warehouse_id", "snapshot_date"], "inner")
+
+    # Apply Cassandra sentinel: NULL -> 9999.0
+    latest = latest.withColumn(
+        "days_to_stockout",
+        F.coalesce(F.col("days_to_stockout"), F.lit(9999.0)).cast("float"),
+    ).select(
+        F.col("warehouse_id").cast("int"),
+        F.col("days_to_stockout"),
+        F.col("product_id").cast("bigint"),
+        F.col("stock_on_hand").cast("int"),
+        F.col("velocity_7d").cast("float"),
+    )
+
+    # Collect warehouse IDs
+    wh_ids = [row.warehouse_id for row in latest.select("warehouse_id").distinct().orderBy("warehouse_id").collect()]
+    if not wh_ids:
+        print("  no rows found in fact_inventory_daily")
+        return False
+
+    cluster, session = get_cassandra_session()
+    try:
+        delete_stmt = session.prepare("DELETE FROM stockout_risk WHERE warehouse_id = ?")
+        insert_stmt = session.prepare(
+            "INSERT INTO stockout_risk "
+            "(warehouse_id, days_to_stockout, product_id, stock_on_hand, velocity_7d) "
+            "VALUES (?, ?, ?, ?, ?)"
+        )
+
+        total_rows = 0
+        BATCH_SIZE = 100  # unlogged batch size within the same partition key
+
+        for wh_id in wh_ids:
+            wh_rows = latest.filter(F.col("warehouse_id") == wh_id).collect()
+            session.execute(delete_stmt, (int(wh_id),))
+
+            for i in range(0, len(wh_rows), BATCH_SIZE):
+                chunk = wh_rows[i : i + BATCH_SIZE]
+                batch = BatchStatement(batch_type=BatchType.UNLOGGED)
+                for r in chunk:
+                    batch.add(
+                        insert_stmt,
+                        (
+                            int(r.warehouse_id),
+                            float(r.days_to_stockout),
+                            int(r.product_id),
+                            int(r.stock_on_hand),
+                            float(r.velocity_7d),
+                        ),
+                    )
+                session.execute(batch)
+
+            total_rows += len(wh_rows)
+            print(f"  warehouse {wh_id}: {len(wh_rows):,} rows written to Cassandra")
+
+        elapsed = time.perf_counter() - t0
+        print(f"BR6 OK: {total_rows:,} rows across {len(wh_ids)} warehouses in {elapsed:.1f} s")
+        return True
+    finally:
+        cluster.shutdown()
+
+
+# ── Entry Point ───────────────────────────────────────────────────────────────
+
 def main():
-    for path in (DIM_USER_DIR, FACT_SESSION_FUNNEL_DIR, FACT_EVENT_DIR, DIM_PRODUCT_DIR):
+    parser = argparse.ArgumentParser(description="Build gold datasets.")
+    parser.add_argument("--br6", action="store_true", help="Run BR6 (stockout_risk -> Cassandra)")
+    parser.add_argument("--rfm", action="store_true", help="Run BR4 (rfm_segments -> Parquet)")
+    parser.add_argument("--funnel", action="store_true", help="Run BR2 (funnel_daily -> Parquet)")
+    args = parser.parse_args()
+
+    run_all = not (args.br6 or args.rfm or args.funnel)
+
+    # Validate inputs upfront: missing input fails loudly instead of being skipped
+    required_paths = []
+    if run_all or args.rfm:
+        required_paths.append(DIM_USER_DIR)
+    if run_all or args.funnel:
+        required_paths.extend([FACT_SESSION_FUNNEL_DIR, FACT_EVENT_DIR, DIM_PRODUCT_DIR])
+    if run_all or args.br6:
+        required_paths.append(FACT_INVENTORY_DIR)
+
+    for path in required_paths:
         if not (path / "_SUCCESS").exists():
             sys.exit(f"{path} is missing. Run python processing/batch_warehouse.py first.")
+
     spark = SparkSession.builder.master("local[*]").appName("batch_gold").getOrCreate()
-    ok_rfm = run_rfm_segments(spark)
-    ok_funnel = run_funnel_daily(spark)  # runs even when BR4 failed, so both report
-    spark.stop()
-    if not (ok_rfm and ok_funnel):
+    ok_rfm = True
+    ok_funnel = True
+    ok_br6 = True
+    try:
+        if run_all or args.rfm:
+            ok_rfm = run_rfm_segments(spark)
+        if run_all or args.funnel:
+            ok_funnel = run_funnel_daily(spark)
+        if run_all or args.br6:
+            ok_br6 = run_br6(spark)
+    finally:
+        spark.stop()
+
+    if not (ok_rfm and ok_funnel and ok_br6):
         sys.exit(1)
     print("GOLD OK")
 

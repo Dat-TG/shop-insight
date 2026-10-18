@@ -1,0 +1,2 @@
+FILE data/warehouse/fact_event/event_date=2019-11-29/part-00006-f7d05af5-9355-43e5-801c-3db90be7cd54.c000.snappy.parquet
+[('event_time', None, None), ('price', '0.83', '2574.07')]
