@@ -41,3 +41,11 @@ Khi đo lần chính thức trên **máy demo** ở W44:
 
 File `w41_benchmark_results.csv` là nguồn số duy nhất cho report mục 4.4.  
 Mọi con số trong report phải trích dẫn file này, không trích dẫn thẳng evidence files.
+
+## Biểu đồ trực quan hoá (W42 Task 100 — Slide 5 / Report 4.4)
+
+Biểu đồ so sánh 4 cấu hình với trục tung thang logarit (`log10`) được tạo tự động bởi:
+- Script: `benchmark/plot_benchmark.py`
+- Ảnh kết quả: `benchmark/results/w41_benchmark_comparison.png`
+- Nền tảng kiểm chứng DuckDB Star: `benchmark/verify_duckdb_star.py`
+Biểu đồ này sẵn sàng để Nguyên nhúng vào **Slide mục 5** và Khang đưa vào **Report mục 4.4**.
