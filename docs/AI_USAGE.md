@@ -2209,3 +2209,77 @@ Made by AI, flagged for review:
 
 Carried forward:
 - Session 23's carried-forward list is unchanged; nothing in it was touched here.
+
+## Session 25 — 21 October 2026 (W43)
+
+**Tool:** Claude Code (Opus 5.5).
+**Scope:** revision v3 of the indexing presentation (Canva `DAHYkUBuuhM`, 19 pages) against the reviewer's comments
+of 21 October, plus one new measurement for page 17. No application code was written; the measurement script was run
+and its source is appended to its evidence file.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| PR #31 (E1, `docs/evidence/presentation_parquet_run.txt`) merged with a merge commit | Done by the AI after Đắt approved the plan |
+| `docs/evidence/presentation_csv_vs_parquet.txt` (E4) — revenue per category on the same 7% sample, DuckDB on a CSV export of bronze vs DuckDB on `data/silver` with hive partitioning | Run and verified on Đắt's machine |
+| Canva `DAHYkUBuuhM` — slide text on 18 pages, speaker notes on 17, references with venues and docs URLs, title renamed to `Group15_Indexing_Presentation` | AI-edited; Đắt approved the 19 draft thumbnails before the commit |
+| Figures F14 (p17), F7 (p10), F8 (p11), F2 (p5), F9 (p12) redrawn as SVG and rendered to PNG with headless Chromium and Arimo; each checked by a second, independent agent | AI-drawn; approved with the thumbnails |
+| `docs/PRESENTATION_SLIDES.md` "Số được dùng" table — 19-page numbering, rows for "khớp 10%", "9 GB" and E4 | AI-drafted; local file, excluded by `.git/info/exclude` |
+| `docs/AI_USAGE.md` — this session | AI-drafted |
+
+### How it was checked
+
+- Every review point was checked read-only before anything was edited: four agents (repo facts, technical claims
+  with primary sources, Vietnamese wording, figures) and one adversarial agent over their combined output.
+- The draft deck was scanned for leftover terms ("ngược từ câu hỏi", "quét dải", "index học được", "hash table",
+  "9,009", …). Every "Nguồn:" footer matches a page 19 entry; page numbers run 1–19; notes exist on all 19 pages.
+
+| Claim | How it was measured |
+|---|---|
+| CSV 177.0 ms → partitioned Parquet 9.0 ms; Parquet opens 31 of 93 files | `.venv/bin/python presentation_csv_vs_parquet.py` (source at the end of the evidence file): 1 warm-up + 5 timed runs each, median; `EXPLAIN ANALYZE` prints `Scanning Files: 31/93`; both sides return the same 14 groups and 65,150 orders |
+| "khớp 10% dòng", "gần 2/3 số trang" (p8) | `docs/evidence/gin_vs_seqscan.txt`: 21,078 / 210,454 rows; Heap Blocks 7,646 vs seq-scan buffers 11,608 |
+| Colour is synthetic | `ingestion/gen_catalog.py`, `COLORS` chosen by a hash of `product_id` |
+| BR6 is batch but writes Cassandra | `run_br6` in `processing/batch_gold.py` |
+| The total-revenue screen reads one partition | `serving/api/routers/br1.py` reads the `category_l1 = 'all'` partition |
+
+### What the AI got wrong, and was corrected on
+
+- While planning, it told Đắt the copy differed from the original deck "only on a few pages". It differs on almost
+  every page (v2 restructured it). It re-asked with the facts, and Đắt changed the decision to re-recording the video.
+- `update_fill` silently re-cropped images: F14 came out zoomed and cut at the edges, and the GIN figure and F5 (where
+  only the alt text was changed) were zoomed slightly. This was caught on the thumbnails; the crops were reset, and
+  F5's restored to its original values.
+- The first E4 run printed an empty `File Filters` line. The extraction was fixed and the script re-run; the committed
+  file is the second run (152.0 / 8.3 ms in the first run, 177.0 / 9.0 ms in the second).
+- Canva captions were added at the default 16 px black and then reformatted to 24 px grey. The page 15 strip wrapped
+  "xoá" onto a second line until the sentence was shortened and the box widened.
+- Three review claims were refuted rather than applied: "5 màn hình thời gian thực" (BR6 is batch), "the total screen
+  reads many partitions" (it reads `'all'`), and "Cassandra 5.0 replaced Summary/Index with BTI" (BTI is opt-in).
+
+### Judgement that stayed with the team
+
+Đắt decided:
+- submit the copy's PDF on 23/10 and re-record the video from it;
+- drop thousands separators in the speaker notes only; slides and the report keep rule 4;
+- run the CSV vs Parquet measurement and no Cassandra measurement;
+- approve the plan, then approve the commit after seeing the thumbnails.
+
+Made by AI, flagged for review:
+- the terminology choices (quét khoảng, khoá, bảng băm, join, máy, bỏ qua / xoá, English section names);
+- the declined review items: no ShopInsight example on pages 7 and 10, keep the DELETE + INSERT example on page 9,
+  keep "trả bằng" and M for LSM on page 15, no learned index on the RUM triangle, author-year references instead of
+  IEEE numbering;
+- the page 17 line carries two numbers, against the one-number rule, because it is a before/after pair;
+- F7's right panel is now 3 × 2 boxes; F9 keeps the root label `silver/`.
+
+Not done: the P3 items of the plan (F4b "key", F5 marker, taller F6 and F13, bullet unification) and the layout of
+pages 9 and 16.
+
+Carried forward:
+- The original deck `DAHYFi9Mr50` shows `updated_at` 21/10 19:07, from another account. This session never opened an
+  editing transaction on it. Its owner should check the version history.
+- Owners write the "Bản video" narration for their pages (only 12–15 have one) and re-record from the locked PDF;
+  Nguyên assembles; someone asks the lecturer about the deadline as a fallback.
+- `docs/PRESENTATION_REVISION_PLAN.md` (local) has a v3 section (§9); the F7, F8, F14 rows of its §4 still describe v2.
+- Session 24's carried-forward list is unchanged; nothing in it was touched here.
