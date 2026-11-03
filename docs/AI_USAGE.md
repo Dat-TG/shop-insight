@@ -2264,3 +2264,132 @@ Made by AI, flagged for review:
 
 Carried forward:
 - Session 23's carried-forward list is unchanged; nothing in it was touched here.
+
+## Session 26 — 21 October 2026 (W43)
+
+**Tool:** Claude Code (Opus 5.5).
+**Scope:** revision v3 of the indexing presentation (Canva `DAHYkUBuuhM`, 19 pages) against the reviewer's comments
+of 21 October, plus one new measurement for page 17. No application code was written; the measurement script was run
+and its source is appended to its evidence file.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| PR #31 (E1, `docs/evidence/presentation_parquet_run.txt`) merged with a merge commit | Done by the AI after Đắt approved the plan |
+| `docs/evidence/presentation_csv_vs_parquet.txt` (E4) — revenue per category on the same 7% sample, DuckDB on a CSV export of bronze vs DuckDB on `data/silver` with hive partitioning | Run and verified on Đắt's machine |
+| Canva `DAHYkUBuuhM` — slide text on 18 pages, speaker notes on 17, references with venues and docs URLs, title renamed to `Group15_Indexing_Presentation` | AI-edited; Đắt approved the 19 draft thumbnails before the commit |
+| Figures F14 (p17), F7 (p10), F8 (p11), F2 (p5), F9 (p12) redrawn as SVG and rendered to PNG with headless Chromium and Arimo; each checked by a second, independent agent | AI-drawn; approved with the thumbnails |
+| `docs/PRESENTATION_SLIDES.md` "Số được dùng" table — 19-page numbering, rows for "khớp 10%", "9 GB" and E4 | AI-drafted; local file, excluded by `.git/info/exclude` |
+| `docs/AI_USAGE.md` — this session | AI-drafted |
+
+### How it was checked
+
+- Every review point was checked read-only before anything was edited: four agents (repo facts, technical claims
+  with primary sources, Vietnamese wording, figures) and one adversarial agent over their combined output.
+- The draft deck was scanned for leftover terms ("ngược từ câu hỏi", "quét dải", "index học được", "hash table",
+  "9,009", …). Every "Nguồn:" footer matches a page 19 entry; page numbers run 1–19; notes exist on all 19 pages.
+
+| Claim | How it was measured |
+|---|---|
+| CSV 177.0 ms → partitioned Parquet 9.0 ms; Parquet opens 31 of 93 files | `.venv/bin/python presentation_csv_vs_parquet.py` (source at the end of the evidence file): 1 warm-up + 5 timed runs each, median; `EXPLAIN ANALYZE` prints `Scanning Files: 31/93`; both sides return the same 14 groups and 65,150 orders |
+| "khớp 10% dòng", "gần 2/3 số trang" (p8) | `docs/evidence/gin_vs_seqscan.txt`: 21,078 / 210,454 rows; Heap Blocks 7,646 vs seq-scan buffers 11,608 |
+| Colour is synthetic | `ingestion/gen_catalog.py`, `COLORS` chosen by a hash of `product_id` |
+| BR6 is batch but writes Cassandra | `run_br6` in `processing/batch_gold.py` |
+| The total-revenue screen reads one partition | `serving/api/routers/br1.py` reads the `category_l1 = 'all'` partition |
+
+### What the AI got wrong, and was corrected on
+
+- While planning, it told Đắt the copy differed from the original deck "only on a few pages". It differs on almost
+  every page (v2 restructured it). It re-asked with the facts, and Đắt changed the decision to re-recording the video.
+- `update_fill` silently re-cropped images: F14 came out zoomed and cut at the edges, and the GIN figure and F5 (where
+  only the alt text was changed) were zoomed slightly. This was caught on the thumbnails; the crops were reset, and
+  F5's restored to its original values.
+- The first E4 run printed an empty `File Filters` line. The extraction was fixed and the script re-run; the committed
+  file is the second run (152.0 / 8.3 ms in the first run, 177.0 / 9.0 ms in the second).
+- Canva captions were added at the default 16 px black and then reformatted to 24 px grey. The page 15 strip wrapped
+  "xoá" onto a second line until the sentence was shortened and the box widened.
+- Three review claims were refuted rather than applied: "5 màn hình thời gian thực" (BR6 is batch), "the total screen
+  reads many partitions" (it reads `'all'`), and "Cassandra 5.0 replaced Summary/Index with BTI" (BTI is opt-in).
+
+### Judgement that stayed with the team
+
+Đắt decided:
+- submit the copy's PDF on 23/10 and re-record the video from it;
+- drop thousands separators in the speaker notes only; slides and the report keep rule 4;
+- run the CSV vs Parquet measurement and no Cassandra measurement;
+- approve the plan, then approve the commit after seeing the thumbnails.
+
+Made by AI, flagged for review:
+- the terminology choices (quét khoảng, khoá, bảng băm, join, máy, bỏ qua / xoá, English section names);
+- the declined review items: no ShopInsight example on pages 7 and 10, keep the DELETE + INSERT example on page 9,
+  keep "trả bằng" and M for LSM on page 15, no learned index on the RUM triangle, author-year references instead of
+  IEEE numbering;
+- the page 17 line carries two numbers, against the one-number rule, because it is a before/after pair;
+- F7's right panel is now 3 × 2 boxes; F9 keeps the root label `silver/`.
+
+Not done: the P3 items of the plan (F4b "key", F5 marker, taller F6 and F13, bullet unification) and the layout of
+pages 9 and 16.
+
+Carried forward:
+- The original deck `DAHYFi9Mr50` shows `updated_at` 21/10 19:07, from another account. This session never opened an
+  editing transaction on it. Its owner should check the version history.
+- Owners write the "Bản video" narration for their pages (only 12–15 have one) and re-record from the locked PDF;
+  Nguyên assembles; someone asks the lecturer about the deadline as a fallback.
+- `docs/PRESENTATION_REVISION_PLAN.md` (local) has a v3 section (§9); the F7, F8, F14 rows of its §4 still describe v2.
+- Session 24's carried-forward list is unchanged; nothing in it was touched here.
+
+## Session 27 — 23 October to 3 November 2026 (W43-W45)
+
+**Tool:** Claude Code (Opus 5.5).
+**Scope:** two artefacts of the indexing presentation that were made in Claude Code sessions not logged at the time,
+the "Áp dụng cho ShopInsight" figure F14 (23 October) and evidence E5 (26 October), brought to `main` through PR #32 on
+3 November (sprint task T01). This entry was written on 3 November from the files themselves and the "Số được dùng"
+table of `docs/PRESENTATION_SLIDES.md`, not from the two sessions' transcripts. No application code was written.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| `docs/figures/shopinsight_applied_map.html` — figure F14 of Canva `DAHYkUBuuhM` as HTML, rendered at 3x by headless Chromium to the PNG on the slide (the command is in the file's header) | AI-drawn on 23/10; it is the figure on the page 17 Đắt presented. Committed unchanged |
+| `docs/figures/fonts/` — Arimo (Apache 2.0) from Google Fonts: `arimo.css` and 16 woff2 subsets, so the figure renders the same on a machine without Arimo | Downloaded on 23/10; committed unchanged |
+| `docs/evidence/presentation_price_zonemap.txt` (E5) — the `price` min/max in the footer of each of the 93 silver row groups, and how many of them a `price > v` filter could skip | Run on Đắt's machine on 26/10; re-run on 3/11 (below) |
+| `docs/AI_USAGE.md` — the merge of `main` into this branch, which renumbered the E4 session from 25 to 26; this session | AI-drafted |
+
+### How it was checked
+
+On 3/11, before the merge, three independent agents checked these three artefacts read-only. Each check ran before `data/silver` was rebuilt for task T02.
+
+| Claim | How it was measured |
+|---|---|
+| E5 reproduces | The script in E5's SOURCE section, extracted verbatim and re-run with `.venv/bin/python` from the repo root: sections 1-3 (129 lines) are identical. Only the header date differs |
+| A filter `price > 1000` can skip 0 of the 93 row groups, although only 4.97% of rows match | E5 section 2, and a separate DuckDB query: `parquet_metadata('data/silver/*/*/*.parquet')`, `path_in_schema = 'price'`, 0 row groups with max <= 1000, and 236,207 of 4,754,015 rows with `price > 1000` |
+| The figure needs nothing from the network | Every `href`, `src` and `url()` in the HTML and `arimo.css` is relative and exists. A render inside `unshare -rn` (no network) is byte-identical to a normal one, and the browser requested only `file://` URLs |
+| The bundled Arimo is what the figure renders with | Rendered again with `fonts/` deleted, it is a different PNG, and DejaVu Sans overflows 5 boxes. With `fonts/` present, CDP `CSS.getPlatformFontsForNode` puts every glyph on the web font, Vietnamese diacritics included |
+| The conflict resolution drops nothing | The resolved file starts with `main`'s file byte for byte (`cmp`), followed by the branch's 74-line block with one changed line, the heading. Headings run 1 to 26 |
+
+### What the AI got wrong, and was corrected on
+
+- **Neither session was logged when it happened.** The figure and E5 stayed untracked on Đắt's machine for 11 and 8
+  days, so the project deck (T06), which redraws the figure, depended on one laptop. This entry is the late log.
+- **Session 26 (then numbered 25) took a number that `main` already had.** It was written on 21/10 without checking
+  `main` for the next free number, and Khang's report 4.3 entry, merged first, had taken 25. The heading was
+  renumbered and nothing else in the block changed. The merge commit says so, because the already-pushed `cf744d5`
+  message still says "session 25".
+- **E5 only reads the Parquet footers.** No Spark query filtering on price was timed. The file says this itself, and
+  the slide table keeps it in the spoken line only, not as a measured skip.
+
+### Judgement that stayed with the team
+
+Đắt decided (sprint sheet, row T01, 2/11): bring E5 and `docs/figures/` to `main` inside PR #32 rather than a new PR,
+and fix the duplicate session number while updating the branch. Then merge.
+
+Made by AI, flagged for review:
+- `main`'s Session 25 keeps its number because it reached `main` first; Đắt's E4 entry moved instead.
+- The HTML still carries the indexing talk's labels ("Hình minh hoạ", the badges 02/03/04, "trang 16", "trang 17",
+  "BRIN mới tạo, chưa đo"). They are part of F14 as presented. T06 removes them when it redraws the figure for the
+  project deck.
+- The Apache 2.0 licence is named in the HTML header but its text is not in the repo.
+
+Carried forward:
+- Session 26's carried-forward list is unchanged; nothing in it was touched here.
