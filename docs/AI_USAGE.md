@@ -2338,3 +2338,58 @@ Carried forward:
   Nguyên assembles; someone asks the lecturer about the deadline as a fallback.
 - `docs/PRESENTATION_REVISION_PLAN.md` (local) has a v3 section (§9); the F7, F8, F14 rows of its §4 still describe v2.
 - Session 24's carried-forward list is unchanged; nothing in it was touched here.
+
+## Session 27 — 23 October to 3 November 2026 (W43-W45)
+
+**Tool:** Claude Code (Opus 5.5).
+**Scope:** two artefacts of the indexing presentation that were made in Claude Code sessions not logged at the time,
+the "Áp dụng cho ShopInsight" figure F14 (23 October) and evidence E5 (26 October), brought to `main` through PR #32 on
+3 November (sprint task T01). This entry was written on 3 November from the files themselves and the "Số được dùng"
+table of `docs/PRESENTATION_SLIDES.md`, not from the two sessions' transcripts. No application code was written.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| `docs/figures/shopinsight_applied_map.html` — figure F14 of Canva `DAHYkUBuuhM` as HTML, rendered at 3x by headless Chromium to the PNG on the slide (the command is in the file's header) | AI-drawn on 23/10; it is the figure on the page 17 Đắt presented. Committed unchanged |
+| `docs/figures/fonts/` — Arimo (Apache 2.0) from Google Fonts: `arimo.css` and 16 woff2 subsets, so the figure renders the same on a machine without Arimo | Downloaded on 23/10; committed unchanged |
+| `docs/evidence/presentation_price_zonemap.txt` (E5) — the `price` min/max in the footer of each of the 93 silver row groups, and how many of them a `price > v` filter could skip | Run on Đắt's machine on 26/10; re-run on 3/11 (below) |
+| `docs/AI_USAGE.md` — the merge of `main` into this branch, which renumbered the E4 session from 25 to 26; this session | AI-drafted |
+
+### How it was checked
+
+On 3/11, before the merge, three independent agents checked these three artefacts read-only. Each check ran before `data/silver` was rebuilt for task T02.
+
+| Claim | How it was measured |
+|---|---|
+| E5 reproduces | The script in E5's SOURCE section, extracted verbatim and re-run with `.venv/bin/python` from the repo root: sections 1-3 (129 lines) are identical. Only the header date differs |
+| A filter `price > 1000` can skip 0 of the 93 row groups, although only 4.97% of rows match | E5 section 2, and a separate DuckDB query: `parquet_metadata('data/silver/*/*/*.parquet')`, `path_in_schema = 'price'`, 0 row groups with max <= 1000, and 236,207 of 4,754,015 rows with `price > 1000` |
+| The figure needs nothing from the network | Every `href`, `src` and `url()` in the HTML and `arimo.css` is relative and exists. A render inside `unshare -rn` (no network) is byte-identical to a normal one, and the browser requested only `file://` URLs |
+| The bundled Arimo is what the figure renders with | Rendered again with `fonts/` deleted, it is a different PNG, and DejaVu Sans overflows 5 boxes. With `fonts/` present, CDP `CSS.getPlatformFontsForNode` puts every glyph on the web font, Vietnamese diacritics included |
+| The conflict resolution drops nothing | The resolved file starts with `main`'s file byte for byte (`cmp`), followed by the branch's 74-line block with one changed line, the heading. Headings run 1 to 26 |
+
+### What the AI got wrong, and was corrected on
+
+- **Neither session was logged when it happened.** The figure and E5 stayed untracked on Đắt's machine for 11 and 8
+  days, so the project deck (T06), which redraws the figure, depended on one laptop. This entry is the late log.
+- **Session 26 (then numbered 25) took a number that `main` already had.** It was written on 21/10 without checking
+  `main` for the next free number, and Khang's report 4.3 entry, merged first, had taken 25. The heading was
+  renumbered and nothing else in the block changed. The merge commit says so, because the already-pushed `cf744d5`
+  message still says "session 25".
+- **E5 only reads the Parquet footers.** No Spark query filtering on price was timed. The file says this itself, and
+  the slide table keeps it in the spoken line only, not as a measured skip.
+
+### Judgement that stayed with the team
+
+Đắt decided (sprint sheet, row T01, 2/11): bring E5 and `docs/figures/` to `main` inside PR #32 rather than a new PR,
+and fix the duplicate session number while updating the branch. Then merge.
+
+Made by AI, flagged for review:
+- `main`'s Session 25 keeps its number because it reached `main` first; Đắt's E4 entry moved instead.
+- The HTML still carries the indexing talk's labels ("Hình minh hoạ", the badges 02/03/04, "trang 16", "trang 17",
+  "BRIN mới tạo, chưa đo"). They are part of F14 as presented. T06 removes them when it redraws the figure for the
+  project deck.
+- The Apache 2.0 licence is named in the HTML header but its text is not in the repo.
+
+Carried forward:
+- Session 26's carried-forward list is unchanged; nothing in it was touched here.

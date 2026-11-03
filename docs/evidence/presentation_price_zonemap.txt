@@ -1,0 +1,245 @@
+E5 - price min/max per silver row group: a price filter skips nothing (Canva page 17)
+
+====================================================================================================
+HEADER
+====================================================================================================
+date        2026-10-26T00:07:50+07:00
+machine     Dat-Xiaoxin | Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.43 | 20 logical cores
+versions    Python 3.14.4 | DuckDB 1.5.5
+repo        /home/dat/shop-insight @ cf744d5
+silver      data/silver/*/*/*.parquet, 93 files
+command     .venv/bin/python presentation_price_zonemap.py (source at the end of this file)
+
+====================================================================================================
+1  FOOTER STATISTICS OF price, ALL SILVER ROW GROUPS
+====================================================================================================
+SELECT file_name, row_group_id, row_group_num_rows AS num_rows,
+       CAST(stats_min_value AS DOUBLE) AS price_min,
+       CAST(stats_max_value AS DOUBLE) AS price_max
+FROM parquet_metadata('data/silver/*/*/*.parquet')
+WHERE path_in_schema = 'price'
+ORDER BY file_name, row_group_id
+
+row groups              93 in 93 files
+with min and max        93
+rows per row group      170 .. 438706
+price_min, range        0.77 .. 7.70
+price_max, range        1644.59 .. 2574.07
+
+====================================================================================================
+2  price > v: ROW GROUPS A READER COULD SKIP (max <= v) AND ROWS THAT MATCH
+====================================================================================================
+total rows              4754015
+
+     v    skippable row groups   rows with price > v     share
+   500                  0 / 93                810219    17.04%
+  1000                  0 / 93                236207     4.97%
+  1500                  0 / 93                 81461     1.71%
+  2000                 14 / 93                 25455     0.54%
+  2500                 35 / 93                 10781     0.23%
+
+A row group can be skipped for price > v only when its max <= v. This table is derived
+from the footers; no Spark query filtering on price was run or timed.
+
+====================================================================================================
+3  EVERY ROW GROUP
+====================================================================================================
+ num_rows  price_min  price_max  file
+     1051       6.67    2011.39  data/silver/event_date=2019-11-01/event_type=cart/part-00001-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+     1356       4.09    2393.63  data/silver/event_date=2019-11-01/event_type=purchase/part-00013-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+    77653       0.88    2574.07  data/silver/event_date=2019-11-01/event_type=view/part-00003-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+     1300       6.40    2003.91  data/silver/event_date=2019-11-02/event_type=cart/part-00015-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+     1536       1.14    2393.63  data/silver/event_date=2019-11-02/event_type=purchase/part-00016-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+   103118       0.77    2574.07  data/silver/event_date=2019-11-02/event_type=view/part-00013-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+     1271       6.40    1658.82  data/silver/event_date=2019-11-03/event_type=cart/part-00008-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+     1487       2.93    2574.07  data/silver/event_date=2019-11-03/event_type=purchase/part-00020-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+   105434       0.77    2574.07  data/silver/event_date=2019-11-03/event_type=view/part-00007-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+     1470       4.90    1671.27  data/silver/event_date=2019-11-04/event_type=cart/part-00000-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+     1875       1.79    2574.07  data/silver/event_date=2019-11-04/event_type=purchase/part-00020-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+   122889       0.83    2574.07  data/silver/event_date=2019-11-04/event_type=view/part-00003-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+     1219       0.88    1671.83  data/silver/event_date=2019-11-05/event_type=cart/part-00012-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+     1714       3.68    2342.15  data/silver/event_date=2019-11-05/event_type=purchase/part-00015-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+   120638       0.80    2574.07  data/silver/event_date=2019-11-05/event_type=view/part-00014-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+     1360       6.40    2006.14  data/silver/event_date=2019-11-06/event_type=cart/part-00007-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+     1615       2.02    2574.04  data/silver/event_date=2019-11-06/event_type=purchase/part-00007-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+   119725       0.85    2574.07  data/silver/event_date=2019-11-06/event_type=view/part-00020-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+     1463       6.40    2033.23  data/silver/event_date=2019-11-07/event_type=cart/part-00000-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+     1853       3.86    2033.23  data/silver/event_date=2019-11-07/event_type=purchase/part-00005-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+   124245       0.79    2574.07  data/silver/event_date=2019-11-07/event_type=view/part-00017-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+     5023       0.88    2573.81  data/silver/event_date=2019-11-08/event_type=cart/part-00005-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+     1937       4.09    2007.52  data/silver/event_date=2019-11-08/event_type=purchase/part-00001-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+   125674       0.88    2574.07  data/silver/event_date=2019-11-08/event_type=view/part-00015-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+     5008       1.00    2059.23  data/silver/event_date=2019-11-09/event_type=cart/part-00018-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+     1613       1.00    1891.94  data/silver/event_date=2019-11-09/event_type=purchase/part-00016-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+   125062       0.80    2574.07  data/silver/event_date=2019-11-09/event_type=view/part-00004-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+     5018       1.78    2574.04  data/silver/event_date=2019-11-10/event_type=cart/part-00016-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+     1661       1.88    2331.85  data/silver/event_date=2019-11-10/event_type=purchase/part-00013-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+   128689       0.83    2574.07  data/silver/event_date=2019-11-10/event_type=view/part-00018-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+     5398       1.25    2573.81  data/silver/event_date=2019-11-11/event_type=cart/part-00007-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+     1872       2.02    2005.20  data/silver/event_date=2019-11-11/event_type=purchase/part-00004-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+   134259       0.83    2574.07  data/silver/event_date=2019-11-11/event_type=view/part-00010-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+     4845       1.30    2572.23  data/silver/event_date=2019-11-12/event_type=cart/part-00017-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+     1578       4.09    1645.86  data/silver/event_date=2019-11-12/event_type=purchase/part-00012-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+   133112       0.77    2574.07  data/silver/event_date=2019-11-12/event_type=view/part-00001-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+     5181       0.88    2574.04  data/silver/event_date=2019-11-13/event_type=cart/part-00020-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+     1632       0.88    1644.59  data/silver/event_date=2019-11-13/event_type=purchase/part-00007-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+   136496       0.77    2574.07  data/silver/event_date=2019-11-13/event_type=view/part-00005-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+     5699       0.94    2186.03  data/silver/event_date=2019-11-14/event_type=cart/part-00004-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+     1604       3.84    1645.81  data/silver/event_date=2019-11-14/event_type=purchase/part-00005-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+   155208       0.77    2574.07  data/silver/event_date=2019-11-14/event_type=view/part-00001-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+    35812       0.80    2573.79  data/silver/event_date=2019-11-15/event_type=cart/part-00011-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+      170       7.70    1661.56  data/silver/event_date=2019-11-15/event_type=purchase/part-00007-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+   386054       0.77    2574.07  data/silver/event_date=2019-11-15/event_type=view/part-00002-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+    29448       0.88    2574.07  data/silver/event_date=2019-11-16/event_type=cart/part-00012-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+     4853       3.27    2572.23  data/silver/event_date=2019-11-16/event_type=purchase/part-00016-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+   421946       0.77    2574.07  data/silver/event_date=2019-11-16/event_type=view/part-00006-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+    31607       0.77    2574.07  data/silver/event_date=2019-11-17/event_type=cart/part-00010-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+    11736       0.77    2573.79  data/silver/event_date=2019-11-17/event_type=purchase/part-00003-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+   438706       0.77    2574.07  data/silver/event_date=2019-11-17/event_type=view/part-00009-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+     8418       1.14    2562.49  data/silver/event_date=2019-11-18/event_type=cart/part-00005-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+     3115       1.26    2470.59  data/silver/event_date=2019-11-18/event_type=purchase/part-00014-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+   155507       0.80    2574.07  data/silver/event_date=2019-11-18/event_type=view/part-00012-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+     5080       1.29    2161.96  data/silver/event_date=2019-11-19/event_type=cart/part-00015-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+     1799       1.29    2161.96  data/silver/event_date=2019-11-19/event_type=purchase/part-00012-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+   118471       0.79    2574.07  data/silver/event_date=2019-11-19/event_type=view/part-00019-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+     4956       0.80    2574.04  data/silver/event_date=2019-11-20/event_type=cart/part-00019-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+     1773       2.93    2562.49  data/silver/event_date=2019-11-20/event_type=purchase/part-00011-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+   114041       0.77    2574.07  data/silver/event_date=2019-11-20/event_type=view/part-00011-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+     5804       1.00    2470.59  data/silver/event_date=2019-11-21/event_type=cart/part-00020-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+     1942       1.00    2249.97  data/silver/event_date=2019-11-21/event_type=purchase/part-00005-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+   112632       0.83    2574.07  data/silver/event_date=2019-11-21/event_type=view/part-00016-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+     4997       1.52    2562.49  data/silver/event_date=2019-11-22/event_type=cart/part-00003-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+     1717       4.09    2562.49  data/silver/event_date=2019-11-22/event_type=purchase/part-00010-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+   104224       0.80    2574.07  data/silver/event_date=2019-11-22/event_type=view/part-00004-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+     4554       0.87    1978.66  data/silver/event_date=2019-11-23/event_type=cart/part-00007-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+     1561       1.54    1978.66  data/silver/event_date=2019-11-23/event_type=purchase/part-00019-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+   102750       0.87    2574.07  data/silver/event_date=2019-11-23/event_type=view/part-00008-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+     4676       1.93    2239.18  data/silver/event_date=2019-11-24/event_type=cart/part-00017-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+     1608       1.93    1976.63  data/silver/event_date=2019-11-24/event_type=purchase/part-00000-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+   106762       0.77    2574.07  data/silver/event_date=2019-11-24/event_type=view/part-00016-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+     5053       0.83    2573.79  data/silver/event_date=2019-11-25/event_type=cart/part-00011-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+     1808       0.83    1736.77  data/silver/event_date=2019-11-25/event_type=purchase/part-00013-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+   108575       0.83    2574.07  data/silver/event_date=2019-11-25/event_type=view/part-00015-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+     5253       1.14    2571.49  data/silver/event_date=2019-11-26/event_type=cart/part-00020-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+     1696       1.88    2571.21  data/silver/event_date=2019-11-26/event_type=purchase/part-00018-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+   110368       0.81    2574.07  data/silver/event_date=2019-11-26/event_type=view/part-00013-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+     5104       0.95    2574.04  data/silver/event_date=2019-11-27/event_type=cart/part-00005-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+     1758       1.14    1930.29  data/silver/event_date=2019-11-27/event_type=purchase/part-00005-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+   109363       0.77    2574.07  data/silver/event_date=2019-11-27/event_type=view/part-00007-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+     5089       0.90    2574.04  data/silver/event_date=2019-11-28/event_type=cart/part-00000-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+     1711       4.09    2239.18  data/silver/event_date=2019-11-28/event_type=purchase/part-00020-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+   109245       0.77    2574.07  data/silver/event_date=2019-11-28/event_type=view/part-00008-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+     6479       1.54    2573.79  data/silver/event_date=2019-11-29/event_type=cart/part-00015-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+     2252       1.54    2573.79  data/silver/event_date=2019-11-29/event_type=purchase/part-00017-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+   123065       0.83    2574.07  data/silver/event_date=2019-11-29/event_type=view/part-00000-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+     5793       0.97    2574.04  data/silver/event_date=2019-11-30/event_type=cart/part-00007-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+     2032       2.01    2573.81  data/silver/event_date=2019-11-30/event_type=purchase/part-00009-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+   115952       0.77    2574.07  data/silver/event_date=2019-11-30/event_type=view/part-00019-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+      857       0.90    2123.01  data/silver/event_date=2019-12-01/event_type=cart/part-00007-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+      286       4.53    1827.33  data/silver/event_date=2019-12-01/event_type=purchase/part-00002-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+    24716       0.87    2574.07  data/silver/event_date=2019-12-01/event_type=view/part-00008-0b282522-dcb4-4aa9-ba49-5f6c0910deac.c000.snappy.parquet
+
+====================================================================================================
+SOURCE
+====================================================================================================
+"""E5 - why a price filter cannot skip any silver row group, for the indexing presentation.
+
+Question: Canva page 17 says zone maps (per-row-group min/max in the Parquet footer) only
+help when close values sit in the same row group. ShopInsight's own example is the price
+column: every silver row group holds both cheap and expensive items, so a filter such as
+price > 1000 cannot rule out a single row group, although few rows match.
+
+  1  footer statistics of price for every silver row group (read with DuckDB parquet_metadata)
+  2  for price > v, how many row groups a reader could skip (max <= v) and how many rows match
+  3  every row group, one line each
+
+This is read from the footers only. No Spark query filtering on price was run or timed,
+and no ShopInsight screen filters by price.
+
+Run from the repo root:  .venv/bin/python presentation_price_zonemap.py > docs/evidence/presentation_price_zonemap.txt
+"""
+
+import datetime
+import os
+import platform
+import subprocess
+import sys
+
+import duckdb
+
+SILVER = "data/silver/*/*/*.parquet"
+THRESHOLDS = [500, 1000, 1500, 2000, 2500]
+
+STATS = f"""
+SELECT file_name, row_group_id, row_group_num_rows AS num_rows,
+       CAST(stats_min_value AS DOUBLE) AS price_min,
+       CAST(stats_max_value AS DOUBLE) AS price_max
+FROM parquet_metadata('{SILVER}')
+WHERE path_in_schema = 'price'
+ORDER BY file_name, row_group_id
+"""
+
+
+def rule(title):
+    print("=" * 100)
+    print(title)
+    print("=" * 100)
+
+
+def main():
+    con = duckdb.connect(":memory:")
+    commit = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip()
+
+    print("E5 - price min/max per silver row group: a price filter skips nothing (Canva page 17)")
+    print()
+    rule("HEADER")
+    print(f"date        {datetime.datetime.now().astimezone().isoformat(timespec='seconds')}")
+    print(f"machine     {platform.node()} | {platform.platform()} | {os.cpu_count()} logical cores")
+    print(f"versions    Python {platform.python_version()} | DuckDB {duckdb.__version__}")
+    print(f"repo        {os.getcwd()} @ {commit}")
+    files = con.execute(f"SELECT count(*) FROM glob('{SILVER}')").fetchone()[0]
+    print(f"silver      {SILVER}, {files} files")
+    print(f"command     .venv/bin/python presentation_price_zonemap.py (source at the end of this file)")
+    print()
+
+    rows = con.execute(STATS).fetchall()
+    with_stats = [r for r in rows if r[3] is not None and r[4] is not None]
+
+    rule("1  FOOTER STATISTICS OF price, ALL SILVER ROW GROUPS")
+    print(STATS.strip())
+    print()
+    print(f"row groups              {len(rows)} in {len({r[0] for r in rows})} files")
+    print(f"with min and max        {len(with_stats)}")
+    print(f"rows per row group      {min(r[2] for r in rows)} .. {max(r[2] for r in rows)}")
+    print(f"price_min, range        {min(r[3] for r in with_stats):.2f} .. {max(r[3] for r in with_stats):.2f}")
+    print(f"price_max, range        {min(r[4] for r in with_stats):.2f} .. {max(r[4] for r in with_stats):.2f}")
+    print()
+
+    rule("2  price > v: ROW GROUPS A READER COULD SKIP (max <= v) AND ROWS THAT MATCH")
+    total = con.execute(f"SELECT count(*) FROM read_parquet('{SILVER}')").fetchone()[0]
+    print(f"total rows              {total}")
+    print()
+    print(f"{'v':>6}  {'skippable row groups':>22}  {'rows with price > v':>20}  {'share':>8}")
+    for v in THRESHOLDS:
+        skippable = sum(1 for r in with_stats if r[4] <= v)
+        matching = con.execute(f"SELECT count(*) FROM read_parquet('{SILVER}') WHERE price > {v}").fetchone()[0]
+        print(f"{v:>6}  {f'{skippable} / {len(rows)}':>22}  {matching:>20}  {100.0 * matching / total:>7.2f}%")
+    print()
+    print("A row group can be skipped for price > v only when its max <= v. This table is derived")
+    print("from the footers; no Spark query filtering on price was run or timed.")
+    print()
+
+    rule("3  EVERY ROW GROUP")
+    print(f"{'num_rows':>9}  {'price_min':>9}  {'price_max':>9}  file")
+    for file_name, _, num_rows, lo, hi in rows:
+        print(f"{num_rows:>9}  {lo:>9.2f}  {hi:>9.2f}  {file_name}")
+    print()
+
+    rule("SOURCE")
+    print(open(__file__).read())
+    sys.exit(0 if len(with_stats) == len(rows) else 1)
+
+
+if __name__ == "__main__":
+    main()
+
