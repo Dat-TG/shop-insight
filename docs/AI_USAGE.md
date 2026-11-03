@@ -2393,3 +2393,62 @@ Made by AI, flagged for review:
 
 Carried forward:
 - Session 26's carried-forward list is unchanged; nothing in it was touched here.
+
+## Session 28 — 3 November 2026 (W45)
+
+**Tool:** Claude Code (Opus 5.5).
+**Scope:** sprint task T02. Rebuild Đắt's demo machine from the raw CSV, time each batch job, start the stream in the
+README order, and check that all eight screens show real numbers. No application code was written or changed. The
+timing script was run, and its source is appended to its evidence file.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| `docs/evidence/batch_timings.txt` — wall-clock time of the seven one-time batch jobs (`load_bronze.py` to `gold_br7.py`), run one after another on `main` @ `aa65472` with nothing else running. It includes each job's stdout and the script source | Run on Đắt's machine, 3/11 |
+| The demo machine: Postgres and Cassandra up; `streaming_gold.py --fresh`, then after READY `replayer.py --speed 60 --start "2019-11-17 08:00:00"`; uvicorn on :8000; vite on :5173 | Run. The replayer and the streaming job were stopped once 17/11 (Vietnam time) had been replayed |
+| `docs/AI_USAGE.md` — this session | AI-drafted |
+
+### How it was checked
+
+| Claim | How it was measured |
+|---|---|
+| The seven jobs take 426.5 s, of which `batch_warehouse.py`, with its Postgres load, takes 273.0 s | `batch_timings.txt` section 1: `date +%s.%N` before and after each job. It is one run, not a median |
+| A re-run rebuilds the same data | `batch_timings.txt` section 2: every count each job prints equals the documented count. Silver has 4,754,015 rows in 31 dates and 93 directories. The facts have 4,754,015 / 970,797 / 1,909,650 rows. `dim_product` has 210,454 rows and `dim_user` 319,426, and every SCD2 check is 0 |
+| Gold is current (BR2 and BR4 had been stale since 7/10, and BR7 was missing) | Section 2: `funnel_daily` 465 rows, `rfm_segments` 258,330, `stockout_risk` 63,655 (12,731 per warehouse), `product_affinity` 314 |
+| All 8 screens show real numbers | Eight agents ran in parallel, one per screen. Each rendered it in headless Chromium over CDP, read the QueryMeta footer, and compared one number on screen with a direct `cqlsh` or DuckDB query taken at almost the same moment. All 8 matched, and the load footers ranged from 3.6 to 216 ms. Example: BR1 shows GMV 311.3K and 919 orders for 16:45-17:44 on 17/11, which is the sum of those minutes of `gmv_by_minute` (`category_l1 = 'all'`). BR2 shows 966,143 sessions, the sum of `funnel_daily` 'all' over 1-30 Nov |
+
+### What the AI got wrong, and was corrected on
+
+- **The first smoke test called each endpoint with no parameters.** BR1 and BR5 looked empty, BR7 returned 422 and BR4
+  returned all 258,330 rows, but no screen sends a bare call like that. Each one sends a date (BR1, BR5, BR8), a product (BR7) or
+  a segment and an R score (BR4). The verdict above comes from the rendered screens, not from that test.
+- **The evidence header shows the raw CSV as "8.4G".** `du -h` counts in GiB. The file is 9,006,762,395 bytes, the 9.0 GB
+  the docs give. The generated file was left as it ran, with this note as the explanation.
+- **Stopping the replayer with `pkill -f 'ingestion/replayer.py'` also killed the shell running that command**, because
+  the pattern was in the shell's own command line. The replayer did stop, and the streaming job was then stopped by PID.
+
+### Judgement that stayed with the team
+
+Đắt decided (sprint sheet, row T02, 2/11): re-run the whole chain once to time each job, and start the streaming job
+before the replayer.
+
+Made by AI, flagged for review:
+- The replay starts at 17/11 08:00 UTC, the date the streaming screens open on. The streaming tables hold 17/11 from
+  15:00 to about 00:50 Vietnam time. To demo again, run `streaming_gold.py --fresh` first.
+- The timings are one run each, and the wall clock includes JVM start and stop. They answer "how long does the batch
+  build take" and are not benchmark results. The benchmark with repeated runs is T12 and T14.
+- Seen on the screens and left to their owners, since T02 changes no code:
+  - **BR8:** `GET /api/br8/alerts` without `event_date` returns 500. `_latest_date()` returns the driver's
+    `cassandra.util.Date`, which has no `isoformat()` (`serving/api/routers/br8.py` line 105); the screen always sends
+    a date. The page logs React's "unique key" error, because the fragment in `rows.map` has no key. Its table and
+    footer disappear during each 10 s refresh. Its subtitle says "rolling", but the windows are tumbling.
+  - **BR3:** in Live mode the footer counts every window partition (126 at load, and growing), because the endpoint
+    runs `SELECT DISTINCT window_start` to find the newest window. With a chosen window it reads 2.
+  - **BR7:** there is no footer until an anchor product is clicked. **BR5:** the empty state has no footer.
+  - **All screens:** at 1440 px the nav bar hides the BR8 tab. T08 regroups the nav.
+  - Already in rows T09 and T10: BR6's cards count only the 100 rows read per warehouse; BR8 applies its severity filter
+    after `LIMIT 500`; BR8's thresholds text; BR5's two Vietnamese strings; BR4's single snapshot.
+
+Carried forward:
+- The owner issues above, until T09 and T10 close them. Session 27's list is unchanged.
