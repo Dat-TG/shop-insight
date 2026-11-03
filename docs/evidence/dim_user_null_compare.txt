@@ -1,0 +1,51 @@
+dim_user: why the version test is null-safe (report section 4.3)
+Khang's machine, 18 October 2026, PySpark 4.1.3 and DuckDB 1.5.5, on the
+data/warehouse/stg_rfm_snapshot and dim_user that batch_warehouse.py builds.
+The scripts below are scratch scripts, not committed.
+
+== rfm_cell is NULL for every user with no purchase yet (DuckDB) ==
+select snapshot_date, count(*), count(*) filter (where rfm_cell is null)
+from read_parquet('data/warehouse/stg_rfm_snapshot/**/*.parquet', hive_partitioning=true)
+group by 1 order by 1
+
+snapshot      users    rfm_cell NULL   share
+2019-11-07   258,330      251,299      97.3%
+2019-11-14   258,330      245,552      95.1%
+2019-11-21   258,330      233,321      90.3%
+2019-11-28   258,330      228,931      88.6%
+2019-11-30   258,330      227,325      88.0%
+
+dim_user on disk: 319,426 rows, 258,330 current.
+
+== The same version test with != instead of eqNullSafe (Spark) ==
+processing/dim_user.py, build_rfm_snapshot():
+    cell_changed = F.lag("snapshot_date").over(by_user).isNull() | ~F.col("rfm_cell").eqNullSafe(
+        F.lag("rfm_cell").over(by_user)
+    )
+The scratch script read stg_rfm_snapshot, recomputed version_no with the line
+above and with this one, then ran build_dim_user() and scd2_violations() from
+the repo on the result:
+    changed = F.lag("snapshot_date").over(by_user).isNull() | (F.col("rfm_cell") != F.lag("rfm_cell").over(by_user))
+
+                                           eqNullSafe (code)    !=
+dim_user versions                                319,426      295,452
+current rows                                     258,330      258,330
+users whose current version has a stale cell           0        5,529
+scd2_violations (6 counts)                        all 0        all 0
+inside EXPECTED_RANGES "dim_user versions"
+  (258,330 .. 1,291,650)                             yes          yes
+
+With !=, a comparison with NULL is NULL, the cast to int keeps it NULL and
+sum() skips it, so a cell going from NULL to a value (a first purchase) opens
+no version: 23,974 changes lost (319,426 - 295,452). The 5,529 users are the
+ones whose last change was that first purchase: their current row says
+segment no_purchase while stg_rfm_snapshot gives them frequency > 0 on 30 Nov.
+Every integrity check still passes, because valid_from and valid_to are built
+from version_no itself: the ranges stay contiguous, only versions are missing.
+
+== The other way to get NULL wrong (DuckDB, same data) ==
+Counting a comparison with NULL as a change instead, i.e. a version wherever
+(rfm_cell <> lag(rfm_cell)) is not false, gives 1,254,555 versions: every
+non-buyer gets a new one at each snapshot. That is not what Spark does with
+the != line above; it is listed only to show that neither reading of NULL
+gives the 319,426 of the null-safe test.

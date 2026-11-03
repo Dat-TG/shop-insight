@@ -2210,7 +2210,62 @@ Made by AI, flagged for review:
 Carried forward:
 - Session 23's carried-forward list is unchanged; nothing in it was touched here.
 
-## Session 25 — 21 October 2026 (W43)
+## Session 25 — 18 October 2026 (W42)
+
+**Tool:** Claude Code (Opus 5.5).
+**Scope:** report section 4.3, Spark (tracker row 87): `local[*]`, batch against streaming, the five Structured
+Streaming concepts the jobs use, writing Cassandra with `cassandra-driver` inside `foreachBatch`, the two memory
+traps, and the null-safe version test of `dim_user`. Branch `w42-khang-report-4-3`, cut from
+`w41-khang-report-4-2` because both sections edit `docs/REPORT.md`.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| `docs/REPORT.md` 4.3 — five code excerpts copied from the repo (`read_events`, BR3's `writeStream`, the head of BR3's `write_batch`, the two settings of `conf/spark-defaults.conf`, `cell_changed` in `dim_user.py`) | AI-drafted, numbers measured or quoted |
+| `docs/REPORT.md` "Nguồn số liệu của mục 4" — seven rows for 4.3 | AI-drafted |
+| `docs/evidence/dim_user_null_compare.txt` (new) — the null shares and the `!=` comparison below | Captured from the run |
+| `docs/AI_USAGE.md` — this session | AI-drafted |
+
+### How it was checked
+
+| Claim | How it was measured |
+|---|---|
+| The five excerpts are verbatim | Scratch script (not committed): every line of each code block is a line of its file, and every block but the two-line config one is contiguous in it |
+| `rfm_cell` NULL for 97.3% of users on 7 Nov, 88.0% on 30 Nov | DuckDB on `data/warehouse/stg_rfm_snapshot` on Khang's machine; the query is in the evidence file |
+| With `!=`, 295,452 versions instead of 319,426, 5,529 current rows stale, all six SCD2 counts 0 | Scratch script (not committed) on Khang's machine: `version_no` recomputed from `stg_rfm_snapshot` with the repo's `eqNullSafe` line and with `!=`, then `build_dim_user()` and `scd2_violations()` imported from the repo. The `eqNullSafe` run gives back the 319,426 rows of `dim_user` on disk |
+| 200 against 4 shuffle partitions | Quoted from the comment in `main()` of `processing/streaming_gold.py` (W40 dry run, Dat's machine), not re-measured |
+| BR1 476 ms and BR3 719 ms per micro-batch; the restart after batch 11 | Quoted from `docs/evidence/gate1b_br3_run.txt`, not re-measured |
+| The builder-config trap, 1.0 GiB heap with `getConf()` at `6g` | Quoted from `docs/SETUP_SPARK.md` section 6 (measured on PySpark 4.1.3), not re-measured |
+| Every Spark script runs `local[*]` and sets `SPARK_CONF_DIR` first | `grep` over `processing/`, `ingestion/`, `checks/`: every file that builds a SparkSession sets `master("local[*]")`, and its `SPARK_CONF_DIR` line comes before its first `pyspark` import |
+
+### What the AI got wrong, and was corrected on
+
+- **The first draft said no later check could catch the `!=` mistake.** The integrity checks cannot, but comparing
+  the current segment with the last snapshot in `stg_rfm_snapshot` does (that is how the 5,529 were counted). The
+  sentence now says so.
+- **The first draft's `getConf()` sentence left out that the new session is built with `6g`.** Added, as in
+  `docs/SETUP_SPARK.md` section 6.
+
+### Judgement that stayed with the team
+
+Made by AI, flagged for review:
+- **Three statements of tracker row 87 are not followed, because the code and the data say otherwise.**
+  - 88% is the share of NULL `rfm_cell` at the last snapshot (30 Nov), not the first; the first, 7 Nov, is 97.3%.
+  - With `<>` the version test loses versions, it does not add them. The tracker says a non-buyer would get a new
+    version every snapshot. In this code a comparison with NULL is NULL and `sum()` skips it, so the first purchase
+    (NULL to a value) opens no version. Counting NULL as a change would give 1,254,555 versions instead (DuckDB,
+    same data, in the evidence file); 4.3 describes what Spark does with the code as written.
+  - `builder.config("spark.driver.memory")` is not always ignored. It works when that builder starts the JVM, as
+    `conf/spark-defaults.conf` and `docs/SETUP_SPARK.md` section 6 already say; 4.3 follows them.
+- **The shuffle-partition paragraph is not in the tracker row.** It is the one Spark setting the team changed on a
+  measurement; it can go if 4.3 must stay at two pages.
+- **4.3 is about 2.5 pages with its five excerpts.**
+
+Carried forward:
+- Session 23's carried-forward list is unchanged; nothing in it was touched here.
+
+## Session 26 — 21 October 2026 (W43)
 
 **Tool:** Claude Code (Opus 5.5).
 **Scope:** revision v3 of the indexing presentation (Canva `DAHYkUBuuhM`, 19 pages) against the reviewer's comments
