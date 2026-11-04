@@ -2452,3 +2452,54 @@ Made by AI, flagged for review:
 
 Carried forward:
 - The owner issues above, until T09 and T10 close them. Session 27's list is unchanged.
+
+## Session 29 — 4 November 2026 (W45)
+
+**Tool:** Claude Code (Opus 5.5).
+**Scope:** sprint task T06: the skeleton of the project deck, the redrawn architecture figure, and the file the team
+writes the deck's content in. No application code was written.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| Claude Slides deck "Group15_ShopInsight_Project": 26 pages in the report's 6 sections. Each page has its section, a working title, its speaker taken from row T20, and a dashed box naming its block in `docs/project_deck.md` and its sources. The agenda table and the BR pages' user group, path (batch or real time) and serving table are filled in; everything else is left to T20 | AI-built; Đắt reviews before the PDF goes to the team |
+| `docs/figures/shopinsight_architecture.html` — F14 (`shopinsight_applied_map.html`) without the indexing talk's labels (02, 03, 04, "trang 16", "trang 17", "Hình minh hoạ") and without "đo trên 3 ngày dữ liệu; BRIN mới tạo, chưa đo". The PostgreSQL line now lists B+-tree, partial, BRIN and GIN, and its box is shorter. Rendered at 2x and placed on page 08 | AI-drawn; the render was viewed |
+| `docs/project_deck.md` — one block per page (`## Trang NN · name · writer`) with empty fields for the title, up to 4 key points, the spoken lines and the syllable count, plus a source hint. It ends with "## Lỗi trình bày (không phải trang slide)" for T26 | AI-drafted |
+| `docs/AI_USAGE.md` — this session | AI-drafted |
+
+### How it was checked
+
+| Claim | How it was measured |
+|---|---|
+| Deck and file agree page by page | A script compared `deck.json`'s order, each slide's speaker pill, its footer number and its title with the 26 `## Trang` headers of `project_deck.md`. All 26 match, and the per-person totals are Khang 7, Nguyên 8, Đắt 6, Tín 5 pages, as in row T20 |
+| No indexing-talk label is left in the figure | `grep` finds "trang 16", "trang 17", "Hình minh hoạ" and "BRIN mới tạo" only in the header comment, which names what was removed |
+| Postgres index types on the figure exist | `warehouse/ddl.sql`: GIN on `attributes jsonb_path_ops`, BRIN on `fact_event.event_time`, partial indexes (`WHERE is_current`, `WHERE event_type_key = 3`, ...) and B-tree |
+| The BR pages' user groups, paths and tables | REPORT.md §1.2 (user groups) and the BR table in CLAUDE.md (layer and sink); table names from `serving/cassandra_schema.cql` and `data/gold/` |
+
+### What the AI got wrong, and was corrected on
+
+- **The figure first kept the PostgreSQL box at its old height.** With the BRIN line gone, the box had an empty
+  third line. It was shortened from 122 to 88 px before the render that went onto the slide.
+- Nothing else was found. The check that could have found a speaker or page-number mismatch between the deck and
+  the file is the comparison above.
+
+### Judgement that stayed with the team
+
+Đắt decided (sprint sheet, rows T06 and T20, 2-3/11): the deck is Claude Slides; it follows the report's 6 sections;
+the speaker split is the one in T20; `project_deck.md` holds the content.
+
+Made by AI, flagged for review:
+- **26 pages.** Section 4 has two data-model pages (concept and logic, then physical), not three. Section 5 has one
+  page per BR, so each of the 8 gate2b screenshots gets a page. There are no section-divider pages.
+- **Section 5 follows the owners' order** (BR1, BR2 · BR3, BR4 · BR5, BR7 · BR6, BR8), not the user-group order, so
+  each person demos without a break.
+- **Page 26 (references) is shown but not read.** It is listed under Nguyên with no spoken lines.
+- **The cover's subtitle,** "Từ nhật ký hành vi mua sắm tới 8 màn hình trả lời dưới 2 giây", is a draft for Khang to
+  keep or change. The members' full names and student IDs are a placeholder.
+- **Typeface Be Vietnam Pro, for its Vietnamese diacritics;** the colours are the figure's navy and blue plus an orange
+  speaker pill.
+
+Carried forward:
+- The PDF of the skeleton deck goes to the team Drive, exported from the deck by Đắt, and the post to the group is
+  his. Session 28's list is unchanged.
