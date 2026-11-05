@@ -17,18 +17,27 @@ thông qua Claude. Cả nhóm viết nội dung vào file này, rồi ở T25 Cl
 - **Số âm tiết:** cuối mỗi khối, ghi số âm tiết của lời thoại trong khối.
 - Thuật ngữ kỹ thuật giữ nguyên tiếng Anh: partition, row group, watermark, star schema...
 
-## Phân công (theo T20)
+## Phân công (theo T20, đổi thứ tự ngày 5/11)
 
-| Người | Trang |
-|---|---|
-| Khang | 01, 02, 03, 04, 16 (BR3), 17 (BR4), 22 |
-| Nguyên | 05, 06, 07, 11, 18 (BR5), 19 (BR7), 25, 26 |
-| Đắt | 08, 09, 10, 12, 14 (BR1), 15 (BR2) |
-| Tín | 13, 20 (BR6), 21 (BR8), 23, 24 |
+Trang được xếp để mỗi người nói đúng 2 đoạn liền, cho bớt số lần cắt ghép khi quay (T29, T31):
+
+| Thứ tự | Trang | Người | Nội dung |
+|---|---|---|---|
+| 1 | 01-04 | Khang | bìa, nội dung, bối cảnh, bốn nhóm người dùng |
+| 2 | 05-07 | Nguyên | tám BR, hai trang nguồn dữ liệu |
+| 3 | 08-11 | Đắt | kiến trúc, mô hình dữ liệu (2 trang), Spark |
+| 4 | 12-15 | Tín | Cassandra, phương án thay thế, demo BR6, BR8 |
+| 5 | 16-17 | Đắt | demo BR1, BR2 |
+| 6 | 18-19 | Nguyên | demo BR5, BR7 |
+| 7 | 20-22 | Khang | demo BR3, BR4, tính đúng đắn |
+| 8 | 23-26 | Tín | hiệu năng, hữu dụng, kết luận, tài liệu tham khảo (trang 26 chỉ hiện) |
+
+So với phân công T20 ban đầu, có hai trang đổi từ Nguyên sang Tín: Cassandra (trang 12) vì cả hai BR của Tín
+(BR6, BR8) đều ghi Cassandra, và Kết luận (trang 25) vì nó nối ngay sau hai trang đánh giá của Tín. Mỗi người
+vẫn nói khoảng 3 phút phần slide. Đắt quyết định ngày 5/11.
 
 Trang 14-21 mở đầu đoạn demo của từng BR. Lời thoại ở đó ngắn: câu hỏi nghiệp vụ và vì sao màn hình trả lời
-được câu hỏi đó. Thao tác demo nằm trong kịch bản T16. Mục 5 xếp BR theo người làm (BR1, BR2 · BR3, BR4 ·
-BR5, BR7 · BR6, BR8) để mỗi người demo liền một đoạn.
+được câu hỏi đó. Thao tác demo nằm trong kịch bản T16.
 
 ---
 
@@ -183,9 +192,9 @@ Nguồn gợi ý: REPORT.md §4.4 (T15); evidence E1, E4, E5, explain_star_join.
 
 ---
 
-## Trang 11 · Cassandra: thiết kế khoá từ câu hỏi của màn hình · Nguyên
+## Trang 11 · Spark: một engine cho nhánh theo lô và nhánh thời gian thực · Đắt
 
-Nguồn gợi ý: REPORT.md §4.2, serving/cassandra_schema.cql.
+Nguồn gợi ý: REPORT.md §4.3; docs/evidence/batch_timings.txt (T02).
 
 **Tiêu đề:**
 
@@ -198,9 +207,9 @@ Nguồn gợi ý: REPORT.md §4.2, serving/cassandra_schema.cql.
 
 ---
 
-## Trang 12 · Spark: một engine cho nhánh theo lô và nhánh thời gian thực · Đắt
+## Trang 12 · Cassandra: thiết kế khoá từ câu hỏi của màn hình · Tín
 
-Nguồn gợi ý: REPORT.md §4.3; docs/evidence/batch_timings.txt (T02).
+Nguồn gợi ý: REPORT.md §4.2, serving/cassandra_schema.cql.
 
 **Tiêu đề:**
 
@@ -228,7 +237,37 @@ Nguồn gợi ý: REPORT.md §4.5 (T22); số đo benchmark T12, T14 và E4.
 
 ---
 
-## Trang 14 · BR1 · Doanh thu theo từng phút · Đắt
+## Trang 14 · BR6 · Nguy cơ hết hàng · Tín
+
+Nguồn gợi ý: docs/BR_SCOPE.md BR6; ảnh docs/evidence/gate2b_br6.png (T14); thao tác demo theo kịch bản T16.
+
+**Tiêu đề:**
+
+**Ý chính (tối đa 4):**
+-
+
+**Lời thoại:**
+
+**Số âm tiết:**
+
+---
+
+## Trang 15 · BR8 · Tài khoản đặt đơn bất thường · Tín
+
+Nguồn gợi ý: docs/BR_SCOPE.md BR8; ảnh docs/evidence/gate2b_br8.png (T14); thao tác demo theo kịch bản T16.
+
+**Tiêu đề:**
+
+**Ý chính (tối đa 4):**
+-
+
+**Lời thoại:**
+
+**Số âm tiết:**
+
+---
+
+## Trang 16 · BR1 · Doanh thu theo từng phút · Đắt
 
 Nguồn gợi ý: docs/BR_SCOPE.md BR1; ảnh docs/evidence/gate2b_br1.png (T14); thao tác demo theo kịch bản T16.
 
@@ -243,39 +282,9 @@ Nguồn gợi ý: docs/BR_SCOPE.md BR1; ảnh docs/evidence/gate2b_br1.png (T14)
 
 ---
 
-## Trang 15 · BR2 · Phễu chuyển đổi · Đắt
+## Trang 17 · BR2 · Phễu chuyển đổi · Đắt
 
 Nguồn gợi ý: docs/BR_SCOPE.md BR2; ảnh docs/evidence/gate2b_br2.png (T14); thao tác demo theo kịch bản T16.
-
-**Tiêu đề:**
-
-**Ý chính (tối đa 4):**
--
-
-**Lời thoại:**
-
-**Số âm tiết:**
-
----
-
-## Trang 16 · BR3 · Sản phẩm đang tăng mạnh · Khang
-
-Nguồn gợi ý: docs/BR_SCOPE.md BR3; ảnh docs/evidence/gate2b_br3.png (T14); thao tác demo theo kịch bản T16.
-
-**Tiêu đề:**
-
-**Ý chính (tối đa 4):**
--
-
-**Lời thoại:**
-
-**Số âm tiết:**
-
----
-
-## Trang 17 · BR4 · Phân khúc khách hàng theo RFM · Khang
-
-Nguồn gợi ý: docs/BR_SCOPE.md BR4; ảnh docs/evidence/gate2b_br4.png (T14); thao tác demo theo kịch bản T16.
 
 **Tiêu đề:**
 
@@ -318,9 +327,9 @@ Nguồn gợi ý: docs/BR_SCOPE.md BR7; ảnh docs/evidence/gate2b_br7.png (T14)
 
 ---
 
-## Trang 20 · BR6 · Nguy cơ hết hàng · Tín
+## Trang 20 · BR3 · Sản phẩm đang tăng mạnh · Khang
 
-Nguồn gợi ý: docs/BR_SCOPE.md BR6; ảnh docs/evidence/gate2b_br6.png (T14); thao tác demo theo kịch bản T16.
+Nguồn gợi ý: docs/BR_SCOPE.md BR3; ảnh docs/evidence/gate2b_br3.png (T14); thao tác demo theo kịch bản T16.
 
 **Tiêu đề:**
 
@@ -333,9 +342,9 @@ Nguồn gợi ý: docs/BR_SCOPE.md BR6; ảnh docs/evidence/gate2b_br6.png (T14)
 
 ---
 
-## Trang 21 · BR8 · Tài khoản đặt đơn bất thường · Tín
+## Trang 21 · BR4 · Phân khúc khách hàng theo RFM · Khang
 
-Nguồn gợi ý: docs/BR_SCOPE.md BR8; ảnh docs/evidence/gate2b_br8.png (T14); thao tác demo theo kịch bản T16.
+Nguồn gợi ý: docs/BR_SCOPE.md BR4; ảnh docs/evidence/gate2b_br4.png (T14); thao tác demo theo kịch bản T16.
 
 **Tiêu đề:**
 
@@ -393,7 +402,7 @@ Nguồn gợi ý: docs/evidence/survey_responses.csv (T18).
 
 ---
 
-## Trang 25 · Kết luận, giới hạn và hướng phát triển · Nguyên
+## Trang 25 · Kết luận, giới hạn và hướng phát triển · Tín
 
 Nguồn gợi ý: REPORT.md §6.4 (T24).
 
@@ -408,7 +417,7 @@ Nguồn gợi ý: REPORT.md §6.4 (T24).
 
 ---
 
-## Trang 26 · Tài liệu tham khảo · Nguyên
+## Trang 26 · Tài liệu tham khảo · Tín
 
 Nguồn gợi ý: trang này chỉ hiện, không đọc. Danh sách lấy từ mục Tài liệu tham khảo của REPORT.md (T28), nên
 khối này không cần lời thoại.
