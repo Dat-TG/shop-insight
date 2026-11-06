@@ -1,4 +1,4 @@
 OK  BR4 rfm_segments  100.00%  (31,005/31,005)  buyers: frequency, monetary, recency as of each user's current snapshot
 OK  BR6 stockout_risk  100.00%  (63,655/63,655)  gold 63,655 rows, truth 63,655 rows
 OK  BR7 product_affinity  100.00%  (314/314)  per gold row: co_count exact, lift within 1%
-LOW BR8 order_velocity_alerts    0.00%  (0/0)  gold is empty: replay first
+OK  BR8 order_velocity_alerts  100.00%  (4,144/4,144)  closed windows up to 2019-11-17 16:44:47, min order_count 1
