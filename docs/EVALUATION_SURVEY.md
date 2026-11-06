@@ -47,7 +47,7 @@ Người tham gia khảo sát (5 bạn sinh viên/kỹ sư) sẽ thực hiện l
 - **Mục tiêu:** Cảnh báo nguy cơ thiếu hàng và phát hiện tài khoản đặt đơn bất thường.
 - **Thao tác:**
   1. Mở tab **BR6 (Stockout Risk)**: Lọc Kho 1, lọc ngưỡng $< 3$ ngày. Quan sát các dòng bị bôi đỏ cảnh báo khẩn cấp.
-  2. Mở tab **BR8 (Order Velocity Alerts)**: Quan sát các cảnh báo đặt đơn dồn dập (Spike), bấm vào dòng cảnh báo để mở chi tiết cửa sổ 5 phút.
+  2. Mở tab **BR8 (Order Velocity Alerts)**: Mở rộng xem tổng cửa sổ 5 phút để xác nhận tổng đơn trong cửa sổ. Bấm vào dòng cảnh báo để xem chi tiết breakdown theo phút.
 - **Câu hỏi xác thực:** Có bao nhiêu SKU tại Kho 1 đang ở mức nguy hiểm dưới 3 ngày?
 
 ---
@@ -73,13 +73,5 @@ Người tham gia điền đánh giá theo các câu hỏi sau:
 
 ---
 
-## 4. Bảng Kết quả Thu thập Khảo sát (Template W44)
-
-| Người tham gia | Vai trò / Background | Latency cảm nhận (1-5) | Tính minh bạch QueryMeta (1-5) | Màu sắc & UI (1-5) | Đánh giá chung (1-5) | Tác vụ hoàn thành | Góp ý cải tiến |
-|---|---|:---:|:---:|:---:|:---:|:---:|---|
-| **User 1** | Sinh viên KHMT | 5 | 5 | 5 | 5 | 4/4 | "Footer QueryMeta đo server-side rất thuyết phục." |
-| **User 2** | Data Analyst | 4 | 5 | 4 | 5 | 4/4 | "Bảng BR6 tô đỏ trực quan, filter nhanh." |
-| **User 3** | Kỹ sư Phần mềm | 5 | 5 | 4 | 4 | 4/4 | "Accordion xem chi tiết đơn ở BR8 hoạt động mượt." |
-| **User 4** | Sinh viên HTTT | 4 | 4 | 5 | 5 | 4/4 | "Biểu đồ và heatmap tải dưới 1 giây, rất tốt." |
-| **User 5** | Product Owner | 5 | 5 | 5 | 5 | 4/4 | "Phễu chuyển đổi và cảnh báo fraud rất thực tế." |
-| **TRUNG BÌNH** | — | **4.6 / 5.0** | **4.8 / 5.0** | **4.6 / 5.0** | **4.8 / 5.0** | **100%** | **Đạt trọn vẹn SLO Effectiveness** |
+> **Lưu ý:** Bảng kết quả thu thập khảo sát (Section 4) sẽ được điền sau khi thực hiện khảo sát thực tế trong W44.  
+> Template: [Người tham gia | Vai trò | Latency (1-5) | QueryMeta (1-5) | Màu sắc & UI (1-5) | Chung (1-5) | Tác vụ hoàn thành | Góp ý]
