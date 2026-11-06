@@ -2548,3 +2548,53 @@ Made by AI, flagged for review:
 
 Carried forward:
 - Session 29's list is unchanged.
+
+## Session 31 — 6 November 2026 (W45)
+
+**Tool:** Claude Code (Opus 5.5).
+**Scope:** Khang's project-deck blocks (pages 01-04 and 20-22 of `docs/project_deck.md`, sprint row T20) and the
+correctness check that page 22 cites (T19): a rebuild of the batch layers and one replay on Khang's machine, an
+independent answer for each BR, and the SCD2 integrity of both dimensions.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| `checks/correctness_8br.py` (new) — DuckDB answer for each BR from silver (BR6: the inventory series), compared with the gold Parquet and Cassandra tables the screens read; matched / max(answer, stored) per BR, threshold 99% | Run and verified |
+| `docs/evidence/correctness_8br.txt` (new) — the run, the eight scores, BR4's raw-value limitation, a run that is meant to fail, SCD2 for both dimensions | Captured from the run |
+| `docs/project_deck.md` pages 01-04, 20-22 — title, up to four points, spoken lines and syllable count each; 549 syllables in total against the file's 540 | AI-drafted, Khang reviews |
+| `docs/AI_USAGE.md` — this session | AI-drafted |
+
+### How it was checked
+
+| Claim | How it was measured |
+|---|---|
+| The system side is current | Khang's machine on `main` at 3e632d8. `batch_warehouse.py` wrote all nine Parquet tables with every check at its expected value (step 6 stopped on a Postgres without the star DDL; no BR reads Postgres); `batch_gold.py` printed GOLD OK and `gold_br7.py` BR7 OK; `streaming_gold.py --fresh` ran 4 of 4 jobs while the replayer sent 78 files, 187,468 rows, 17 Nov 15:00-21:30 Vietnam time, as in `gate2a_br5_run.txt`. bronze, silver, catalogue and inventory were reused: their scripts are unchanged since those files were written (`git log` per script) |
+| All eight BRs match 100% | `python checks/correctness_8br.py` with the replay span and the final watermark 21:19:59 (BR3's last batch replaced the windows up to 21:00-21:04). BR2 465, BR4 258,330, BR6 63,655, BR7 314 rows over the whole month; BR1 4,563, BR3 7,580, BR5 2,600, BR8 5,815 over the replay |
+| The answer does not reuse the system's code | The script imports nothing from `processing/`. BR6's units sold come from the inventory balance (stock yesterday + received - stock today), not from the warehouse hash; BR5's 2,600 equals the count Dat's Gate 2a run found |
+| The check can fail | The same run with the watermark ten minutes early: BR3 97.36%, BR5 96.77%, exit 1 |
+| SCD2 is intact | `checks/scd2_integrity.py` on `dim_product`: all six counts 0, SCD2 OK. `dim_user`: the same six counts, all 0, in `batch_warehouse.py`'s output |
+| BR4's raw values | DuckDB, `rfm_segments` against `stg_rfm_snapshot` at 30 Nov: recency differs for 23,198 users, frequency or monetary for 590, any for 23,353; Session 17 found the same 23,198 and 590 |
+| The deck blocks' numbers | Page 03 from REPORT §1 "Nguồn số liệu của mục 1"; page 04 from §1.2; page 20 from BR_SCOPE BR3 and the code (`F.window(..., "15 minutes", "1 minute")`, key `(window_start, rank)`); page 21 from BR_SCOPE BR4 and `BR4Page.tsx` (the heatmap is r_score by f_score); page 22 from the evidence file above. Syllables counted by a script over each spoken block |
+
+### What the AI got wrong, and was corrected on
+
+- **The first float comparison rounded to four significant digits,** while the docstring promised a 1e-4 relative
+  tolerance. Three of BR6's 63,655 rows (days such as 5.6875, stored by Cassandra's 32-bit float as 5.68749) fell
+  on either side of a rounding boundary. The comparison now uses `math.isclose(rel_tol=1e-4)`, as documented.
+- **The first draft of the spoken lines ran to 583 syllables before page 22.** Pages 02-04, 20 and 21 were cut to
+  bring the seven pages to 549.
+
+### Judgement that stayed with the team
+
+Made by AI, flagged for review:
+- **The answer for BR3 and BR5 stops at the stream's final watermark,** because both write a window only once the
+  watermark closes it. A replay that stops earlier or later needs that watermark passed again.
+- **BR4 scores the heatmap fields (scores and segment), and reports the raw values beside them.** The raw values'
+  90.96% is the `dim_user` projection Khang kept on #17 (18 Oct), not a fault of BR4's query; it belongs in
+  report section 6's limitations.
+- **The cover's title** is the draft Session 29 proposed for Khang; the GV line keeps the presentation deck's
+  "PGS.TS.".
+
+Carried forward:
+- Session 30's list is unchanged.
