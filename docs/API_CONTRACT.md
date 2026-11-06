@@ -606,9 +606,9 @@ CREATE TABLE order_velocity_alerts (
 
 | Value | Meaning | Threshold (5-minute window) |
 |---|---|---|
-| `"low"` | Within expected range | 1–2 orders |
-| `"medium"` | Moderately above baseline | 3–9 orders |
-| `"high"` | Flagged for manual review | ≥ 10 orders |
+| `"low"` | Within expected range | 1 order |
+| `"medium"` | Moderately above baseline | 2–3 orders |
+| `"high"` | Flagged for manual review | ≥ 4 orders |
 
 **Response row fields:**
 
@@ -629,9 +629,9 @@ CREATE TABLE order_velocity_alerts (
 ```json
 {
   "data": [
-    { "event_date": "2019-11-29", "window_start": "2019-11-29T14:10:00+07:00", "user_id": 541312140, "order_count": 18, "total_value": 8920.50, "severity": "high" },
-    { "event_date": "2019-11-29", "window_start": "2019-11-29T14:05:00+07:00", "user_id": 530253200, "order_count": 7,  "total_value": 3240.00, "severity": "medium" },
-    { "event_date": "2019-11-29", "window_start": "2019-11-29T14:00:00+07:00", "user_id": 572756958, "order_count": 2,  "total_value": 640.50,  "severity": "low" }
+    { "event_date": "2019-11-29", "window_start": "2019-11-29T14:10:00+07:00", "user_id": 541312140, "order_count": 5, "total_value": 8920.50, "severity": "high" },
+    { "event_date": "2019-11-29", "window_start": "2019-11-29T14:05:00+07:00", "user_id": 530253200, "order_count": 3,  "total_value": 3240.00, "severity": "medium" },
+    { "event_date": "2019-11-29", "window_start": "2019-11-29T14:00:00+07:00", "user_id": 572756958, "order_count": 1,  "total_value": 640.50,  "severity": "low" }
   ],
   "meta": { "ms": 7.8, "warehouse": "Cassandra", "partitions": 1, "rows": 3 }
 }
