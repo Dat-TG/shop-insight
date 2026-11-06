@@ -23,6 +23,12 @@ export default function BR7Page() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    const previousTitle = document.title;
+    document.title = 'Bought Together';
+    return () => { document.title = previousTitle; };
+  }, []);
+
   // Offer ids that are known to work, so the screen never opens as a dead end.
   useEffect(() => {
     fetch(`${API_BASE}/api/br7/anchors`)
@@ -154,7 +160,7 @@ export default function BR7Page() {
               <div className="panel__title-group">
                 <h2 className="panel__title">Frequently Bought With {asked}</h2>
                 <span className="panel__subtitle">
-                  Ranked by sessions bought together · lift above 1
+                  Ranked by lift · sessions break ties · lift above 1
                 </span>
               </div>
             </div>

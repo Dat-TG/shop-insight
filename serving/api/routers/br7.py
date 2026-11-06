@@ -48,7 +48,7 @@ def response(rows: list[dict], ms: float) -> ApiResponse:
 
 @router.get("/affinity", response_model=ApiResponse, summary="Frequently bought together")
 def get_affinity(product_id: int = Query(..., ge=0)) -> ApiResponse:
-    # co_count first: a pair seen 40 times beats a pair seen 3 times with a bigger lift.
+    # lift first, as API_CONTRACT section 9 and BR_SCOPE say; co_count breaks ties.
     sql = f"""
         SELECT a.product_a, a.product_b, a.co_count, a.support, a.lift,
                p.brand, p.category_l1, p.price
@@ -57,7 +57,7 @@ def get_affinity(product_id: int = Query(..., ge=0)) -> ApiResponse:
                    FROM read_parquet(?, union_by_name = true)
                    WHERE is_current) p ON p.product_id = a.product_b
         WHERE a.product_a = ?
-        ORDER BY a.co_count DESC, a.lift DESC
+        ORDER BY a.lift DESC, a.co_count DESC
         LIMIT {TOP_N}
     """
     rows, ms = run(sql, [AFFINITY_GLOB, DIM_PRODUCT_GLOB, product_id])
