@@ -5,14 +5,14 @@
   "_table": "order_velocity_alerts",
   "_primary_key": "((event_date), window_start, user_id)",
   "_clustering": "window_start DESC, user_id ASC",
-  "_severity_vocab": "low | medium | high",
+  "_severity_vocab": "low (1) | medium (2-3) | high (>=4)",
   "default": {
     "data": [
       {
         "event_date": "2019-11-29",
         "window_start": "2019-11-29T14:10:00+07:00",
         "user_id": 541312140,
-        "order_count": 18,
+        "order_count": 5,
         "total_value": 8920.50,
         "severity": "high"
       },
@@ -20,9 +20,9 @@
         "event_date": "2019-11-29",
         "window_start": "2019-11-29T14:05:00+07:00",
         "user_id": 530253200,
-        "order_count": 7,
+        "order_count": 4,
         "total_value": 3240.00,
-        "severity": "medium"
+        "severity": "high"
       },
       {
         "event_date": "2019-11-29",
@@ -36,7 +36,7 @@
         "event_date": "2019-11-29",
         "window_start": "2019-11-29T14:00:00+07:00",
         "user_id": 572756958,
-        "order_count": 2,
+        "order_count": 1,
         "total_value": 640.50,
         "severity": "low"
       }

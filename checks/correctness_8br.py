@@ -292,7 +292,10 @@ def br5_carts(con, cass, start, end, watermark):
 
 
 def br8_velocity(con, cass, start, end):
-    """Purchases per user in 5-minute tumbling windows, with the low / medium / high label."""
+    """Purchases per user in 5-minute tumbling windows, with the low / medium / high label.
+
+    The label follows API_CONTRACT section 10: low 1, medium 2-3, high >= 4 orders.
+    """
     answer = con.sql(f"""
         WITH ev AS (SELECT * FROM {replayed(start, end)} WHERE event_type = 'purchase'),
         w AS (
@@ -301,7 +304,7 @@ def br8_velocity(con, cass, start, end):
             FROM ev GROUP BY 1, 2, 3
         )
         SELECT event_date, ws, user_id, n, total,
-               CASE WHEN n >= 10 THEN 'high' WHEN n >= 3 THEN 'medium' ELSE 'low' END FROM w
+               CASE WHEN n >= 4 THEN 'high' WHEN n >= 2 THEN 'medium' ELSE 'low' END FROM w
     """).fetchall()
     stored = cassandra_rows(cass, "SELECT event_date, window_start, user_id, order_count, total_value, severity "
                                   "FROM order_velocity_alerts")
