@@ -34,9 +34,12 @@ from serving.api.models import ApiResponse, QueryMeta, VelocityAlertRow
 router = APIRouter(prefix="/api/br8", tags=["BR8 — Order Velocity Alerts"])
 
 VIETNAM = timezone(timedelta(hours=7))
-# Maximum rows fetched per request. A full day at demo speed (60x) produces at
-# most a few thousand (window, user) pairs; 5000 covers any realistic day.
-_LIMIT = 5000
+# Maximum rows fetched per request: one row per (5-minute window, user) with a
+# purchase. The busiest day in silver, 2019-11-17 (the demo day), has 10,962 such
+# rows. The partition is clustered window_start DESC, so a LIMIT below that drops
+# the day's earliest windows, and the severity counts and the severity filter
+# (applied after the read) would undercount without a word.
+_LIMIT = 15000
 _SEVERITY_VALUES = {"low", "medium", "high", "all"}
 _REPO = Path(__file__).resolve().parents[3]
 _FIXTURE_PATH = _REPO / "web" / "fixtures" / "br8-order-velocity-alerts.json"

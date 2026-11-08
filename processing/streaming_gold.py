@@ -436,8 +436,9 @@ def start_br8(events, cassandra):
     Checkpoint: data/checkpoints/br8_order_velocity_alerts/.
     """
     # Severity thresholds — matches API_CONTRACT section 10 & canonical fixture.
-    # Empirically tuned for demo dataset (2019-11-17 at --speed 60):
-    # silver data max window count ~8, so high must be <=4 to appear in demo.
+    # Tuned to the 7% sample: no (user, 5-minute window) in silver has more than 5
+    # purchases (52 windows reach 4 or 5 in the whole month, 8 of them on 17 Nov),
+    # so the old >= 10 rule never fired and high must start at 4 to show in a demo.
     MED_THRESHOLD = 2   # order_count >= 2 → medium (2–3)
     HIGH_THRESHOLD = 4  # order_count >= 4 → high (≥4)
 

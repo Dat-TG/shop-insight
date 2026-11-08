@@ -16,6 +16,9 @@ const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8000';
 
 const REFRESH_MS = 10_000;
 const DEMO_DATE = '2019-11-17';
+// A full day holds up to ~11,000 (window, user) rows. The severity counts use all
+// of them; the table renders only the newest MAX_ROWS, as BR5 does.
+const MAX_ROWS = 200;
 
 const SEVERITY_CONFIG = {
   high:   { label: 'High',   color: '#ff3b30', bg: 'rgba(255,59,48,0.12)',  badge: 'badge badge--danger'  },
@@ -211,7 +214,7 @@ export default function BR8Page() {
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((row, i) => {
+                  {rows.slice(0, MAX_ROWS).map((row, i) => {
                     const sev = SEVERITY_CONFIG[row.severity as keyof typeof SEVERITY_CONFIG];
                     const rowKey = `${row.window_start}-${row.user_id}-${i}`;
                     const isExpanded = expandedKey === rowKey;
@@ -275,13 +278,13 @@ export default function BR8Page() {
                                 </div>
                                 <div className="br8-alert-detail__note">
                                   {row.severity === 'high' && (
-                                    <span>⚠️ <strong>Critical velocity spike (≥10 orders in 5 min):</strong> User initiated rapid repeated orders exceeding automated thresholds. Flagged for fraud prevention review.</span>
+                                    <span>⚠️ <strong>Critical velocity spike (≥4 orders in 5 min):</strong> User initiated rapid repeated orders exceeding automated thresholds. Flagged for fraud prevention review.</span>
                                   )}
                                   {row.severity === 'medium' && (
-                                    <span>⚡ <strong>Elevated purchasing activity (3–9 orders in 5 min):</strong> Velocity moderately above normal baseline. Monitored for bulk re-ordering or automated purchasing.</span>
+                                    <span>⚡ <strong>Elevated purchasing activity (2–3 orders in 5 min):</strong> Velocity moderately above normal baseline. Monitored for bulk re-ordering or automated purchasing.</span>
                                   )}
                                   {row.severity === 'low' && (
-                                    <span>✓ <strong>Standard purchasing velocity (1–2 orders in 5 min):</strong> Order volume is within normal consumer behavior.</span>
+                                    <span>✓ <strong>Standard purchasing velocity (1 order in 5 min):</strong> Order volume is within normal consumer behavior.</span>
                                   )}
                                 </div>
                               </div>
@@ -294,6 +297,11 @@ export default function BR8Page() {
                 </tbody>
               </table>
             </div>
+            {rows.length > MAX_ROWS && (
+              <span className="panel__subtitle">
+                Showing the {MAX_ROWS} newest of {rows.length.toLocaleString('en-US')} alerts. The counts above include all of them.
+              </span>
+            )}
             <div className="panel__footer">
               {response && <QueryMeta meta={response.meta} />}
             </div>

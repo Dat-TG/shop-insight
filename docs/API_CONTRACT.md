@@ -630,10 +630,11 @@ CREATE TABLE order_velocity_alerts (
 {
   "data": [
     { "event_date": "2019-11-29", "window_start": "2019-11-29T14:10:00+07:00", "user_id": 541312140, "order_count": 5, "total_value": 8920.50, "severity": "high" },
-    { "event_date": "2019-11-29", "window_start": "2019-11-29T14:05:00+07:00", "user_id": 530253200, "order_count": 3,  "total_value": 3240.00, "severity": "medium" },
-    { "event_date": "2019-11-29", "window_start": "2019-11-29T14:00:00+07:00", "user_id": 572756958, "order_count": 1,  "total_value": 640.50,  "severity": "low" }
+    { "event_date": "2019-11-29", "window_start": "2019-11-29T14:05:00+07:00", "user_id": 530253200, "order_count": 4, "total_value": 3240.00, "severity": "high" },
+    { "event_date": "2019-11-29", "window_start": "2019-11-29T14:05:00+07:00", "user_id": 515915625, "order_count": 3, "total_value": 1450.75, "severity": "medium" },
+    { "event_date": "2019-11-29", "window_start": "2019-11-29T14:00:00+07:00", "user_id": 572756958, "order_count": 1, "total_value": 640.50,  "severity": "low" }
   ],
-  "meta": { "ms": 7.8, "warehouse": "Cassandra", "partitions": 1, "rows": 3 }
+  "meta": { "ms": 7.8, "warehouse": "Cassandra", "partitions": 1, "rows": 4 }
 }
 ```
 
