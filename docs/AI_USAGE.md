@@ -2638,3 +2638,60 @@ merge. No BR code was changed.
 
 Carried forward:
 - Session 31's list is unchanged.
+
+## Session 33 — 8 November 2026 (W45)
+
+**Tool:** Claude Code (Opus 5.5).
+**Scope:** Dat's review of PR #39, Nguyen's T13 ground-truth check and T09 BR7 sort. At Dat's request the AI fixed
+the review's points on the PR branch, re-ran the check on Dat's machine and merged the PR. The AI did not change
+any BR code. The BR7 sort (lift first) is Nguyen's change, and the AI checked it.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| `checks/ground_truth.py` — BR8 takes a required `--replay-start` and `--replay-end` instead of counting every window since midnight; every line counts missing, extra and duplicated stored rows against the score; BR7 applies gold_br7's cut-offs and compares support; money compared exactly; MISS and INCOMPLETE when a BR cannot run; module docstring | Run and verified |
+| `docs/evidence/ground_truth_run.txt` — header for Tin's run, then a reviewer re-run: before and after the fix on the same replay, wrong spans, one mutation at a time, Cassandra unreachable | Captured from the runs |
+| `docs/AI_USAGE.md` — this session | AI-drafted |
+
+### How it was checked
+
+| Claim | How it was measured |
+|---|---|
+| The check at the PR head gives a false LOW for BR8 after `./run_demo.sh stream` | Cassandra holds the 15:00-21:30 Vietnam-time replay of PR #36's re-run (`order_velocity_alerts` 5,815 rows, 15:00-21:25). `python checks/ground_truth.py --replay-end "2019-11-17 21:30:00"` at c7e11be printed `LOW BR8 65.60% (5,649/8,611)`. On the same replay, correctness_8br.py scores BR8 100%. Silver holds 2,962 (window, user) purchase pairs before 15:00 that the stream never received |
+| The fixed check passes on correct data | Same replay: `--replay-start "2019-11-17 15:00:00" --replay-end "2019-11-17 21:30:00"` printed BR4 31,005, BR6 63,655, BR7 314 and BR8 5,815 of 5,815, then GROUND TRUTH OK. It was run before and after merging origin/main 0511e42 into the branch |
+| The fixed check fails on wrong data | A mutation harness fed the unchanged module mutated copies of the gold Parquet and of the Cassandra rows (`data/` and Cassandra only read): one value off, a missing row, an extra row, an exact or stale duplicate, a stream with a different threshold, a stream that died at 18:00. Every case moved matched/total. The one exception is a duplicated BR8 row, which the primary key makes impossible to store. Per-case figures are in the evidence file |
+| BR7 now sorts as API_CONTRACT §9 says | `serving.api.routers.br7.get_affinity(1005115)` returned 10 rows with lift descending (top row: 1005230, co_count 3, lift 4.07) in 18.7 ms; an unknown id returns `[]`. `npx tsc -b --noEmit` in `web/` exited 0 |
+| The numbers in Tin's run hold | DuckDB: `rfm_segments` has 31,005 buyers, `product_affinity` 314 rows, stockout_risk's last day 12,731 × 5 = 63,655 rows. Silver has 4,144 closed purchase pairs on 17 Nov up to 16:44:47, the count a replay from midnight gives |
+
+### What the AI got wrong, and was corrected on
+
+- **The AI's first fix kept two blind spots, and its own docstring hid them.** That docstring said every line counted a
+  duplicated stored row, but BR4's `FULL JOIN ... count(*)` still scored `rfm_segments` 100% with every buyer row
+  doubled (62,010/62,010). Its BR8 defaults also took the replay span from the table under test, so a stream that
+  died mid-replay scored 100%. Three independent reviewer agents found the BR4 gap; mutation testing found the BR8
+  one. Every such finding was upheld by two refuting agents. BR4 now counts each matched buyer once over the larger
+  row count (every row doubled gives 50%), and the span flags are required.
+- **The first fix said BR8 compares windows "closed by the watermark".** BR8 writes in update mode, so a stored row
+  is final once all its window's events were replayed. The extra 10-minute cut dropped complete windows and kept one
+  the watermark had not closed. The filter is now "the window lies inside the replay".
+- **The PR's comment gave the wrong reason for BR7's DISTINCT.** It cited the 7,312 exact duplicates in silver, but
+  only one of those is a purchase. The DISTINCT counts a repeat buy in one session once, as gold_br7 does.
+
+### Judgement that stayed with the team
+
+- **Dat** asked for the fixes to go on Nguyen's branch and for the PR to be merged after them.
+- The review's other suggestion was to drop `ground_truth.py`, because `checks/correctness_8br.py` (#36) already
+  covers these four BRs and more. Dat asked for it to be fixed, so it stays, and two checks now overlap:
+  - `ground_truth.py` checks BR4's raw values as of each user's stored snapshot.
+  - `correctness_8br.py` checks the scores and segment, and its "BR4 raw" line measures the values as of 30 Nov (90.96%).
+
+  Which one T19 and report section 6 quote is the team's call.
+- The re-run on Dat's machine is a reviewer's reproduction. T19 is Nguyen's: the owner runs the fixed check, with the
+  span of the owner's replay.
+- **Open:** the PR title promised a BR5 fix that is not in it. On main, BR5's screen still shows two Vietnamese
+  strings, which T09 asks Nguyen to translate. Nguyen should also add a line here if the T13 commits were
+  AI-assisted; this file does not say.
+
+Carried forward:
+- Session 31's list is unchanged.

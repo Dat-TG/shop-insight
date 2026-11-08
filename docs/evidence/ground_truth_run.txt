@@ -1,4 +1,74 @@
+T13, DuckDB ground truth for BR4, BR6, BR7 and BR8: checks/ground_truth.py
+Each stored result against an answer written in DuckDB SQL; the module docstring says what each line covers.
+
+== The PR's run (Tin, 6 November 2026, commit c7e11be of PR #39) ==
+The check as first written. BR8 had no replay start; this replay began at midnight Vietnam time, so every
+window from 00:00 was in Cassandra. The command line was not recorded; the BR8 note shows --replay-end
+"2019-11-17 16:44:47".
+
 OK  BR4 rfm_segments  100.00%  (31,005/31,005)  buyers: frequency, monetary, recency as of each user's current snapshot
 OK  BR6 stockout_risk  100.00%  (63,655/63,655)  gold 63,655 rows, truth 63,655 rows
 OK  BR7 product_affinity  100.00%  (314/314)  per gold row: co_count exact, lift within 1%
 OK  BR8 order_velocity_alerts  100.00%  (4,144/4,144)  closed windows up to 2019-11-17 16:44:47, min order_count 1
+
+== Reviewer re-run after the fix (Dat, PR #39 review) ==
+Dat's machine (20 threads, 15 GB RAM, Ubuntu 26.04.1 in WSL2), 8 November 2026, branch W45-Nguyen with
+origin/main 0511e42 merged in. Cassandra 4.1.12, DuckDB 1.5.5, cassandra-driver 3.30.1.
+Data: bronze, silver, warehouse, gold Parquet and stockout_risk as built on that machine. The streaming
+tables hold the replay of PR #36's review re-run (docs/evidence/correctness_8br.txt): streaming_gold.py
+--fresh, then replayer.py --speed 60 --start "2019-11-17 08:00:00", 78 files, 15:00-21:30 Vietnam time.
+That is the replay ./run_demo.sh stream makes. Cassandra holds order_velocity_alerts 5,815 rows,
+window_start 15:00 to 21:25, as correctness_8br.txt records.
+
+The check before the fix, on this replay (BR8 counts every window since midnight, 2,962 (window, user)
+pairs that were never replayed):
+  python checks/ground_truth.py --replay-end "2019-11-17 21:30:00"
+LOW BR8 order_velocity_alerts   65.60%  (5,649/8,611)  closed windows up to 2019-11-17 21:30:00, min order_count 1
+The same replay scores BR8 100% in correctness_8br.txt, so the 65.60% is the check's error, not the stream's.
+
+The check after the fix:
+  python checks/ground_truth.py --replay-start "2019-11-17 15:00:00" --replay-end "2019-11-17 21:30:00"
+OK  BR4 rfm_segments  100.00%  (31,005/31,005)  gold 31,005 buyers, truth 31,005: frequency, monetary, recency as of each user's current snapshot
+OK  BR6 stockout_risk  100.00%  (63,655/63,655)  gold 63,655 rows, truth 63,655 rows
+OK  BR7 product_affinity  100.00%  (314/314)  gold 314 rows, truth 314 rows: co_count, support, lift per pair
+OK  BR8 order_velocity_alerts  100.00%  (5,815/5,815)  windows inside 2019-11-17 15:00:00 .. 2019-11-17 21:30:00, gold 5,815, truth 5,815
+GROUND TRUTH OK
+(exit 0)
+
+A wrong span now fails instead of passing:
+  --replay-start "2019-11-17 00:00:00"   LOW BR8  66.25%  (5,815/8,777)
+  --replay-end   "2019-11-17 22:30:00"   LOW BR8  86.60%  (5,815/6,715)
+  no --replay-start / --replay-end       argparse error: the following arguments are required
+
+== The check can fail: one mutation at a time ==
+A harness imported the module unchanged and fed it mutated copies of the stored results: gold Parquet
+copied to a scratch directory and rewritten with DuckDB, Cassandra rows read once with SELECT and handed
+over through a stand-in session. data/ and Cassandra were only read. One bad row moves the score by less
+than the 1% threshold, so a mutation counts as seen when matched/total moves. Each line is matched/total.
+
+BR4  monetary +0.01, frequency +1 or recency +1 on one buyer   31,004/31,005 each
+     one buyer missing, or stored as a non-buyer               31,004/31,005 each
+     an extra buyer, an exact or a stale duplicate             31,005/31,006 each
+     every buyer row duplicated                                31,005/62,010   50.00%
+BR6  days_to_stockout x1.01 on one row, or one row missing     63,654/63,655 each
+     an extra product                                          63,655/63,656
+     a stale duplicate, larger / smaller days_to_stockout      63,654/63,656 and 63,655/63,656
+     warehouse 1 partition empty                               50,924/63,655   80.00%
+BR7  co_count +1, lift or support x1.001, or lift NULL         313/314 each
+     one direction of a pair missing                           313/314
+     a pair missing in both directions                         312/314
+     an extra pair, an exact or a stale duplicate              314/315 each
+     the co_count = 3 rows dropped (a cut-off of 4)            176/314   56.05%
+BR8  order_count +1 or total_value +0.01 on one row            5,814/5,815 each
+     one row missing / an extra row                            5,814/5,815 and 5,815/5,816
+     the 1-order windows dropped (a threshold of 2)            340/5,815   5.85%
+     stream died at 18:00                                      2,449/5,815   42.12%
+     first 30 minutes missing                                  5,413/5,815   93.09%
+Not seen: a duplicated BR8 row (5,815/5,815), which the primary key ((event_date), window_start, user_id)
+makes impossible to store.
+
+Cassandra unreachable (simulated): BR4 and BR7 print their lines, then "MISS BR6, BR8: no Cassandra",
+"GROUND TRUTH INCOMPLETE", exit 1.
+
+This re-run is a reviewer's reproduction, not the record. T19 quotes the owner's run of the fixed check
+on the owner's machine, with the replay span that machine used.
