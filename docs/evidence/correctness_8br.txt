@@ -83,3 +83,41 @@ python checks/scd2_integrity.py data/warehouse/dim_product product_id
   overlaps 0, not_one_current 0, gaps 0, empty_ranges 0, current_flag_wrong 0, null_fields 0, SCD2 OK
 dim_user, the same six counts printed by batch_warehouse.py on this run: all 0
   (319,426 versions, 258,330 current, 0 duplicate user_sk, 0 non-buyers with more than one version)
+
+== Reviewer re-run after the exact money comparison (Dat, PR #36 review) ==
+Dat's machine (20 threads, 15 GB RAM, Ubuntu 26.04.1 in WSL2), 8 November 2026, main at f690021 (only
+docs changed since 3e632d8) with this branch's checks/correctness_8br.py. Cassandra 4.1.12, PySpark
+4.1.3, DuckDB 1.5.5. Bronze, silver, warehouse, gold Parquet and stockout_risk as built on that machine.
+Khang's run above stays the record; this is a reproduction for the review.
+
+Two changes to the check, both stricter:
+  - Money stays a Decimal and is compared exactly. Before, norm() turned it into a float, so money fell
+    under the 1e-4 float tolerance: the busiest 'all' minute of the replay (11,782.53 at 20:45) could
+    be 1.18 off and still match.
+  - The score divides by rows, not distinct keys, so a row a gold table writes twice counts against it.
+
+The same replay: streaming_gold.py --fresh, then replayer.py --speed 60 --start "2019-11-17 08:00:00"
+stopped after file 78 (187,468 rows, 15:00-21:30 Vietnam time), then 90 s more. The last BR3 batch
+again replaced the windows 21:00-21:04, so the final watermark was 21:19:59. Same command:
+
+BR          answer    stored   matched     match   compared
+BR1          4,563     4,563     4,563   100.00%   gmv and order_count per (day, category incl. 'all', minute)
+BR2            465       465       465   100.00%   sessions and events per (start date, category), incl. 'all'
+BR3          7,580     7,580     7,580   100.00%   product, views, carts per (window, rank), windows closed by the watermark
+BR4        258,330   258,330   258,330   100.00%   r, f, m score and segment per user (the heatmap and its filter)
+BR5          2,600     2,600     2,600   100.00%   cart_value, user, items, last event per (day, session)
+BR6         63,655    63,655    63,655   100.00%   days_to_stockout, stock, velocity per (warehouse, product) on 30 Nov
+BR7            314       314       314   100.00%   co_count, support, lift per ordered pair
+BR8          5,815     5,815     5,815   100.00%   order_count, total_value, severity per (day, 5-minute window, user)
+          BR4 raw values (shown in the cell list, not in the heatmap):
+BR4 raw    258,330   258,330   234,977    90.96%   BELOW 99%   recency_days, frequency, monetary per user
+          differs: key (276604124)  answer (18, 1, 7.18)  stored (9, 1, 7.18)
+          differs: key (310402868)  answer (19, 1, 77.22)  stored (10, 1, 77.22)
+          differs: key (356520186)  answer (29, 1, 33.45)  stored (6, 1, 33.45)
+CORRECTNESS OK   (exit 0; the check before the fix printed the same eight rows on this replay)
+
+The fix is stricter, measured:
+  gmv of the 20:45 'all' row raised by 1.00 in Cassandra (11,782.53 -> 11,783.53), then put back:
+    check before the fix   BR1   4,563 of 4,563   100.00%   (1.00 is inside 1e-4 of 11,782.53)
+    check after the fix    BR1   4,562 of 4,563    99.98%   differs: answer 11782.53, stored 11783.53
+  score() on one answer row against the same row stored twice: 100.00% before, 50.00% after.

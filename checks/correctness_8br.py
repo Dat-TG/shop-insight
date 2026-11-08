@@ -16,10 +16,10 @@ Then pass the replayed span (Vietnam time, as silver stores it) and the final
 watermark the stream log printed. BR3 and BR5 write a window only once the
 watermark closes it, so their answer stops at that watermark too.
 
-A row matches when its key and every compared value are equal (decimals to the
-cent, floats to 1e-4 relative). The score per BR is matched / max(answer rows,
-stored rows), so a missing row and an extra row both count against it. The
-threshold is 99%. Prints CORRECTNESS OK when all eight pass.
+A row matches when its key and every compared value are equal (decimals exactly,
+to the cent; floats to 1e-4 relative). The score per BR is matched / max(answer
+rows, stored rows), so a missing, an extra or a duplicated row counts against it.
+The threshold is 99%. Prints CORRECTNESS OK when all eight pass.
 """
 
 import argparse
@@ -54,9 +54,14 @@ def gold(name):
 
 
 def norm(value):
-    """One comparable form per value: cents for money, naive seconds for times. Floats stay floats."""
+    """One comparable form per value: cents for money, naive seconds for times. Floats stay floats.
+
+    Money stays a Decimal, so same() compares it exactly. Both sides are Decimal: silver's price
+    is decimal(10,2), and the gold Parquet and Cassandra money columns are decimals too. As a
+    float it would fall under the 1e-4 tolerance, which lets an 11,782.53 GMV minute be 1.18 off.
+    """
     if isinstance(value, Decimal):
-        return round(float(value), 2)
+        return value.quantize(Decimal("0.01"))
     if isinstance(value, datetime):
         return value.replace(tzinfo=None, microsecond=0)
     return value
@@ -75,13 +80,15 @@ def as_map(rows, key_len):
 
 
 def score(name, compared, answer, stored, key_len):
-    """matched / max(len): extra and missing rows both lower the score. Returns a result dict."""
+    """matched / max(rows): extra, missing and duplicated rows all lower the score. Returns a result dict."""
     a, s = as_map(answer, key_len), as_map(stored, key_len)
     matched = sum(1 for k, v in a.items() if same(v, s.get(k)))
-    total = max(len(a), len(s))
+    # Rows, not keys: as_map keeps one row per key, so a gold table that wrote a key twice
+    # would otherwise still score 100%.
+    total = max(len(answer), len(stored))
     pct = 100.0 * matched / total if total else 0.0
     wrong = [(k, a.get(k), s.get(k)) for k in sorted(set(a) | set(s), key=str) if not same(a.get(k), s.get(k))]
-    return {"br": name, "compared": compared, "answer": len(a), "stored": len(s), "matched": matched,
+    return {"br": name, "compared": compared, "answer": len(answer), "stored": len(stored), "matched": matched,
             "pct": pct, "examples": wrong[:3], "wrong": len(wrong)}
 
 
@@ -322,7 +329,12 @@ def print_result(r):
     flag = "" if r["pct"] >= THRESHOLD else "   BELOW 99%"
     print(f"{r['br']:<8}{r['answer']:>10,}{r['stored']:>10,}{r['matched']:>10,}{r['pct']:>9.2f}%{flag}   {r['compared']}")
     for k, a, s in r["examples"]:
-        print(f"{'':8}  differs: key {k}  answer {a}  stored {s}")
+        print(f"{'':8}  differs: key {show(k)}  answer {show(a)}  stored {show(s)}")
+
+
+def show(values):
+    """(2019-11-17, all, 7.18) rather than the reprs (datetime.date(...), Decimal('7.18'))."""
+    return "missing" if values is None else "(" + ", ".join(str(v) for v in values) + ")"
 
 
 def main():

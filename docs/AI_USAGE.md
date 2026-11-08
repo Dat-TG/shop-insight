@@ -2598,3 +2598,43 @@ Made by AI, flagged for review:
 
 Carried forward:
 - Session 30's list is unchanged.
+
+## Session 32 — 8 November 2026 (W45)
+
+**Tool:** Claude Code (Opus 5.5).
+**Scope:** Dat's review of PR #36, Khang's correctness check (Session 31). At Dat's request the AI fixed the
+review's two points on the PR branch, replayed 17 Nov again and re-ran the check on Dat's machine, for Dat to
+merge. No BR code was changed.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| `checks/correctness_8br.py` — money compared exactly as a Decimal, not as a float under the 1e-4 tolerance; the score divides by rows, not distinct keys; the `differs` lines print plain values | Run and verified |
+| `docs/evidence/correctness_8br.txt` — a reviewer re-run section below Khang's run | Captured from the run |
+| `docs/AI_USAGE.md` — this session | AI-drafted |
+
+### How it was checked
+
+| Claim | How it was measured |
+|---|---|
+| Money was compared more loosely than the docstring said | DuckDB over silver: the busiest `'all'` minute of 17 Nov 15:00-21:30 Vietnam time is 11,782.53, so 1e-4 relative let it be 1.18 off. With that row's `gmv` raised by 1.00 in Cassandra, the check at the PR head still matched BR1 4,563 of 4,563; the fixed check matched 4,562 (99.98%). The value was put back and BR1 returned to 100% |
+| A duplicated row was invisible | `score()` on one answer row against the same row stored twice: 100% before the fix, 50% after |
+| The fix changes no number in Khang's run | Khang's replay repeated on Dat's machine (78 files, 187,468 rows, final watermark 21:19:59): the check before and after the fix print the same eight rows, all 100%, and BR4's raw values at 90.96% |
+| The gold Parquet tables hold one row per key, so the row-based score changes nothing today | DuckDB: `funnel_daily` 465, `rfm_segments` 258,330, `product_affinity` 314 rows, each equal to its count of distinct keys |
+
+### What the AI got wrong, and was corrected on
+
+- **The replay script's summary printed the watermark 21:14:59,** the last one a log line showed (batch 77). The
+  final batch 78 carried no new events and closed the BR3 windows up to 21:00-21:04, so the final watermark was
+  21:19:59, as Khang recorded; the check was run with 21:19:59.
+
+### Judgement that stayed with the team
+
+- **Dat** asked for the fixes to go on Khang's branch and for the PR to be merged after the re-run.
+- Khang's run stays the record for report section 6: the correctness comparison is run by its owner. The re-run on
+  Dat's machine is a reviewer's reproduction. Whether Khang re-runs the fixed check on his machine before the
+  report quotes it is Khang's call; on this data it printed the same numbers.
+
+Carried forward:
+- Session 31's list is unchanged.
