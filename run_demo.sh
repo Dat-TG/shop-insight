@@ -56,9 +56,18 @@ cmd_infra() {
     info "Applying Cassandra schema..."
     "$VENV" serving/apply_schema.py
 
-    info "Applying Postgres DDL..."
-    docker compose exec -T postgres psql -U shopinsight -d shopinsight \
-        -v ON_ERROR_STOP=1 < warehouse/ddl.sql
+    # warehouse/ddl.sql applies once, to an empty database: it has no IF NOT EXISTS
+    # on purpose (its header says why), so a second run exits 3 and set -e would
+    # stop here. Apply it only when the star schema is not there yet.
+    HAS_STAR=$(docker compose exec -T postgres psql -U shopinsight -d shopinsight -tAc \
+        "SELECT to_regclass('public.dim_date') IS NOT NULL")
+    if [[ "$HAS_STAR" == "t" ]]; then
+        ok "Postgres star schema already exists; skipping warehouse/ddl.sql."
+    else
+        info "Applying Postgres DDL..."
+        docker compose exec -T postgres psql -U shopinsight -d shopinsight \
+            -v ON_ERROR_STOP=1 < warehouse/ddl.sql
+    fi
     ok "Schemas applied."
 
     # Check if static data already loaded (avoid re-running expensive pipeline)
@@ -70,6 +79,8 @@ cmd_infra() {
         warn "Postgres fact_event is empty. Run the full batch pipeline:"
         warn "  SPARK_CONF_DIR=conf .venv/bin/python ingestion/load_bronze.py"
         warn "  SPARK_CONF_DIR=conf .venv/bin/python processing/batch_silver.py"
+        warn "  .venv/bin/python ingestion/gen_catalog.py"
+        warn "  .venv/bin/python ingestion/gen_inventory.py"
         warn "  SPARK_CONF_DIR=conf .venv/bin/python processing/batch_warehouse.py"
         warn "  .venv/bin/python serving/load_star_postgres.py"
         warn "  .venv/bin/python processing/batch_gold.py"
@@ -155,18 +166,29 @@ cmd_app() {
     API_PID=$!
     echo "api:$API_PID" >> "$PID_FILE"
 
-    # Wait for API to be ready
+    # Wait for API to be ready (-f: a 404 or 500 does not count as up)
+    API_UP=0
     for i in $(seq 1 30); do
         sleep 1
-        curl -s http://localhost:8000/healthz > /dev/null 2>&1 && break
+        if curl -sf http://localhost:8000/health > /dev/null 2>&1; then
+            API_UP=1
+            break
+        fi
         kill -0 "$API_PID" 2>/dev/null || die "uvicorn died. Check $API_LOG"
     done
-    ok "API server running (PID $API_PID) — http://localhost:8000"
+    if [[ "$API_UP" -eq 1 ]]; then
+        ok "API server running (PID $API_PID) — http://localhost:8000"
+    else
+        warn "API did not answer /health within 30 s — check $API_LOG"
+    fi
 
     info "Starting React dev server on http://localhost:5173 ..."
     info "  Log: $WEB_LOG"
     cd web
-    nohup npm run dev > "$WEB_LOG" 2>&1 &
+    [[ -x node_modules/.bin/vite ]] || die "web/node_modules is missing. Run: cd web && npm ci"
+    # vite directly, not `npm run dev` (whose "dev" script is just "vite"): npm runs
+    # vite as a child, so `stop` killed npm and left vite holding :5173.
+    nohup node_modules/.bin/vite > "$WEB_LOG" 2>&1 &
     WEB_PID=$!
     echo "web:$WEB_PID" >> "$PID_FILE"
     cd "$REPO_DIR"
