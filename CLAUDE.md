@@ -173,7 +173,7 @@ source reader) and `processing/streaming_gold.py`, where BR1 writes `gmv_by_minu
 15-minute window to `trending_products`, BR5 writes one row per session that carted and
 did not buy within a 30-minute `session_window` to `abandoned_carts` (upsert, no delete),
 and BR8 writes one row per 5-minute window and user with a purchase to
-`order_velocity_alerts`, labelled low / medium / high at 1-2 / 3-9 / >= 10 orders
+`order_velocity_alerts`, labelled low / medium / high at 1 / 2-3 / >= 4 orders
 (API_CONTRACT section 10; upsert, no delete). `docs/STREAMING_PATTERN.md` walks through it
 block by block, and `docs/SPARK_GUIDE_VI.md` Phần 10 is its Vietnamese twin (keep the
 two in step). All eight BRs are live end to end: `GET /api/br1/realtime`,

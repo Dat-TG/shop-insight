@@ -34,10 +34,12 @@ from serving.api.models import ApiResponse, QueryMeta, VelocityAlertRow
 router = APIRouter(prefix="/api/br8", tags=["BR8 — Order Velocity Alerts"])
 
 VIETNAM = timezone(timedelta(hours=7))
-# Maximum rows fetched per request. Enough for a day of minute-resolution alerts
-# at the sample dataset's purchase rate (about 1.5 purchases / minute → ~432 rows
-# per day if every minute had exactly one alert, much less in practice).
-_LIMIT = 500
+# Maximum rows fetched per request: one row per (5-minute window, user) with a
+# purchase. The busiest day in silver, 2019-11-17 (the demo day), has 10,962 such
+# rows. The partition is clustered window_start DESC, so a LIMIT below that drops
+# the day's earliest windows, and the severity counts and the severity filter
+# (applied after the read) would undercount without a word.
+_LIMIT = 15000
 _SEVERITY_VALUES = {"low", "medium", "high", "all"}
 _REPO = Path(__file__).resolve().parents[3]
 _FIXTURE_PATH = _REPO / "web" / "fixtures" / "br8-order-velocity-alerts.json"
@@ -80,7 +82,7 @@ def _latest_date() -> date:
     description=(
         "One partition of `order_velocity_alerts`, newest window first. "
         "Rows are pre-sorted `window_start DESC, user_id ASC` by Cassandra. "
-        "`severity` values: `low` (1 order), `medium` (2–4), `high` (≥5). "
+        "`severity` values: `low` (1 order), `medium` (2–3), `high` (≥4). "
         "Omit `event_date` to get the latest date available in the table."
     ),
 )
