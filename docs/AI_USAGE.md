@@ -2925,3 +2925,51 @@ their own screens are not part of this session.
 - One list option, not an endpoint that lists snapshots, was the AI's choice to respect the freeze; flagged for Khang.
 - Still owed by people, not code: each owner clicks through their screens and posts "BRx: đạt n/n" (T09). Dat's BR1
   and BR2 are checked during T14.
+
+## Session 40 — 10 November 2026 (W46)
+
+**Tool:** Claude Code (Opus 5.5), in Dat's session on Dat's machine.
+**Scope:** sprint task T14 (Dat's), the measurement session: the query benchmark, the 8 screens timed and
+photographed, the correctness and integrity checks, Postgres against Parquet, streaming throughput and latency, plus
+Dat's T09 self-check of BR1 and BR2 and T10's High-filter check. **Dat chose (10 Nov) that Claude types the commands
+and Dat reviews the raw output before the PR is merged**, a departure from this file's standing rule that the owner
+runs the measurements; the PR is held for that review. No application code was changed.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| `benchmark/results/{raw,summary,env,plans,stdout}_20261110_010557.*` — the official `run_benchmark.py` run: 21 variants, 3 warm-up + 20 timed each, 21 of 21 plan checks OK, at clean 02b22f1 | Run; awaiting Dat's review |
+| `docs/evidence/gate2b_curl_raw.txt` — 8 endpoints, 3 warm-up + 20 timed calls, QueryMeta ms and curl round trip; BR4's five per-R-score calls the screen really makes, measured separately | Run; awaiting review |
+| `docs/evidence/gate2b_br1.png` … `gate2b_br8.png` — each screen with its QueryMeta footer | Captured; tables cut to 15 rows in the image only |
+| `docs/evidence/t14_checks.txt`, `ground_truth_run.txt` (appended) — correctness_8br, ground_truth, SCD2 on both dimensions, fact_event_spot | Run |
+| `docs/evidence/pg_vs_parquet_counts.txt` — the 8 star tables, Postgres vs Parquet | Run |
+| `docs/evidence/streaming_perf.txt` + `t14_logs/` — throughput and micro-batch latency from the timestamped logs of two replays | Run |
+| `docs/evidence/t09_t10_live_checks.txt` — BR1 3/3, BR2 2/2, BR8's first High alert 81 s into the replay | Run |
+
+### How it was checked
+
+| Claim | How it was measured |
+|---|---|
+| Every screen answers under 2 s | `gate2b_curl_raw.txt`: the slowest call of all 160 is BR4's unfiltered endpoint, 1,067.7 ms; the screen's own BR4 calls max 57.5 ms |
+| All 8 BRs match an independent answer at 100% | `correctness_8br.py --replay-start "2019-11-17 15:00:00" --replay-end "2019-11-17 21:30:00" --watermark "2019-11-17 21:19:59"` after each of two replays; `ground_truth.py` OK for BR4, BR6, BR7, BR8 |
+| The replay sends what the 6 and 8 Nov runs sent | Replayer log: 78 files, 187,468 rows, stopped by SIGINT right after file 78, as the earlier runs record |
+| The benchmark measured the intended plans | `plans_20261110_010557.txt`: `plan check: OK` 21 times |
+| Streaming keeps up with the replay | `streaming_perf.txt` run 1: BR1 and BR5 483.0 events/s against an offered 480.7 rows/s; triggerExecution p95 800-1,252 ms |
+
+### What the AI got wrong, and was corrected on
+
+- The first draft of `gate2b_curl_raw.txt` said BR4's screen asks for "one cell's list". `BR4Page.tsx` loads the
+  heatmap with five calls, one per R score. The note was rewritten, and those five calls were measured instead of
+  described.
+- The first screenshots were full-page images up to 26,546 px tall, unreadable. The script now hides table rows
+  after the 15th in the image only; each footer still shows the full row count, and the evidence files say so.
+- The stream logs were first copied as `*.log`, which `.gitignore` drops; they are committed as `.txt`.
+- The `time_screens` heredoc briefly re-ran the read-only BR1 browser check by mistake; it changed nothing.
+
+### Judgement that stayed with the team
+
+- **Dat** decided the protocol (sheet rows T12 and T14) and that Claude runs it with Dat reviewing; the PR waits for him.
+- AI-made choices flagged for Dat: run 1 is quoted for streaming, because run 2 shared the CPU with the app and a
+  browser; BR4's unfiltered endpoint is reported next to what the screen really calls; the 15-row cut in the images.
+- Not measured: an overload test of the stream (the `proc/s` column is headroom per batch, not a ceiling).

@@ -1,0 +1,333 @@
+gate2b - response time of the 8 screens' endpoints, measured with curl (sprint task T14 step 2)
+
+date      2026-11-10 01:14-01:15 +07:00, main at 02b22f1 (all wave-1 PRs merged: #30 #40-#44)
+machine   Dat's machine (Dat-Xiaoxin: 20 logical cores, 15 GB RAM, Ubuntu 26.04.1 in WSL2, kernel 6.18.33.2)
+versions  Python 3.14.4, PySpark 4.1.3, OpenJDK 21.0.12.1, DuckDB 1.5.5, cassandra-driver 3.30.1; Cassandra 4.1.12 and Postgres 16.15 in Docker
+state     right after the T14 replay: streaming_gold.py --fresh, replayer --speed 60 --start '2019-11-17 08:00:00'
+          stopped after file 78 (187,468 rows, 15:00-21:30 Vietnam time), stream stopped 90 s later;
+          API and web started with ./run_demo.sh app (uvicorn --reload, vite). Nothing else running.
+method    per endpoint: 3 warm-up calls (not kept), then 20 timed calls, one after another.
+          meta_ms = QueryMeta.ms the API reports (its own query time); curl_total_ms = curl's time_total,
+          the full HTTP round trip including JSON encoding and transfer. p50/p95 by nearest rank.
+command   bash time_screens.sh > raw.tsv   (source at the end of this file)
+
+== Summary (20 timed calls each) ==
+BR  store       partitions     rows  meta p50  meta p95  curl p50  curl p95  curl max  under 2 s
+BR1 Cassandra            1      120       2.6       3.1       5.2       6.1       6.5  yes
+BR2 Parquet             30        3      17.9      21.4      19.8      23.2      46.1  yes
+BR3 Cassandra          380       20       5.9       7.2       7.9       9.5      15.6  yes
+BR4 Parquet              1  258,330     365.1     408.5     974.1    1052.0    1067.7  yes
+BR5 Cassandra            1    2,600       9.6      11.9      23.3      61.3     130.0  yes
+BR6 Cassandra            5      525      14.9      17.9      18.0      22.2      24.9  yes
+BR7 Parquet              2       10       9.6      11.7      22.8      28.3      29.8  yes
+BR8 Cassandra            1    5,815      19.8      32.2      47.4      63.9      74.7  yes
+
+Endpoints: BR1 /api/br1/realtime?event_date=2019-11-17&category_l1=all; BR2 /api/br2/funnel (1-30 Nov, all);
+BR3 /api/br3/trending (latest window); BR4 /api/br4/segments?snapshot_date=2019-11-30&segment=all;
+BR5 /api/br5/carts?event_date=2019-11-17; BR6 /api/br6/stockout (5 warehouses); BR7 /api/br7/affinity?product_id=1005115;
+BR8 /api/br8/alerts?event_date=2019-11-17&severity=all.
+BR4: the row above calls the endpoint with no score filter, which returns every user of the snapshot (258,330 rows),
+so its round trip is mostly JSON transfer. The screen does not call it that way: BR4Page.tsx loads the heatmap with
+five calls in parallel, one per R score (r_score=1..5, 6,201 rows each, 31,005 buyers in all, the footer of
+gate2b_br4.png). Those five calls, measured the same way (3 warm-up + 20 timed each, finished 01:30 +07:00):
+  r_score  rows   meta p50  meta p95  curl p50  curl p95  curl max
+  1       6,201      29.2      40.0      42.3      53.4      56.2
+  2       6,201      29.0      38.7      42.0      52.7      53.8
+  3       6,201      30.0      37.8      43.2      50.8      52.4
+  4       6,201      30.2      39.1      43.7      53.2      57.5
+  5       6,201      29.8      39.8      43.2      52.3      53.9
+  Raw rows for these 100 calls are at the end of the raw section, under 'BR4 by R score'.
+
+== Raw (tab-separated) ==
+br	run	meta_ms	curl_total_ms	warehouse	partitions	rows	http
+BR1	1	1.906	3.7	Cassandra	1	120	200
+BR1	2	2.657	5.3	Cassandra	1	120	200
+BR1	3	2.891	5.4	Cassandra	1	120	200
+BR1	4	2.438	6.1	Cassandra	1	120	200
+BR1	5	2.706	5.0	Cassandra	1	120	200
+BR1	6	2.488	4.7	Cassandra	1	120	200
+BR1	7	2.584	5.2	Cassandra	1	120	200
+BR1	8	2.404	5.0	Cassandra	1	120	200
+BR1	9	2.687	5.9	Cassandra	1	120	200
+BR1	10	2.914	5.4	Cassandra	1	120	200
+BR1	11	2.72	5.5	Cassandra	1	120	200
+BR1	12	3.715	6.5	Cassandra	1	120	200
+BR1	13	2.409	5.0	Cassandra	1	120	200
+BR1	14	2.88	5.7	Cassandra	1	120	200
+BR1	15	2.449	4.6	Cassandra	1	120	200
+BR1	16	2.791	5.2	Cassandra	1	120	200
+BR1	17	2.288	4.6	Cassandra	1	120	200
+BR1	18	2.466	5.0	Cassandra	1	120	200
+BR1	19	3.055	5.8	Cassandra	1	120	200
+BR1	20	2.346	4.8	Cassandra	1	120	200
+BR2	1	44.36	46.1	Parquet	30	3	200
+BR2	2	19.04	21.5	Parquet	30	3	200
+BR2	3	16.14	17.9	Parquet	30	3	200
+BR2	4	17.9	19.8	Parquet	30	3	200
+BR2	5	17.76	19.8	Parquet	30	3	200
+BR2	6	17.85	19.6	Parquet	30	3	200
+BR2	7	18.43	20.3	Parquet	30	3	200
+BR2	8	17.39	19.1	Parquet	30	3	200
+BR2	9	17.96	19.7	Parquet	30	3	200
+BR2	10	17.25	19.4	Parquet	30	3	200
+BR2	11	17.24	19.0	Parquet	30	3	200
+BR2	12	17.35	19.8	Parquet	30	3	200
+BR2	13	21.37	23.2	Parquet	30	3	200
+BR2	14	19.02	21.1	Parquet	30	3	200
+BR2	15	19.51	21.4	Parquet	30	3	200
+BR2	16	17.2	19.2	Parquet	30	3	200
+BR2	17	19.37	21.2	Parquet	30	3	200
+BR2	18	15.9	17.9	Parquet	30	3	200
+BR2	19	17.69	19.4	Parquet	30	3	200
+BR2	20	18.23	19.9	Parquet	30	3	200
+BR3	1	6.236	7.9	Cassandra	380	20	200
+BR3	2	6.985	8.8	Cassandra	380	20	200
+BR3	3	6.736	9.0	Cassandra	380	20	200
+BR3	4	5.619	7.5	Cassandra	380	20	200
+BR3	5	6.41	8.2	Cassandra	380	20	200
+BR3	6	5.572	7.3	Cassandra	380	20	200
+BR3	7	5.929	7.9	Cassandra	380	20	200
+BR3	8	6.524	8.3	Cassandra	380	20	200
+BR3	9	6.496	8.6	Cassandra	380	20	200
+BR3	10	6.073	8.2	Cassandra	380	20	200
+BR3	11	7.208	9.0	Cassandra	380	20	200
+BR3	12	5.668	7.4	Cassandra	380	20	200
+BR3	13	5.684	7.4	Cassandra	380	20	200
+BR3	14	5.66	7.4	Cassandra	380	20	200
+BR3	15	5.3	6.9	Cassandra	380	20	200
+BR3	16	5.274	7.0	Cassandra	380	20	200
+BR3	17	13.914	15.6	Cassandra	380	20	200
+BR3	18	5.217	7.0	Cassandra	380	20	200
+BR3	19	5.523	7.2	Cassandra	380	20	200
+BR3	20	7.126	9.5	Cassandra	380	20	200
+BR4	1	400.51	1022.8	Parquet	1	258330	200
+BR4	2	352.94	991.0	Parquet	1	258330	200
+BR4	3	391.9	1008.7	Parquet	1	258330	200
+BR4	4	342.72	946.4	Parquet	1	258330	200
+BR4	5	408.47	1005.3	Parquet	1	258330	200
+BR4	6	326.24	966.0	Parquet	1	258330	200
+BR4	7	358.67	971.1	Parquet	1	258330	200
+BR4	8	397.4	967.9	Parquet	1	258330	200
+BR4	9	335.3	984.3	Parquet	1	258330	200
+BR4	10	351.12	952.2	Parquet	1	258330	200
+BR4	11	374.45	1067.7	Parquet	1	258330	200
+BR4	12	349.99	974.2	Parquet	1	258330	200
+BR4	13	412.01	979.3	Parquet	1	258330	200
+BR4	14	324.45	937.1	Parquet	1	258330	200
+BR4	15	365.12	942.2	Parquet	1	258330	200
+BR4	16	382.13	959.2	Parquet	1	258330	200
+BR4	17	387.95	961.1	Parquet	1	258330	200
+BR4	18	360.69	979.4	Parquet	1	258330	200
+BR4	19	380.94	1052.0	Parquet	1	258330	200
+BR4	20	386.81	974.1	Parquet	1	258330	200
+BR5	1	9.987	23.5	Cassandra	1	2600	200
+BR5	2	114.699	130.0	Cassandra	1	2600	200
+BR5	3	9.581	22.5	Cassandra	1	2600	200
+BR5	4	9.321	22.6	Cassandra	1	2600	200
+BR5	5	9.362	21.6	Cassandra	1	2600	200
+BR5	6	9.101	22.2	Cassandra	1	2600	200
+BR5	7	9.19	22.0	Cassandra	1	2600	200
+BR5	8	10.359	23.7	Cassandra	1	2600	200
+BR5	9	9.894	23.9	Cassandra	1	2600	200
+BR5	10	11.924	25.1	Cassandra	1	2600	200
+BR5	11	9.791	23.4	Cassandra	1	2600	200
+BR5	12	9.391	22.3	Cassandra	1	2600	200
+BR5	13	9.647	23.3	Cassandra	1	2600	200
+BR5	14	10.454	23.6	Cassandra	1	2600	200
+BR5	15	9.511	22.8	Cassandra	1	2600	200
+BR5	16	9.967	23.9	Cassandra	1	2600	200
+BR5	17	10.947	61.3	Cassandra	1	2600	200
+BR5	18	11.169	25.3	Cassandra	1	2600	200
+BR5	19	9.322	22.1	Cassandra	1	2600	200
+BR5	20	9.147	23.2	Cassandra	1	2600	200
+BR6	1	17.86	21.8	Cassandra	5	525	200
+BR6	2	17.29	20.7	Cassandra	5	525	200
+BR6	3	15.78	19.2	Cassandra	5	525	200
+BR6	4	13.62	16.9	Cassandra	5	525	200
+BR6	5	17.64	21.1	Cassandra	5	525	200
+BR6	6	14.19	17.5	Cassandra	5	525	200
+BR6	7	14.93	17.9	Cassandra	5	525	200
+BR6	8	13.84	16.9	Cassandra	5	525	200
+BR6	9	15.03	18.4	Cassandra	5	525	200
+BR6	10	15.95	24.9	Cassandra	5	525	200
+BR6	11	13.17	16.3	Cassandra	5	525	200
+BR6	12	13.89	17.1	Cassandra	5	525	200
+BR6	13	12.85	15.8	Cassandra	5	525	200
+BR6	14	14.74	18.0	Cassandra	5	525	200
+BR6	15	15.53	19.0	Cassandra	5	525	200
+BR6	16	14.87	17.7	Cassandra	5	525	200
+BR6	17	15.7	19.3	Cassandra	5	525	200
+BR6	18	18.66	22.2	Cassandra	5	525	200
+BR6	19	15.21	18.7	Cassandra	5	525	200
+BR6	20	13.81	16.7	Cassandra	5	525	200
+BR7	1	11.4	26.0	Parquet	2	10	200
+BR7	2	9.2	23.1	Parquet	2	10	200
+BR7	3	9.6	23.0	Parquet	2	10	200
+BR7	4	9.7	23.6	Parquet	2	10	200
+BR7	5	8.8	21.2	Parquet	2	10	200
+BR7	6	8.8	21.7	Parquet	2	10	200
+BR7	7	8.9	21.2	Parquet	2	10	200
+BR7	8	9.8	22.8	Parquet	2	10	200
+BR7	9	10.5	24.9	Parquet	2	10	200
+BR7	10	11.7	29.8	Parquet	2	10	200
+BR7	11	9.9	22.7	Parquet	2	10	200
+BR7	12	9.6	23.9	Parquet	2	10	200
+BR7	13	9.5	21.9	Parquet	2	10	200
+BR7	14	10.4	22.8	Parquet	2	10	200
+BR7	15	9.2	20.5	Parquet	2	10	200
+BR7	16	9.0	22.3	Parquet	2	10	200
+BR7	17	8.9	21.3	Parquet	2	10	200
+BR7	18	11.8	28.3	Parquet	2	10	200
+BR7	19	9.4	22.2	Parquet	2	10	200
+BR7	20	10.8	27.5	Parquet	2	10	200
+BR8	1	23.27	63.9	Cassandra	1	5815	200
+BR8	2	18.13	44.4	Cassandra	1	5815	200
+BR8	3	19.6	45.5	Cassandra	1	5815	200
+BR8	4	19.72	46.4	Cassandra	1	5815	200
+BR8	5	21.53	53.1	Cassandra	1	5815	200
+BR8	6	32.18	60.2	Cassandra	1	5815	200
+BR8	7	19.8	45.5	Cassandra	1	5815	200
+BR8	8	22.35	52.7	Cassandra	1	5815	200
+BR8	9	20.94	59.0	Cassandra	1	5815	200
+BR8	10	46.89	74.7	Cassandra	1	5815	200
+BR8	11	19.71	44.4	Cassandra	1	5815	200
+BR8	12	19.44	47.4	Cassandra	1	5815	200
+BR8	13	20.55	49.4	Cassandra	1	5815	200
+BR8	14	20.6	58.9	Cassandra	1	5815	200
+BR8	15	18.87	43.6	Cassandra	1	5815	200
+BR8	16	18.32	42.0	Cassandra	1	5815	200
+BR8	17	18.33	43.6	Cassandra	1	5815	200
+BR8	18	19.01	49.3	Cassandra	1	5815	200
+BR8	19	21.55	62.4	Cassandra	1	5815	200
+BR8	20	19.9	46.8	Cassandra	1	5815	200
+
+== Raw: BR4 by R score (tab-separated) ==
+r_score	run	meta_ms	curl_total_ms	rows
+1	1	29.91	44.5	6201
+1	2	28.83	41.8	6201
+1	3	29.83	43.6	6201
+1	4	29.25	42.2	6201
+1	5	40.05	56.2	6201
+1	6	28.34	42.2	6201
+1	7	28.12	40.8	6201
+1	8	28.97	42.6	6201
+1	9	30.06	42.3	6201
+1	10	40.15	53.4	6201
+1	11	29.58	43.4	6201
+1	12	28.71	41.7	6201
+1	13	28.63	43.0	6201
+1	14	29.32	42.0	6201
+1	15	29.49	43.2	6201
+1	16	28.4	41.9	6201
+1	17	37.58	51.4	6201
+1	18	27.46	41.7	6201
+1	19	28.81	41.7	6201
+1	20	29.47	42.7	6201
+2	1	27.47	40.0	6201
+2	2	29.62	43.2	6201
+2	3	36.77	49.6	6201
+2	4	28.47	42.5	6201
+2	5	26.55	40.2	6201
+2	6	27.51	40.8	6201
+2	7	27.04	40.2	6201
+2	8	29.56	42.0	6201
+2	9	30.78	50.1	6201
+2	10	37.5	51.4	6201
+2	11	29.27	41.6	6201
+2	12	29.02	41.4	6201
+2	13	28.8	42.2	6201
+2	14	28.06	41.9	6201
+2	15	39.35	53.8	6201
+2	16	28.64	41.6	6201
+2	17	30.0	45.7	6201
+2	18	31.6	45.0	6201
+2	19	28.74	41.4	6201
+2	20	38.69	52.7	6201
+3	1	32.25	45.0	6201
+3	2	31.72	45.2	6201
+3	3	38.62	52.4	6201
+3	4	28.39	41.0	6201
+3	5	30.02	43.2	6201
+3	6	28.54	42.0	6201
+3	7	29.58	42.7	6201
+3	8	37.75	50.3	6201
+3	9	28.68	40.6	6201
+3	10	30.01	43.7	6201
+3	11	29.09	46.9	6201
+3	12	31.32	44.3	6201
+3	13	37.05	49.3	6201
+3	14	29.4	42.7	6201
+3	15	28.28	42.2	6201
+3	16	29.83	42.6	6201
+3	17	28.03	40.4	6201
+3	18	30.78	44.5	6201
+3	19	29.96	43.2	6201
+3	20	37.16	50.8	6201
+4	1	38.29	49.9	6201
+4	2	29.3	43.0	6201
+4	3	28.79	41.8	6201
+4	4	28.48	42.3	6201
+4	5	30.47	42.2	6201
+4	6	39.1	53.2	6201
+4	7	29.29	42.2	6201
+4	8	29.35	41.8	6201
+4	9	29.47	44.1	6201
+4	10	27.69	40.5	6201
+4	11	29.59	41.8	6201
+4	12	31.01	46.9	6201
+4	13	37.13	50.8	6201
+4	14	30.42	44.8	6201
+4	15	30.34	44.1	6201
+4	16	31.59	46.4	6201
+4	17	30.57	43.7	6201
+4	18	43.16	57.5	6201
+4	19	30.18	45.2	6201
+4	20	29.32	43.3	6201
+5	1	29.68	43.5	6201
+5	2	29.97	42.1	6201
+5	3	29.19	43.6	6201
+5	4	29.94	41.4	6201
+5	5	38.63	52.3	6201
+5	6	29.77	42.5	6201
+5	7	29.86	42.9	6201
+5	8	28.97	43.0	6201
+5	9	28.48	40.7	6201
+5	10	40.04	53.9	6201
+5	11	28.32	42.1	6201
+5	12	28.31	40.7	6201
+5	13	31.17	44.0	6201
+5	14	29.74	43.3	6201
+5	15	29.49	43.2	6201
+5	16	31.17	44.9	6201
+5	17	39.77	52.2	6201
+5	18	29.99	44.1	6201
+5	19	28.55	43.0	6201
+5	20	31.18	46.0	6201
+
+== Source: time_screens.sh ==
+#!/usr/bin/env bash
+# T14 step 2: time each of the 8 screens' endpoints. 3 warm-up calls (not kept), then 20 timed calls.
+# Per call: server-side meta.ms (QueryMeta) and client-side curl time_total (HTTP round trip incl. JSON).
+set -euo pipefail
+BASE=${BASE:-http://localhost:8000}
+declare -a EP=(
+  "BR1 /api/br1/realtime?event_date=2019-11-17&category_l1=all"
+  "BR2 /api/br2/funnel?start_date=2019-11-01&end_date=2019-11-30&category_l1=all"
+  "BR3 /api/br3/trending"
+  "BR4 /api/br4/segments?snapshot_date=2019-11-30&segment=all"
+  "BR5 /api/br5/carts?event_date=2019-11-17"
+  "BR6 /api/br6/stockout"
+  "BR7 /api/br7/affinity?product_id=1005115"
+  "BR8 /api/br8/alerts?event_date=2019-11-17&severity=all"
+)
+echo -e "br\trun\tmeta_ms\tcurl_total_ms\twarehouse\tpartitions\trows\thttp"
+for e in "${EP[@]}"; do
+  br=${e%% *}; path=${e#* }
+  for i in $(seq -3 20); do
+    out=$(curl -s -o body.json -w '%{http_code} %{time_total}' "$BASE$path")
+    code=${out% *}; tt=${out#* }
+    [[ $i -le 0 ]] && continue
+    read -r ms wh parts rows < <(python3 -c 'import json,sys; m=json.load(open(sys.argv[1]))["meta"]; print(m["ms"], m["warehouse"], m["partitions"], m["rows"])' body.json)
+    printf '%s\t%d\t%s\t%.1f\t%s\t%s\t%s\t%s\n' "$br" "$i" "$ms" "$(python3 -c "print(float('$tt')*1000)")" "$wh" "$parts" "$rows" "$code"
+  done
+done

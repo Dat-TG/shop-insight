@@ -1,0 +1,647 @@
+2026-11-10 01:06:34.549 --fresh: removed 4 checkpoint directories and 78 landed files, emptied gmv_by_minute, trending_products, abandoned_carts, order_velocity_alerts
+2026-11-10 01:06:34.931 WARNING: Using incubator modules: jdk.incubator.vector
+2026-11-10 01:06:35.826 Using Spark's default log4j profile: org/apache/spark/log4j2-defaults.properties
+2026-11-10 01:06:35.840 26/11/09 18:06:35 WARN Utils: Your hostname, Dat-Xiaoxin, resolves to a loopback address: 127.0.1.1; using 10.255.255.254 instead (on interface lo)
+2026-11-10 01:06:35.843 26/11/09 18:06:35 WARN Utils: Set SPARK_LOCAL_IP if you need to bind to another address
+2026-11-10 01:06:36.178 Using Spark's default log4j profile: org/apache/spark/log4j2-defaults.properties
+2026-11-10 01:06:36.178 Setting default log level to "WARN".
+2026-11-10 01:06:36.179 To adjust logging level use sc.setLogLevel(newLevel). For SparkR, use setLogLevel(newLevel).
+2026-11-10 01:06:36.420 26/11/09 18:06:36 WARN NativeCodeLoader: Unable to load native-hadoop library for your platform... using builtin-java classes where applicable
+2026-11-10 01:06:39.918 26/11/09 18:06:39 WARN ResolveWriteToStream: spark.sql.adaptive.enabled is not supported in streaming DataFrames/Datasets and will be disabled.
+2026-11-10 01:06:40.131 26/11/09 18:06:40 WARN MicroBatchExecution: Disabling AQE since AQE is not supported in stateful workloads.
+2026-11-10 01:06:40.183 26/11/09 18:06:40 WARN ResolveWriteToStream: spark.sql.adaptive.enabled is not supported in streaming DataFrames/Datasets and will be disabled.
+2026-11-10 01:06:40.272 26/11/09 18:06:40 WARN MicroBatchExecution: Disabling AQE since AQE is not supported in stateful workloads.
+2026-11-10 01:06:40.351 26/11/09 18:06:40 WARN ResolveWriteToStream: spark.sql.adaptive.enabled is not supported in streaming DataFrames/Datasets and will be disabled.
+2026-11-10 01:06:40.434 26/11/09 18:06:40 WARN MicroBatchExecution: Disabling AQE since AQE is not supported in stateful workloads.
+2026-11-10 01:06:40.461 26/11/09 18:06:40 WARN ResolveWriteToStream: spark.sql.adaptive.enabled is not supported in streaming DataFrames/Datasets and will be disabled.
+2026-11-10 01:06:40.541 26/11/09 18:06:40 WARN MicroBatchExecution: Disabling AQE since AQE is not supported in stateful workloads.
+2026-11-10 01:06:41.030 READY: 4 of 4 jobs running (br1_gmv_by_minute, br3_trending_products, br5_abandoned_carts, br8_order_velocity_alerts), watching /home/dat/shop-insight/data/stream_landing
+2026-11-10 01:06:41.031 READY: now start python ingestion/replayer.py --speed 60
+2026-11-10 01:07:02.954 [br5_abandoned_carts] batch 0: no session closed yet
+2026-11-10 01:07:03.005 [br8_order_velocity_alerts] batch 0: upserted 78 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 1412 ms
+2026-11-10 01:07:03.050 [br1_gmv_by_minute] batch 0: upserted 56 rows into gmv_by_minute (13 partitions) in 1457 ms
+2026-11-10 01:07:03.475 [br3_trending_products] batch 0: no window closed yet
+2026-11-10 01:07:04.180 [br1_gmv_by_minute] batch 0: 1,791 events after cleaning, watermark none yet, 3,201 ms
+2026-11-10 01:07:04.182 [br3_trending_products] batch 0: 1,707 events after cleaning, watermark none yet, 3,524 ms
+2026-11-10 01:07:04.184 [br5_abandoned_carts] batch 0: 1,791 events after cleaning, watermark none yet, 3,199 ms
+2026-11-10 01:07:04.186 [br8_order_velocity_alerts] batch 0: 84 events after cleaning, watermark none yet, 3,200 ms
+2026-11-10 01:07:05.886 [br5_abandoned_carts] batch 1: no session closed yet
+2026-11-10 01:07:05.932 [br8_order_velocity_alerts] batch 1: upserted 61 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 572 ms
+2026-11-10 01:07:05.950 [br1_gmv_by_minute] batch 1: upserted 58 rows into gmv_by_minute (12 partitions) in 607 ms
+2026-11-10 01:07:06.196 [br1_gmv_by_minute] batch 1: 2,007 events after cleaning, watermark 2019-11-17 14:54:59, 1,008 ms
+2026-11-10 01:07:06.200 [br5_abandoned_carts] batch 1: 2,007 events after cleaning, watermark 2019-11-17 14:54:59, 957 ms
+2026-11-10 01:07:06.202 [br8_order_velocity_alerts] batch 1: 63 events after cleaning, watermark 2019-11-17 14:54:59, 999 ms
+2026-11-10 01:07:06.830 [br3_trending_products] batch 1: no window closed yet
+2026-11-10 01:07:07.206 [br3_trending_products] batch 1: 1,944 events after cleaning, watermark 2019-11-17 14:54:59, 1,889 ms
+2026-11-10 01:07:10.721 [br5_abandoned_carts] batch 2: no session closed yet
+2026-11-10 01:07:10.790 [br8_order_velocity_alerts] batch 2: upserted 66 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 510 ms
+2026-11-10 01:07:10.807 [br1_gmv_by_minute] batch 2: upserted 55 rows into gmv_by_minute (13 partitions) in 525 ms
+2026-11-10 01:07:11.196 [br3_trending_products] batch 2: no window closed yet
+2026-11-10 01:07:11.233 [br1_gmv_by_minute] batch 2: 1,871 events after cleaning, watermark 2019-11-17 14:59:59, 877 ms
+2026-11-10 01:07:11.236 [br5_abandoned_carts] batch 2: 1,871 events after cleaning, watermark 2019-11-17 14:59:59, 789 ms
+2026-11-10 01:07:11.238 [br8_order_velocity_alerts] batch 2: 72 events after cleaning, watermark 2019-11-17 14:59:49, 865 ms
+2026-11-10 01:07:12.241 [br3_trending_products] batch 2: 1,799 events after cleaning, watermark 2019-11-17 14:59:59, 1,252 ms
+2026-11-10 01:07:15.649 [br5_abandoned_carts] batch 3: no session closed yet
+2026-11-10 01:07:15.664 [br8_order_velocity_alerts] batch 3: upserted 59 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 402 ms
+2026-11-10 01:07:15.696 [br1_gmv_by_minute] batch 3: upserted 58 rows into gmv_by_minute (12 partitions) in 432 ms
+2026-11-10 01:07:16.093 [br3_trending_products] batch 3: replaced 4 windows in trending_products (80 rows, windows from 14:46 to 14:49) in 789 ms
+2026-11-10 01:07:16.261 [br1_gmv_by_minute] batch 3: 1,812 events after cleaning, watermark 2019-11-17 15:04:59, 764 ms
+2026-11-10 01:07:16.262 [br3_trending_products] batch 3: 1,748 events after cleaning, watermark 2019-11-17 15:04:59, 1,142 ms
+2026-11-10 01:07:16.264 [br5_abandoned_carts] batch 3: 1,812 events after cleaning, watermark 2019-11-17 15:04:59, 721 ms
+2026-11-10 01:07:16.265 [br8_order_velocity_alerts] batch 3: 64 events after cleaning, watermark 2019-11-17 15:04:56, 733 ms
+2026-11-10 01:07:20.734 [br5_abandoned_carts] batch 4: no session closed yet
+2026-11-10 01:07:20.757 [br8_order_velocity_alerts] batch 4: upserted 63 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 452 ms
+2026-11-10 01:07:20.790 [br1_gmv_by_minute] batch 4: upserted 59 rows into gmv_by_minute (12 partitions) in 475 ms
+2026-11-10 01:07:21.178 [br3_trending_products] batch 4: replaced 5 windows in trending_products (100 rows, windows from 14:50 to 14:54) in 815 ms
+2026-11-10 01:07:21.287 [br1_gmv_by_minute] batch 4: 2,087 events after cleaning, watermark 2019-11-17 15:09:59, 845 ms
+2026-11-10 01:07:21.288 [br3_trending_products] batch 4: 2,018 events after cleaning, watermark 2019-11-17 15:09:59, 1,228 ms
+2026-11-10 01:07:21.290 [br5_abandoned_carts] batch 4: 2,087 events after cleaning, watermark 2019-11-17 15:09:59, 800 ms
+2026-11-10 01:07:21.291 [br8_order_velocity_alerts] batch 4: 69 events after cleaning, watermark 2019-11-17 15:09:41, 820 ms
+2026-11-10 01:07:25.588 [br5_abandoned_carts] batch 5: no session closed yet
+2026-11-10 01:07:25.678 [br8_order_velocity_alerts] batch 5: upserted 75 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 451 ms
+2026-11-10 01:07:25.706 [br1_gmv_by_minute] batch 5: upserted 60 rows into gmv_by_minute (12 partitions) in 480 ms
+2026-11-10 01:07:26.032 [br3_trending_products] batch 5: replaced 5 windows in trending_products (100 rows, windows from 14:55 to 14:59) in 762 ms
+2026-11-10 01:07:26.315 [br1_gmv_by_minute] batch 5: 2,046 events after cleaning, watermark 2019-11-17 15:14:59, 772 ms
+2026-11-10 01:07:26.316 [br3_trending_products] batch 5: 1,963 events after cleaning, watermark 2019-11-17 15:14:59, 1,078 ms
+2026-11-10 01:07:26.317 [br5_abandoned_carts] batch 5: 2,046 events after cleaning, watermark 2019-11-17 15:14:59, 656 ms
+2026-11-10 01:07:26.319 [br8_order_velocity_alerts] batch 5: 83 events after cleaning, watermark 2019-11-17 15:14:50, 739 ms
+2026-11-10 01:07:30.602 [br5_abandoned_carts] batch 6: no session closed yet
+2026-11-10 01:07:30.641 [br8_order_velocity_alerts] batch 6: upserted 69 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 369 ms
+2026-11-10 01:07:30.675 [br1_gmv_by_minute] batch 6: upserted 58 rows into gmv_by_minute (12 partitions) in 400 ms
+2026-11-10 01:07:31.066 [br3_trending_products] batch 6: replaced 5 windows in trending_products (100 rows, windows from 15:00 to 15:04) in 774 ms
+2026-11-10 01:07:31.342 [br1_gmv_by_minute] batch 6: 2,028 events after cleaning, watermark 2019-11-17 15:19:59, 750 ms
+2026-11-10 01:07:31.343 [br3_trending_products] batch 6: 1,958 events after cleaning, watermark 2019-11-17 15:19:59, 1,123 ms
+2026-11-10 01:07:31.345 [br5_abandoned_carts] batch 6: 2,028 events after cleaning, watermark 2019-11-17 15:19:59, 667 ms
+2026-11-10 01:07:31.346 [br8_order_velocity_alerts] batch 6: 70 events after cleaning, watermark 2019-11-17 15:19:58, 715 ms
+2026-11-10 01:07:35.589 [br5_abandoned_carts] batch 7: no session closed yet
+2026-11-10 01:07:35.614 [br8_order_velocity_alerts] batch 7: upserted 66 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 372 ms
+2026-11-10 01:07:35.623 [br1_gmv_by_minute] batch 7: upserted 56 rows into gmv_by_minute (12 partitions) in 381 ms
+2026-11-10 01:07:35.956 [br3_trending_products] batch 7: replaced 5 windows in trending_products (100 rows, windows from 15:05 to 15:09) in 666 ms
+2026-11-10 01:07:36.370 [br1_gmv_by_minute] batch 7: 1,991 events after cleaning, watermark 2019-11-17 15:24:59, 685 ms
+2026-11-10 01:07:36.371 [br3_trending_products] batch 7: 1,922 events after cleaning, watermark 2019-11-17 15:24:59, 1,002 ms
+2026-11-10 01:07:36.372 [br5_abandoned_carts] batch 7: 1,991 events after cleaning, watermark 2019-11-17 15:24:59, 650 ms
+2026-11-10 01:07:36.373 [br8_order_velocity_alerts] batch 7: 69 events after cleaning, watermark 2019-11-17 15:24:56, 675 ms
+2026-11-10 01:07:40.572 [br5_abandoned_carts] batch 8: no session closed yet
+2026-11-10 01:07:40.640 [br8_order_velocity_alerts] batch 8: upserted 76 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 427 ms
+2026-11-10 01:07:40.669 [br1_gmv_by_minute] batch 8: upserted 57 rows into gmv_by_minute (12 partitions) in 453 ms
+2026-11-10 01:07:40.977 [br3_trending_products] batch 8: replaced 5 windows in trending_products (100 rows, windows from 15:10 to 15:14) in 733 ms
+2026-11-10 01:07:41.420 [br1_gmv_by_minute] batch 8: 1,943 events after cleaning, watermark 2019-11-17 15:29:59, 734 ms
+2026-11-10 01:07:41.422 [br3_trending_products] batch 8: 1,865 events after cleaning, watermark 2019-11-17 15:29:59, 1,025 ms
+2026-11-10 01:07:41.423 [br5_abandoned_carts] batch 8: 1,943 events after cleaning, watermark 2019-11-17 15:29:59, 638 ms
+2026-11-10 01:07:41.424 [br8_order_velocity_alerts] batch 8: 78 events after cleaning, watermark 2019-11-17 15:29:48, 699 ms
+2026-11-10 01:07:45.613 [br8_order_velocity_alerts] batch 9: upserted 76 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 372 ms
+2026-11-10 01:07:45.613 [br5_abandoned_carts] batch 9: upserted 18 carts into abandoned_carts (1 partitions) in 390 ms
+2026-11-10 01:07:45.643 [br1_gmv_by_minute] batch 9: upserted 59 rows into gmv_by_minute (12 partitions) in 387 ms
+2026-11-10 01:07:45.951 [br3_trending_products] batch 9: replaced 5 windows in trending_products (100 rows, windows from 15:15 to 15:19) in 650 ms
+2026-11-10 01:07:46.453 [br1_gmv_by_minute] batch 9: 2,051 events after cleaning, watermark 2019-11-17 15:34:59, 702 ms
+2026-11-10 01:07:46.454 [br3_trending_products] batch 9: 1,971 events after cleaning, watermark 2019-11-17 15:34:59, 1,015 ms
+2026-11-10 01:07:46.455 [br5_abandoned_carts] batch 9: 2,051 events after cleaning, watermark 2019-11-17 15:34:59, 674 ms
+2026-11-10 01:07:46.456 [br8_order_velocity_alerts] batch 9: 80 events after cleaning, watermark 2019-11-17 15:34:59, 678 ms
+2026-11-10 01:07:50.894 [br8_order_velocity_alerts] batch 10: upserted 61 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 516 ms
+2026-11-10 01:07:50.899 [br5_abandoned_carts] batch 10: upserted 35 carts into abandoned_carts (1 partitions) in 549 ms
+2026-11-10 01:07:50.936 [br1_gmv_by_minute] batch 10: upserted 59 rows into gmv_by_minute (12 partitions) in 559 ms
+2026-11-10 01:07:51.280 [br3_trending_products] batch 10: replaced 5 windows in trending_products (100 rows, windows from 15:20 to 15:24) in 852 ms
+2026-11-10 01:07:51.477 [br1_gmv_by_minute] batch 10: 1,908 events after cleaning, watermark 2019-11-17 15:39:59, 1,025 ms
+2026-11-10 01:07:51.478 [br3_trending_products] batch 10: 1,843 events after cleaning, watermark 2019-11-17 15:39:59, 1,348 ms
+2026-11-10 01:07:51.480 [br5_abandoned_carts] batch 10: 1,908 events after cleaning, watermark 2019-11-17 15:39:59, 992 ms
+2026-11-10 01:07:51.481 [br8_order_velocity_alerts] batch 10: 65 events after cleaning, watermark 2019-11-17 15:39:55, 983 ms
+2026-11-10 01:07:55.658 [br5_abandoned_carts] batch 11: upserted 30 carts into abandoned_carts (1 partitions) in 413 ms
+2026-11-10 01:07:55.669 [br1_gmv_by_minute] batch 11: upserted 53 rows into gmv_by_minute (12 partitions) in 386 ms
+2026-11-10 01:07:55.714 [br8_order_velocity_alerts] batch 11: upserted 63 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 436 ms
+2026-11-10 01:07:56.083 [br3_trending_products] batch 11: replaced 5 windows in trending_products (100 rows, windows from 15:25 to 15:29) in 767 ms
+2026-11-10 01:07:56.522 [br1_gmv_by_minute] batch 11: 1,518 events after cleaning, watermark 2019-11-17 15:44:59, 735 ms
+2026-11-10 01:07:56.523 [br3_trending_products] batch 11: 1,447 events after cleaning, watermark 2019-11-17 15:44:59, 1,153 ms
+2026-11-10 01:07:56.524 [br5_abandoned_carts] batch 11: 1,518 events after cleaning, watermark 2019-11-17 15:44:59, 720 ms
+2026-11-10 01:07:56.525 [br8_order_velocity_alerts] batch 11: 71 events after cleaning, watermark 2019-11-17 15:44:49, 779 ms
+2026-11-10 01:08:00.543 [br5_abandoned_carts] batch 12: upserted 37 carts into abandoned_carts (1 partitions) in 356 ms
+2026-11-10 01:08:00.544 [br1_gmv_by_minute] batch 12: upserted 52 rows into gmv_by_minute (12 partitions) in 347 ms
+2026-11-10 01:08:00.546 [br8_order_velocity_alerts] batch 12: upserted 51 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 334 ms
+2026-11-10 01:08:00.885 [br3_trending_products] batch 12: replaced 5 windows in trending_products (100 rows, windows from 15:30 to 15:34) in 646 ms
+2026-11-10 01:08:01.549 [br1_gmv_by_minute] batch 12: 1,287 events after cleaning, watermark 2019-11-17 15:49:59, 636 ms
+2026-11-10 01:08:01.550 [br3_trending_products] batch 12: 1,232 events after cleaning, watermark 2019-11-17 15:49:59, 939 ms
+2026-11-10 01:08:01.552 [br5_abandoned_carts] batch 12: 1,287 events after cleaning, watermark 2019-11-17 15:49:59, 636 ms
+2026-11-10 01:08:01.552 [br8_order_velocity_alerts] batch 12: 55 events after cleaning, watermark 2019-11-17 15:49:55, 638 ms
+2026-11-10 01:08:05.547 [br8_order_velocity_alerts] batch 13: upserted 71 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 340 ms
+2026-11-10 01:08:05.551 [br5_abandoned_carts] batch 13: upserted 40 carts into abandoned_carts (1 partitions) in 365 ms
+2026-11-10 01:08:05.584 [br1_gmv_by_minute] batch 13: upserted 60 rows into gmv_by_minute (13 partitions) in 382 ms
+2026-11-10 01:08:05.912 [br3_trending_products] batch 13: replaced 5 windows in trending_products (100 rows, windows from 15:35 to 15:39) in 670 ms
+2026-11-10 01:08:06.593 [br1_gmv_by_minute] batch 13: 1,807 events after cleaning, watermark 2019-11-17 15:54:59, 689 ms
+2026-11-10 01:08:06.595 [br3_trending_products] batch 13: 1,728 events after cleaning, watermark 2019-11-17 15:54:59, 961 ms
+2026-11-10 01:08:06.596 [br5_abandoned_carts] batch 13: 1,807 events after cleaning, watermark 2019-11-17 15:54:59, 668 ms
+2026-11-10 01:08:06.597 [br8_order_velocity_alerts] batch 13: 79 events after cleaning, watermark 2019-11-17 15:54:57, 662 ms
+2026-11-10 01:08:10.577 [br5_abandoned_carts] batch 14: upserted 35 carts into abandoned_carts (1 partitions) in 388 ms
+2026-11-10 01:08:10.639 [br8_order_velocity_alerts] batch 14: upserted 64 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 430 ms
+2026-11-10 01:08:10.673 [br1_gmv_by_minute] batch 14: upserted 56 rows into gmv_by_minute (12 partitions) in 460 ms
+2026-11-10 01:08:10.847 [br3_trending_products] batch 14: replaced 5 windows in trending_products (100 rows, windows from 15:40 to 15:44) in 609 ms
+2026-11-10 01:08:11.617 [br1_gmv_by_minute] batch 14: 1,700 events after cleaning, watermark 2019-11-17 15:59:59, 756 ms
+2026-11-10 01:08:11.619 [br3_trending_products] batch 14: 1,631 events after cleaning, watermark 2019-11-17 15:59:59, 897 ms
+2026-11-10 01:08:11.620 [br5_abandoned_carts] batch 14: 1,700 events after cleaning, watermark 2019-11-17 15:59:59, 658 ms
+2026-11-10 01:08:11.620 [br8_order_velocity_alerts] batch 14: 69 events after cleaning, watermark 2019-11-17 15:59:58, 720 ms
+2026-11-10 01:08:15.575 [br8_order_velocity_alerts] batch 15: upserted 60 rows into order_velocity_alerts (1 partitions, 1 high-severity) in 367 ms
+2026-11-10 01:08:15.576 [br5_abandoned_carts] batch 15: upserted 32 carts into abandoned_carts (1 partitions) in 382 ms
+2026-11-10 01:08:15.614 [br1_gmv_by_minute] batch 15: upserted 55 rows into gmv_by_minute (12 partitions) in 390 ms
+2026-11-10 01:08:15.929 [br3_trending_products] batch 15: replaced 5 windows in trending_products (100 rows, windows from 15:45 to 15:49) in 688 ms
+2026-11-10 01:08:16.643 [br1_gmv_by_minute] batch 15: 1,872 events after cleaning, watermark 2019-11-17 16:04:59, 699 ms
+2026-11-10 01:08:16.644 [br3_trending_products] batch 15: 1,806 events after cleaning, watermark 2019-11-17 16:04:59, 979 ms
+2026-11-10 01:08:16.646 [br5_abandoned_carts] batch 15: 1,872 events after cleaning, watermark 2019-11-17 16:04:59, 678 ms
+2026-11-10 01:08:16.647 [br8_order_velocity_alerts] batch 15: 66 events after cleaning, watermark 2019-11-17 16:04:58, 687 ms
+2026-11-10 01:08:20.563 [br5_abandoned_carts] batch 16: upserted 27 carts into abandoned_carts (1 partitions) in 348 ms
+2026-11-10 01:08:20.583 [br8_order_velocity_alerts] batch 16: upserted 68 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 334 ms
+2026-11-10 01:08:20.589 [br1_gmv_by_minute] batch 16: upserted 55 rows into gmv_by_minute (12 partitions) in 352 ms
+2026-11-10 01:08:20.660 [br1_gmv_by_minute] batch 16: 1,873 events after cleaning, watermark 2019-11-17 16:09:59, 653 ms
+2026-11-10 01:08:20.663 [br5_abandoned_carts] batch 16: 1,873 events after cleaning, watermark 2019-11-17 16:09:59, 625 ms
+2026-11-10 01:08:20.665 [br8_order_velocity_alerts] batch 16: 72 events after cleaning, watermark 2019-11-17 16:09:52, 644 ms
+2026-11-10 01:08:20.827 [br3_trending_products] batch 16: replaced 5 windows in trending_products (100 rows, windows from 15:50 to 15:54) in 562 ms
+2026-11-10 01:08:21.668 [br3_trending_products] batch 16: 1,801 events after cleaning, watermark 2019-11-17 16:09:59, 876 ms
+2026-11-10 01:08:25.540 [br8_order_velocity_alerts] batch 17: upserted 55 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 352 ms
+2026-11-10 01:08:25.542 [br5_abandoned_carts] batch 17: upserted 36 carts into abandoned_carts (1 partitions) in 377 ms
+2026-11-10 01:08:25.571 [br1_gmv_by_minute] batch 17: upserted 56 rows into gmv_by_minute (12 partitions) in 385 ms
+2026-11-10 01:08:25.685 [br1_gmv_by_minute] batch 17: 1,945 events after cleaning, watermark 2019-11-17 16:14:59, 669 ms
+2026-11-10 01:08:25.694 [br5_abandoned_carts] batch 17: 1,945 events after cleaning, watermark 2019-11-17 16:14:59, 641 ms
+2026-11-10 01:08:25.694 [br8_order_velocity_alerts] batch 17: 57 events after cleaning, watermark 2019-11-17 16:14:47, 634 ms
+2026-11-10 01:08:25.892 [br3_trending_products] batch 17: replaced 5 windows in trending_products (100 rows, windows from 15:55 to 15:59) in 673 ms
+2026-11-10 01:08:26.693 [br3_trending_products] batch 17: 1,888 events after cleaning, watermark 2019-11-17 16:14:59, 942 ms
+2026-11-10 01:08:30.549 [br5_abandoned_carts] batch 18: upserted 30 carts into abandoned_carts (1 partitions) in 367 ms
+2026-11-10 01:08:30.605 [br8_order_velocity_alerts] batch 18: upserted 67 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 403 ms
+2026-11-10 01:08:30.619 [br1_gmv_by_minute] batch 18: upserted 59 rows into gmv_by_minute (14 partitions) in 425 ms
+2026-11-10 01:08:30.709 [br1_gmv_by_minute] batch 18: 1,748 events after cleaning, watermark 2019-11-17 16:19:59, 691 ms
+2026-11-10 01:08:30.713 [br5_abandoned_carts] batch 18: 1,748 events after cleaning, watermark 2019-11-17 16:19:59, 616 ms
+2026-11-10 01:08:30.715 [br8_order_velocity_alerts] batch 18: 73 events after cleaning, watermark 2019-11-17 16:19:57, 675 ms
+2026-11-10 01:08:30.796 [br3_trending_products] batch 18: replaced 5 windows in trending_products (100 rows, windows from 16:00 to 16:04) in 573 ms
+2026-11-10 01:08:31.718 [br3_trending_products] batch 18: 1,675 events after cleaning, watermark 2019-11-17 16:19:59, 848 ms
+2026-11-10 01:08:35.570 [br8_order_velocity_alerts] batch 19: upserted 54 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 369 ms
+2026-11-10 01:08:35.574 [br5_abandoned_carts] batch 19: upserted 36 carts into abandoned_carts (1 partitions) in 390 ms
+2026-11-10 01:08:35.611 [br1_gmv_by_minute] batch 19: upserted 59 rows into gmv_by_minute (14 partitions) in 404 ms
+2026-11-10 01:08:35.733 [br1_gmv_by_minute] batch 19: 1,721 events after cleaning, watermark 2019-11-17 16:24:59, 695 ms
+2026-11-10 01:08:35.737 [br5_abandoned_carts] batch 19: 1,721 events after cleaning, watermark 2019-11-17 16:24:59, 669 ms
+2026-11-10 01:08:35.740 [br8_order_velocity_alerts] batch 19: 58 events after cleaning, watermark 2019-11-17 16:24:59, 669 ms
+2026-11-10 01:08:35.883 [br3_trending_products] batch 19: replaced 5 windows in trending_products (100 rows, windows from 16:05 to 16:09) in 654 ms
+2026-11-10 01:08:36.743 [br3_trending_products] batch 19: 1,663 events after cleaning, watermark 2019-11-17 16:24:59, 930 ms
+2026-11-10 01:08:40.507 [br5_abandoned_carts] batch 20: upserted 22 carts into abandoned_carts (1 partitions) in 327 ms
+2026-11-10 01:08:40.572 [br8_order_velocity_alerts] batch 20: upserted 74 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 374 ms
+2026-11-10 01:08:40.607 [br1_gmv_by_minute] batch 20: upserted 57 rows into gmv_by_minute (12 partitions) in 404 ms
+2026-11-10 01:08:40.758 [br1_gmv_by_minute] batch 20: 1,928 events after cleaning, watermark 2019-11-17 16:29:59, 675 ms
+2026-11-10 01:08:40.762 [br5_abandoned_carts] batch 20: 1,928 events after cleaning, watermark 2019-11-17 16:29:59, 572 ms
+2026-11-10 01:08:40.763 [br8_order_velocity_alerts] batch 20: 76 events after cleaning, watermark 2019-11-17 16:29:48, 646 ms
+2026-11-10 01:08:40.815 [br3_trending_products] batch 20: replaced 5 windows in trending_products (100 rows, windows from 16:10 to 16:14) in 595 ms
+2026-11-10 01:08:41.766 [br3_trending_products] batch 20: 1,852 events after cleaning, watermark 2019-11-17 16:29:59, 865 ms
+2026-11-10 01:08:45.589 [br8_order_velocity_alerts] batch 21: upserted 73 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 385 ms
+2026-11-10 01:08:45.592 [br5_abandoned_carts] batch 21: upserted 33 carts into abandoned_carts (1 partitions) in 412 ms
+2026-11-10 01:08:45.625 [br1_gmv_by_minute] batch 21: upserted 57 rows into gmv_by_minute (12 partitions) in 423 ms
+2026-11-10 01:08:45.780 [br1_gmv_by_minute] batch 21: 2,069 events after cleaning, watermark 2019-11-17 16:34:59, 730 ms
+2026-11-10 01:08:45.785 [br5_abandoned_carts] batch 21: 2,069 events after cleaning, watermark 2019-11-17 16:34:59, 692 ms
+2026-11-10 01:08:45.787 [br8_order_velocity_alerts] batch 21: 75 events after cleaning, watermark 2019-11-17 16:34:58, 692 ms
+2026-11-10 01:08:45.948 [br3_trending_products] batch 21: replaced 5 windows in trending_products (100 rows, windows from 16:15 to 16:19) in 717 ms
+2026-11-10 01:08:46.789 [br3_trending_products] batch 21: 1,994 events after cleaning, watermark 2019-11-17 16:34:59, 995 ms
+2026-11-10 01:08:50.551 [br8_order_velocity_alerts] batch 22: upserted 48 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 348 ms
+2026-11-10 01:08:50.553 [br5_abandoned_carts] batch 22: upserted 38 carts into abandoned_carts (1 partitions) in 371 ms
+2026-11-10 01:08:50.580 [br1_gmv_by_minute] batch 22: upserted 58 rows into gmv_by_minute (12 partitions) in 377 ms
+2026-11-10 01:08:50.804 [br1_gmv_by_minute] batch 22: 1,756 events after cleaning, watermark 2019-11-17 16:39:59, 654 ms
+2026-11-10 01:08:50.808 [br5_abandoned_carts] batch 22: 1,756 events after cleaning, watermark 2019-11-17 16:39:59, 629 ms
+2026-11-10 01:08:50.809 [br8_order_velocity_alerts] batch 22: 52 events after cleaning, watermark 2019-11-17 16:39:51, 622 ms
+2026-11-10 01:08:50.898 [br3_trending_products] batch 22: replaced 5 windows in trending_products (100 rows, windows from 16:20 to 16:24) in 666 ms
+2026-11-10 01:08:51.813 [br3_trending_products] batch 22: 1,704 events after cleaning, watermark 2019-11-17 16:39:59, 948 ms
+2026-11-10 01:08:55.486 [br5_abandoned_carts] batch 23: upserted 20 carts into abandoned_carts (1 partitions) in 334 ms
+2026-11-10 01:08:55.487 [br8_order_velocity_alerts] batch 23: upserted 73 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 320 ms
+2026-11-10 01:08:55.521 [br1_gmv_by_minute] batch 23: upserted 57 rows into gmv_by_minute (13 partitions) in 346 ms
+2026-11-10 01:08:55.777 [br3_trending_products] batch 23: replaced 5 windows in trending_products (100 rows, windows from 16:25 to 16:29) in 577 ms
+2026-11-10 01:08:55.829 [br1_gmv_by_minute] batch 23: 1,897 events after cleaning, watermark 2019-11-17 16:44:59, 592 ms
+2026-11-10 01:08:55.832 [br5_abandoned_carts] batch 23: 1,897 events after cleaning, watermark 2019-11-17 16:44:59, 571 ms
+2026-11-10 01:08:55.833 [br8_order_velocity_alerts] batch 23: 80 events after cleaning, watermark 2019-11-17 16:44:47, 571 ms
+2026-11-10 01:08:56.836 [br3_trending_products] batch 23: 1,817 events after cleaning, watermark 2019-11-17 16:44:59, 830 ms
+2026-11-10 01:09:00.510 [br8_order_velocity_alerts] batch 24: upserted 51 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 324 ms
+2026-11-10 01:09:00.523 [br5_abandoned_carts] batch 24: upserted 37 carts into abandoned_carts (1 partitions) in 352 ms
+2026-11-10 01:09:00.527 [br1_gmv_by_minute] batch 24: upserted 56 rows into gmv_by_minute (12 partitions) in 341 ms
+2026-11-10 01:09:00.666 [br3_trending_products] batch 24: replaced 5 windows in trending_products (100 rows, windows from 16:30 to 16:34) in 483 ms
+2026-11-10 01:09:00.851 [br1_gmv_by_minute] batch 24: 1,533 events after cleaning, watermark 2019-11-17 16:49:59, 589 ms
+2026-11-10 01:09:00.853 [br3_trending_products] batch 24: 1,475 events after cleaning, watermark 2019-11-17 16:49:59, 710 ms
+2026-11-10 01:09:00.860 [br5_abandoned_carts] batch 24: 1,533 events after cleaning, watermark 2019-11-17 16:49:59, 592 ms
+2026-11-10 01:09:00.860 [br8_order_velocity_alerts] batch 24: 58 events after cleaning, watermark 2019-11-17 16:49:58, 578 ms
+2026-11-10 01:09:05.438 [br8_order_velocity_alerts] batch 25: upserted 71 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 283 ms[br5_abandoned_carts] batch 25: upserted 28 carts into abandoned_carts (1 partitions) in 286 ms
+2026-11-10 01:09:05.438 
+2026-11-10 01:09:05.478 [br1_gmv_by_minute] batch 25: upserted 58 rows into gmv_by_minute (12 partitions) in 301 ms
+2026-11-10 01:09:05.759 [br3_trending_products] batch 25: replaced 5 windows in trending_products (100 rows, windows from 16:35 to 16:39) in 564 ms
+2026-11-10 01:09:05.871 [br1_gmv_by_minute] batch 25: 1,779 events after cleaning, watermark 2019-11-17 16:54:59, 573 ms
+2026-11-10 01:09:05.872 [br3_trending_products] batch 25: 1,704 events after cleaning, watermark 2019-11-17 16:54:59, 806 ms
+2026-11-10 01:09:05.873 [br5_abandoned_carts] batch 25: 1,779 events after cleaning, watermark 2019-11-17 16:54:59, 506 ms
+2026-11-10 01:09:05.874 [br8_order_velocity_alerts] batch 25: 75 events after cleaning, watermark 2019-11-17 16:54:55, 507 ms
+2026-11-10 01:09:10.455 [br5_abandoned_carts] batch 26: upserted 37 carts into abandoned_carts (1 partitions) in 287 ms
+2026-11-10 01:09:10.463 [br1_gmv_by_minute] batch 26: upserted 59 rows into gmv_by_minute (13 partitions) in 283 ms
+2026-11-10 01:09:10.518 [br8_order_velocity_alerts] batch 26: upserted 69 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 325 ms
+2026-11-10 01:09:10.732 [br3_trending_products] batch 26: replaced 5 windows in trending_products (100 rows, windows from 16:40 to 16:44) in 518 ms
+2026-11-10 01:09:10.890 [br1_gmv_by_minute] batch 26: 1,985 events after cleaning, watermark 2019-11-17 16:59:59, 515 ms
+2026-11-10 01:09:10.892 [br3_trending_products] batch 26: 1,907 events after cleaning, watermark 2019-11-17 16:59:59, 776 ms
+2026-11-10 01:09:10.893 [br5_abandoned_carts] batch 26: 1,985 events after cleaning, watermark 2019-11-17 16:59:59, 517 ms
+2026-11-10 01:09:10.893 [br8_order_velocity_alerts] batch 26: 78 events after cleaning, watermark 2019-11-17 16:59:58, 580 ms
+2026-11-10 01:09:15.479 [br5_abandoned_carts] batch 27: upserted 21 carts into abandoned_carts (1 partitions) in 325 ms[br8_order_velocity_alerts] batch 27: upserted 70 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 311 ms
+2026-11-10 01:09:15.479 
+2026-11-10 01:09:15.510 [br1_gmv_by_minute] batch 27: upserted 58 rows into gmv_by_minute (12 partitions) in 343 ms
+2026-11-10 01:09:15.768 [br3_trending_products] batch 27: replaced 5 windows in trending_products (100 rows, windows from 16:45 to 16:49) in 571 ms
+2026-11-10 01:09:15.909 [br1_gmv_by_minute] batch 27: 2,041 events after cleaning, watermark 2019-11-17 17:04:59, 589 ms
+2026-11-10 01:09:15.910 [br3_trending_products] batch 27: 1,967 events after cleaning, watermark 2019-11-17 17:04:59, 813 ms
+2026-11-10 01:09:15.911 [br5_abandoned_carts] batch 27: 2,041 events after cleaning, watermark 2019-11-17 17:04:59, 572 ms
+2026-11-10 01:09:15.912 [br8_order_velocity_alerts] batch 27: 74 events after cleaning, watermark 2019-11-17 17:04:56, 573 ms
+2026-11-10 01:09:20.450 [br5_abandoned_carts] batch 28: upserted 34 carts into abandoned_carts (1 partitions) in 290 ms
+2026-11-10 01:09:20.504 [br8_order_velocity_alerts] batch 28: upserted 74 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 328 ms
+2026-11-10 01:09:20.527 [br1_gmv_by_minute] batch 28: upserted 55 rows into gmv_by_minute (12 partitions) in 349 ms
+2026-11-10 01:09:20.690 [br3_trending_products] batch 28: replaced 5 windows in trending_products (100 rows, windows from 16:50 to 16:54) in 496 ms
+2026-11-10 01:09:20.926 [br1_gmv_by_minute] batch 28: 2,133 events after cleaning, watermark 2019-11-17 17:09:59, 591 ms
+2026-11-10 01:09:20.927 [br3_trending_products] batch 28: 2,059 events after cleaning, watermark 2019-11-17 17:09:59, 733 ms
+2026-11-10 01:09:20.928 [br5_abandoned_carts] batch 28: 2,133 events after cleaning, watermark 2019-11-17 17:09:59, 506 ms
+2026-11-10 01:09:20.930 [br8_order_velocity_alerts] batch 28: 74 events after cleaning, watermark 2019-11-17 17:09:54, 564 ms
+2026-11-10 01:09:25.472 [br8_order_velocity_alerts] batch 29: upserted 72 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 287 ms
+2026-11-10 01:09:25.492 [br5_abandoned_carts] batch 29: upserted 42 carts into abandoned_carts (1 partitions) in 330 ms
+2026-11-10 01:09:25.505 [br1_gmv_by_minute] batch 29: upserted 55 rows into gmv_by_minute (13 partitions) in 315 ms
+2026-11-10 01:09:25.804 [br3_trending_products] batch 29: replaced 5 windows in trending_products (100 rows, windows from 16:55 to 16:59) in 603 ms
+2026-11-10 01:09:25.944 [br1_gmv_by_minute] batch 29: 2,202 events after cleaning, watermark 2019-11-17 17:14:59, 588 ms
+2026-11-10 01:09:25.945 [br3_trending_products] batch 29: 2,127 events after cleaning, watermark 2019-11-17 17:14:59, 846 ms
+2026-11-10 01:09:25.947 [br5_abandoned_carts] batch 29: 2,202 events after cleaning, watermark 2019-11-17 17:14:59, 561 ms
+2026-11-10 01:09:25.947 [br8_order_velocity_alerts] batch 29: 75 events after cleaning, watermark 2019-11-17 17:14:58, 537 ms
+2026-11-10 01:09:30.528 [br8_order_velocity_alerts] batch 30: upserted 77 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 345 ms
+2026-11-10 01:09:30.530 [br5_abandoned_carts] batch 30: upserted 41 carts into abandoned_carts (1 partitions) in 370 ms
+2026-11-10 01:09:30.553 [br1_gmv_by_minute] batch 30: upserted 58 rows into gmv_by_minute (12 partitions) in 363 ms
+2026-11-10 01:09:30.777 [br3_trending_products] batch 30: replaced 5 windows in trending_products (100 rows, windows from 17:00 to 17:04) in 571 ms
+2026-11-10 01:09:30.963 [br1_gmv_by_minute] batch 30: 2,595 events after cleaning, watermark 2019-11-17 17:19:59, 616 ms
+2026-11-10 01:09:30.964 [br3_trending_products] batch 30: 2,512 events after cleaning, watermark 2019-11-17 17:19:59, 820 ms
+2026-11-10 01:09:30.965 [br5_abandoned_carts] batch 30: 2,595 events after cleaning, watermark 2019-11-17 17:19:59, 583 ms
+2026-11-10 01:09:30.966 [br8_order_velocity_alerts] batch 30: 83 events after cleaning, watermark 2019-11-17 17:19:59, 590 ms
+2026-11-10 01:09:35.516 [br8_order_velocity_alerts] batch 31: upserted 96 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 344 ms
+2026-11-10 01:09:35.520 [br5_abandoned_carts] batch 31: upserted 37 carts into abandoned_carts (1 partitions) in 363 ms
+2026-11-10 01:09:35.530 [br1_gmv_by_minute] batch 31: upserted 59 rows into gmv_by_minute (12 partitions) in 364 ms
+2026-11-10 01:09:35.856 [br3_trending_products] batch 31: replaced 5 windows in trending_products (100 rows, windows from 17:05 to 17:09) in 659 ms
+2026-11-10 01:09:35.982 [br1_gmv_by_minute] batch 31: 2,534 events after cleaning, watermark 2019-11-17 17:24:59, 615 ms
+2026-11-10 01:09:35.983 [br3_trending_products] batch 31: 2,431 events after cleaning, watermark 2019-11-17 17:24:59, 915 ms
+2026-11-10 01:09:35.984 [br5_abandoned_carts] batch 31: 2,534 events after cleaning, watermark 2019-11-17 17:24:59, 607 ms
+2026-11-10 01:09:35.986 [br8_order_velocity_alerts] batch 31: 103 events after cleaning, watermark 2019-11-17 17:24:58, 606 ms
+2026-11-10 01:09:40.482 [br5_abandoned_carts] batch 32: upserted 27 carts into abandoned_carts (1 partitions) in 315 ms
+2026-11-10 01:09:40.531 [br8_order_velocity_alerts] batch 32: upserted 87 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 340 ms
+2026-11-10 01:09:40.557 [br1_gmv_by_minute] batch 32: upserted 59 rows into gmv_by_minute (12 partitions) in 367 ms
+2026-11-10 01:09:40.711 [br3_trending_products] batch 32: replaced 5 windows in trending_products (100 rows, windows from 17:10 to 17:14) in 501 ms
+2026-11-10 01:09:41.001 [br1_gmv_by_minute] batch 32: 2,530 events after cleaning, watermark 2019-11-17 17:29:59, 623 ms
+2026-11-10 01:09:41.002 [br3_trending_products] batch 32: 2,438 events after cleaning, watermark 2019-11-17 17:29:59, 753 ms
+2026-11-10 01:09:41.003 [br5_abandoned_carts] batch 32: 2,530 events after cleaning, watermark 2019-11-17 17:29:59, 547 ms
+2026-11-10 01:09:41.004 [br8_order_velocity_alerts] batch 32: 92 events after cleaning, watermark 2019-11-17 17:29:59, 592 ms
+2026-11-10 01:09:45.490 [br5_abandoned_carts] batch 33: upserted 28 carts into abandoned_carts (1 partitions) in 339 ms
+2026-11-10 01:09:45.490 [br8_order_velocity_alerts] batch 33: upserted 60 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 321 ms
+2026-11-10 01:09:45.521 [br1_gmv_by_minute] batch 33: upserted 59 rows into gmv_by_minute (12 partitions) in 342 ms
+2026-11-10 01:09:45.760 [br3_trending_products] batch 33: replaced 5 windows in trending_products (100 rows, windows from 17:15 to 17:19) in 569 ms
+2026-11-10 01:09:46.023 [br1_gmv_by_minute] batch 33: 2,685 events after cleaning, watermark 2019-11-17 17:34:59, 603 ms
+2026-11-10 01:09:46.024 [br3_trending_products] batch 33: 2,621 events after cleaning, watermark 2019-11-17 17:34:59, 803 ms
+2026-11-10 01:09:46.025 [br5_abandoned_carts] batch 33: 2,685 events after cleaning, watermark 2019-11-17 17:34:59, 578 ms
+2026-11-10 01:09:46.026 [br8_order_velocity_alerts] batch 33: 64 events after cleaning, watermark 2019-11-17 17:34:59, 583 ms
+2026-11-10 01:09:50.461 [br5_abandoned_carts] batch 34: upserted 29 carts into abandoned_carts (1 partitions) in 300 ms[br8_order_velocity_alerts] batch 34: upserted 66 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 288 ms
+2026-11-10 01:09:50.462 
+2026-11-10 01:09:50.483 [br1_gmv_by_minute] batch 34: upserted 57 rows into gmv_by_minute (12 partitions) in 312 ms
+2026-11-10 01:09:50.725 [br3_trending_products] batch 34: replaced 5 windows in trending_products (100 rows, windows from 17:20 to 17:24) in 528 ms
+2026-11-10 01:09:51.042 [br1_gmv_by_minute] batch 34: 2,913 events after cleaning, watermark 2019-11-17 17:39:59, 541 ms
+2026-11-10 01:09:51.043 [br3_trending_products] batch 34: 2,844 events after cleaning, watermark 2019-11-17 17:39:59, 765 ms
+2026-11-10 01:09:51.044 [br5_abandoned_carts] batch 34: 2,913 events after cleaning, watermark 2019-11-17 17:39:59, 517 ms
+2026-11-10 01:09:51.046 [br8_order_velocity_alerts] batch 34: 69 events after cleaning, watermark 2019-11-17 17:39:57, 518 ms
+2026-11-10 01:09:55.514 [br8_order_velocity_alerts] batch 35: upserted 85 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 339 ms[br5_abandoned_carts] batch 35: upserted 29 carts into abandoned_carts (1 partitions) in 355 ms
+2026-11-10 01:09:55.514 
+2026-11-10 01:09:55.549 [br1_gmv_by_minute] batch 35: upserted 59 rows into gmv_by_minute (12 partitions) in 382 ms
+2026-11-10 01:09:55.690 [br3_trending_products] batch 35: replaced 5 windows in trending_products (100 rows, windows from 17:25 to 17:29) in 520 ms
+2026-11-10 01:09:56.064 [br1_gmv_by_minute] batch 35: 2,905 events after cleaning, watermark 2019-11-17 17:44:59, 617 ms
+2026-11-10 01:09:56.065 [br3_trending_products] batch 35: 2,816 events after cleaning, watermark 2019-11-17 17:44:59, 730 ms
+2026-11-10 01:09:56.066 [br5_abandoned_carts] batch 35: 2,905 events after cleaning, watermark 2019-11-17 17:44:59, 573 ms
+2026-11-10 01:09:56.067 [br8_order_velocity_alerts] batch 35: 89 events after cleaning, watermark 2019-11-17 17:44:52, 575 ms
+2026-11-10 01:10:00.463 [br8_order_velocity_alerts] batch 36: upserted 83 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 292 ms
+2026-11-10 01:10:00.464 [br5_abandoned_carts] batch 36: upserted 39 carts into abandoned_carts (1 partitions) in 297 ms
+2026-11-10 01:10:00.487 [br1_gmv_by_minute] batch 36: upserted 58 rows into gmv_by_minute (12 partitions) in 303 ms
+2026-11-10 01:10:00.693 [br3_trending_products] batch 36: replaced 5 windows in trending_products (100 rows, windows from 17:30 to 17:34) in 499 ms
+2026-11-10 01:10:01.086 [br1_gmv_by_minute] batch 36: 2,697 events after cleaning, watermark 2019-11-17 17:49:59, 545 ms
+2026-11-10 01:10:01.087 [br3_trending_products] batch 36: 2,609 events after cleaning, watermark 2019-11-17 17:49:59, 729 ms
+2026-11-10 01:10:01.094 [br5_abandoned_carts] batch 36: 2,697 events after cleaning, watermark 2019-11-17 17:49:59, 522 ms
+2026-11-10 01:10:01.094 [br8_order_velocity_alerts] batch 36: 88 events after cleaning, watermark 2019-11-17 17:49:49, 523 ms
+2026-11-10 01:10:05.411 [br5_abandoned_carts] batch 37: upserted 37 carts into abandoned_carts (1 partitions) in 260 ms
+2026-11-10 01:10:05.448 [br8_order_velocity_alerts] batch 37: upserted 96 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 275 ms
+2026-11-10 01:10:05.473 [br1_gmv_by_minute] batch 37: upserted 59 rows into gmv_by_minute (13 partitions) in 297 ms
+2026-11-10 01:10:05.776 [br3_trending_products] batch 37: replaced 5 windows in trending_products (100 rows, windows from 17:35 to 17:39) in 588 ms
+2026-11-10 01:10:06.106 [br1_gmv_by_minute] batch 37: 2,757 events after cleaning, watermark 2019-11-17 17:54:59, 561 ms
+2026-11-10 01:10:06.108 [br3_trending_products] batch 37: 2,655 events after cleaning, watermark 2019-11-17 17:54:59, 818 ms
+2026-11-10 01:10:06.110 [br5_abandoned_carts] batch 37: 2,757 events after cleaning, watermark 2019-11-17 17:54:59, 474 ms
+2026-11-10 01:10:06.110 [br8_order_velocity_alerts] batch 37: 102 events after cleaning, watermark 2019-11-17 17:54:58, 517 ms
+2026-11-10 01:10:10.459 [br8_order_velocity_alerts] batch 38: upserted 85 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 287 ms
+2026-11-10 01:10:10.481 [br5_abandoned_carts] batch 38: upserted 26 carts into abandoned_carts (1 partitions) in 314 ms
+2026-11-10 01:10:10.490 [br1_gmv_by_minute] batch 38: upserted 59 rows into gmv_by_minute (12 partitions) in 318 ms
+2026-11-10 01:10:10.733 [br3_trending_products] batch 38: replaced 5 windows in trending_products (100 rows, windows from 17:40 to 17:44) in 539 ms
+2026-11-10 01:10:11.128 [br1_gmv_by_minute] batch 38: 2,885 events after cleaning, watermark 2019-11-17 17:59:59, 546 ms
+2026-11-10 01:10:11.129 [br3_trending_products] batch 38: 2,799 events after cleaning, watermark 2019-11-17 17:59:59, 776 ms
+2026-11-10 01:10:11.131 [br5_abandoned_carts] batch 38: 2,885 events after cleaning, watermark 2019-11-17 17:59:59, 535 ms
+2026-11-10 01:10:11.132 [br8_order_velocity_alerts] batch 38: 86 events after cleaning, watermark 2019-11-17 17:59:59, 517 ms
+2026-11-10 01:10:15.484 [br8_order_velocity_alerts] batch 39: upserted 82 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 302 ms
+2026-11-10 01:10:15.497 [br5_abandoned_carts] batch 39: upserted 40 carts into abandoned_carts (1 partitions) in 332 ms
+2026-11-10 01:10:15.513 [br1_gmv_by_minute] batch 39: upserted 59 rows into gmv_by_minute (13 partitions) in 332 ms
+2026-11-10 01:10:15.877 [br3_trending_products] batch 39: replaced 5 windows in trending_products (100 rows, windows from 17:45 to 17:49) in 667 ms
+2026-11-10 01:10:16.148 [br1_gmv_by_minute] batch 39: 2,723 events after cleaning, watermark 2019-11-17 18:04:59, 621 ms
+2026-11-10 01:10:16.149 [br3_trending_products] batch 39: 2,638 events after cleaning, watermark 2019-11-17 18:04:59, 923 ms
+2026-11-10 01:10:16.151 [br5_abandoned_carts] batch 39: 2,723 events after cleaning, watermark 2019-11-17 18:04:59, 588 ms
+2026-11-10 01:10:16.151 [br8_order_velocity_alerts] batch 39: 85 events after cleaning, watermark 2019-11-17 18:04:58, 570 ms
+2026-11-10 01:10:20.504 [br1_gmv_by_minute] batch 40: upserted 55 rows into gmv_by_minute (12 partitions) in 322 ms
+2026-11-10 01:10:20.506 [br8_order_velocity_alerts] batch 40: upserted 87 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 324 ms
+2026-11-10 01:10:20.515 [br5_abandoned_carts] batch 40: upserted 44 carts into abandoned_carts (1 partitions) in 356 ms
+2026-11-10 01:10:20.731 [br3_trending_products] batch 40: replaced 5 windows in trending_products (100 rows, windows from 17:50 to 17:54) in 557 ms
+2026-11-10 01:10:21.166 [br1_gmv_by_minute] batch 40: 2,569 events after cleaning, watermark 2019-11-17 18:09:59, 574 ms
+2026-11-10 01:10:21.168 [br3_trending_products] batch 40: 2,478 events after cleaning, watermark 2019-11-17 18:09:59, 771 ms
+2026-11-10 01:10:21.175 [br5_abandoned_carts] batch 40: 2,569 events after cleaning, watermark 2019-11-17 18:09:59, 585 ms
+2026-11-10 01:10:21.176 [br8_order_velocity_alerts] batch 40: 91 events after cleaning, watermark 2019-11-17 18:09:59, 577 ms
+2026-11-10 01:10:25.497 [br8_order_velocity_alerts] batch 41: upserted 78 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 308 ms
+2026-11-10 01:10:25.538 [br1_gmv_by_minute] batch 41: upserted 56 rows into gmv_by_minute (12 partitions) in 348 ms
+2026-11-10 01:10:25.543 [br5_abandoned_carts] batch 41: upserted 46 carts into abandoned_carts (1 partitions) in 363 ms
+2026-11-10 01:10:25.876 [br3_trending_products] batch 41: replaced 5 windows in trending_products (100 rows, windows from 17:55 to 17:59) in 659 ms
+2026-11-10 01:10:26.191 [br1_gmv_by_minute] batch 41: 2,492 events after cleaning, watermark 2019-11-17 18:14:59, 613 ms
+2026-11-10 01:10:26.192 [br3_trending_products] batch 41: 2,406 events after cleaning, watermark 2019-11-17 18:14:59, 923 ms
+2026-11-10 01:10:26.195 [br5_abandoned_carts] batch 41: 2,492 events after cleaning, watermark 2019-11-17 18:14:59, 643 ms
+2026-11-10 01:10:26.195 [br8_order_velocity_alerts] batch 41: 86 events after cleaning, watermark 2019-11-17 18:14:59, 594 ms
+2026-11-10 01:10:30.463 [br5_abandoned_carts] batch 42: upserted 52 carts into abandoned_carts (1 partitions) in 304 ms
+2026-11-10 01:10:30.540 [br8_order_velocity_alerts] batch 42: upserted 73 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 361 ms
+2026-11-10 01:10:30.542 [br1_gmv_by_minute] batch 42: upserted 59 rows into gmv_by_minute (14 partitions) in 364 ms
+2026-11-10 01:10:30.808 [br3_trending_products] batch 42: replaced 5 windows in trending_products (100 rows, windows from 18:00 to 18:04) in 594 ms
+2026-11-10 01:10:31.211 [br1_gmv_by_minute] batch 42: 2,591 events after cleaning, watermark 2019-11-17 18:19:59, 607 ms
+2026-11-10 01:10:31.212 [br3_trending_products] batch 42: 2,508 events after cleaning, watermark 2019-11-17 18:19:59, 852 ms
+2026-11-10 01:10:31.220 [br5_abandoned_carts] batch 42: 2,591 events after cleaning, watermark 2019-11-17 18:19:59, 532 ms
+2026-11-10 01:10:31.220 [br8_order_velocity_alerts] batch 42: 83 events after cleaning, watermark 2019-11-17 18:19:58, 602 ms
+2026-11-10 01:10:35.504 [br8_order_velocity_alerts] batch 43: upserted 77 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 335 ms
+2026-11-10 01:10:35.508 [br5_abandoned_carts] batch 43: upserted 43 carts into abandoned_carts (1 partitions) in 350 ms
+2026-11-10 01:10:35.528 [br1_gmv_by_minute] batch 43: upserted 59 rows into gmv_by_minute (12 partitions) in 353 ms
+2026-11-10 01:10:35.851 [br3_trending_products] batch 43: replaced 5 windows in trending_products (100 rows, windows from 18:05 to 18:09) in 641 ms
+2026-11-10 01:10:36.232 [br1_gmv_by_minute] batch 43: 2,487 events after cleaning, watermark 2019-11-17 18:24:59, 624 ms
+2026-11-10 01:10:36.233 [br3_trending_products] batch 43: 2,401 events after cleaning, watermark 2019-11-17 18:24:59, 901 ms
+2026-11-10 01:10:36.236 [br5_abandoned_carts] batch 43: 2,487 events after cleaning, watermark 2019-11-17 18:24:59, 603 ms
+2026-11-10 01:10:36.236 [br8_order_velocity_alerts] batch 43: 86 events after cleaning, watermark 2019-11-17 18:24:57, 587 ms
+2026-11-10 01:10:40.443 [br8_order_velocity_alerts] batch 44: upserted 80 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 265 ms
+2026-11-10 01:10:40.472 [br1_gmv_by_minute] batch 44: upserted 59 rows into gmv_by_minute (13 partitions) in 301 ms
+2026-11-10 01:10:40.479 [br5_abandoned_carts] batch 44: upserted 39 carts into abandoned_carts (1 partitions) in 319 ms
+2026-11-10 01:10:40.746 [br3_trending_products] batch 44: replaced 5 windows in trending_products (100 rows, windows from 18:10 to 18:14) in 548 ms
+2026-11-10 01:10:41.253 [br1_gmv_by_minute] batch 44: 2,420 events after cleaning, watermark 2019-11-17 18:29:59, 531 ms
+2026-11-10 01:10:41.255 [br3_trending_products] batch 44: 2,337 events after cleaning, watermark 2019-11-17 18:29:59, 788 ms
+2026-11-10 01:10:41.262 [br5_abandoned_carts] batch 44: 2,420 events after cleaning, watermark 2019-11-17 18:29:59, 536 ms
+2026-11-10 01:10:41.262 [br8_order_velocity_alerts] batch 44: 83 events after cleaning, watermark 2019-11-17 18:29:59, 515 ms
+2026-11-10 01:10:45.465 [br8_order_velocity_alerts] batch 45: upserted 76 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 317 ms
+2026-11-10 01:10:45.468 [br5_abandoned_carts] batch 45: upserted 40 carts into abandoned_carts (1 partitions) in 321 ms
+2026-11-10 01:10:45.499 [br1_gmv_by_minute] batch 45: upserted 60 rows into gmv_by_minute (14 partitions) in 336 ms
+2026-11-10 01:10:45.790 [br3_trending_products] batch 45: replaced 5 windows in trending_products (100 rows, windows from 18:15 to 18:19) in 594 ms
+2026-11-10 01:10:46.280 [br1_gmv_by_minute] batch 45: 2,442 events after cleaning, watermark 2019-11-17 18:34:59, 590 ms
+2026-11-10 01:10:46.281 [br3_trending_products] batch 45: 2,364 events after cleaning, watermark 2019-11-17 18:34:59, 834 ms
+2026-11-10 01:10:46.289 [br5_abandoned_carts] batch 45: 2,442 events after cleaning, watermark 2019-11-17 18:34:59, 534 ms
+2026-11-10 01:10:46.289 [br8_order_velocity_alerts] batch 45: 78 events after cleaning, watermark 2019-11-17 18:34:59, 532 ms
+2026-11-10 01:10:50.469 [br1_gmv_by_minute] batch 46: upserted 63 rows into gmv_by_minute (14 partitions) in 296 ms
+2026-11-10 01:10:50.485 [br8_order_velocity_alerts] batch 46: upserted 67 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 296 ms
+2026-11-10 01:10:50.486 [br5_abandoned_carts] batch 46: upserted 37 carts into abandoned_carts (1 partitions) in 318 ms
+2026-11-10 01:10:50.757 [br3_trending_products] batch 46: replaced 5 windows in trending_products (100 rows, windows from 18:20 to 18:24) in 555 ms
+2026-11-10 01:10:51.301 [br1_gmv_by_minute] batch 46: 2,331 events after cleaning, watermark 2019-11-17 18:39:59, 530 ms
+2026-11-10 01:10:51.303 [br3_trending_products] batch 46: 2,261 events after cleaning, watermark 2019-11-17 18:39:59, 796 ms
+2026-11-10 01:10:51.311 [br5_abandoned_carts] batch 46: 2,331 events after cleaning, watermark 2019-11-17 18:39:59, 543 ms
+2026-11-10 01:10:51.311 [br8_order_velocity_alerts] batch 46: 70 events after cleaning, watermark 2019-11-17 18:39:58, 540 ms
+2026-11-10 01:10:55.474 [br8_order_velocity_alerts] batch 47: upserted 106 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 300 ms
+2026-11-10 01:10:55.476 [br5_abandoned_carts] batch 47: upserted 44 carts into abandoned_carts (1 partitions) in 327 ms
+2026-11-10 01:10:55.499 [br1_gmv_by_minute] batch 47: upserted 59 rows into gmv_by_minute (12 partitions) in 326 ms
+2026-11-10 01:10:55.859 [br3_trending_products] batch 47: replaced 5 windows in trending_products (100 rows, windows from 18:25 to 18:29) in 656 ms
+2026-11-10 01:10:56.323 [br1_gmv_by_minute] batch 47: 2,652 events after cleaning, watermark 2019-11-17 18:44:59, 559 ms
+2026-11-10 01:10:56.325 [br3_trending_products] batch 47: 2,542 events after cleaning, watermark 2019-11-17 18:44:59, 905 ms
+2026-11-10 01:10:56.332 [br5_abandoned_carts] batch 47: 2,652 events after cleaning, watermark 2019-11-17 18:44:59, 531 ms
+2026-11-10 01:10:56.332 [br8_order_velocity_alerts] batch 47: 110 events after cleaning, watermark 2019-11-17 18:44:59, 530 ms
+2026-11-10 01:11:00.464 [br1_gmv_by_minute] batch 48: upserted 59 rows into gmv_by_minute (12 partitions) in 282 ms
+2026-11-10 01:11:00.534 [br8_order_velocity_alerts] batch 48: upserted 96 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 351 ms
+2026-11-10 01:11:00.537 [br5_abandoned_carts] batch 48: upserted 36 carts into abandoned_carts (1 partitions) in 368 ms
+2026-11-10 01:11:00.792 [br3_trending_products] batch 48: replaced 5 windows in trending_products (100 rows, windows from 18:30 to 18:34) in 584 ms
+2026-11-10 01:11:01.347 [br1_gmv_by_minute] batch 48: 2,786 events after cleaning, watermark 2019-11-17 18:49:59, 523 ms
+2026-11-10 01:11:01.350 [br3_trending_products] batch 48: 2,685 events after cleaning, watermark 2019-11-17 18:49:59, 834 ms
+2026-11-10 01:11:01.356 [br5_abandoned_carts] batch 48: 2,786 events after cleaning, watermark 2019-11-17 18:49:59, 601 ms
+2026-11-10 01:11:01.357 [br8_order_velocity_alerts] batch 48: 101 events after cleaning, watermark 2019-11-17 18:49:58, 591 ms
+2026-11-10 01:11:05.543 [br8_order_velocity_alerts] batch 49: upserted 83 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 362 ms
+2026-11-10 01:11:05.545 [br5_abandoned_carts] batch 49: upserted 37 carts into abandoned_carts (1 partitions) in 382 ms
+2026-11-10 01:11:05.566 [br1_gmv_by_minute] batch 49: upserted 60 rows into gmv_by_minute (13 partitions) in 389 ms
+2026-11-10 01:11:05.829 [br3_trending_products] batch 49: replaced 5 windows in trending_products (100 rows, windows from 18:35 to 18:39) in 623 ms
+2026-11-10 01:11:06.374 [br1_gmv_by_minute] batch 49: 3,010 events after cleaning, watermark 2019-11-17 18:54:59, 625 ms
+2026-11-10 01:11:06.376 [br3_trending_products] batch 49: 2,919 events after cleaning, watermark 2019-11-17 18:54:59, 871 ms
+2026-11-10 01:11:06.377 [br5_abandoned_carts] batch 49: 3,010 events after cleaning, watermark 2019-11-17 18:54:59, 598 ms
+2026-11-10 01:11:06.378 [br8_order_velocity_alerts] batch 49: 91 events after cleaning, watermark 2019-11-17 18:54:59, 600 ms
+2026-11-10 01:11:10.515 [br8_order_velocity_alerts] batch 50: upserted 76 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 344 ms
+2026-11-10 01:11:10.517 [br5_abandoned_carts] batch 50: upserted 47 carts into abandoned_carts (1 partitions) in 362 ms
+2026-11-10 01:11:10.538 [br1_gmv_by_minute] batch 50: upserted 57 rows into gmv_by_minute (14 partitions) in 365 ms
+2026-11-10 01:11:10.758 [br3_trending_products] batch 50: replaced 5 windows in trending_products (100 rows, windows from 18:40 to 18:44) in 566 ms
+2026-11-10 01:11:11.401 [br1_gmv_by_minute] batch 50: 2,676 events after cleaning, watermark 2019-11-17 18:59:59, 601 ms
+2026-11-10 01:11:11.402 [br3_trending_products] batch 50: 2,596 events after cleaning, watermark 2019-11-17 18:59:59, 797 ms
+2026-11-10 01:11:11.409 [br5_abandoned_carts] batch 50: 2,676 events after cleaning, watermark 2019-11-17 18:59:59, 583 ms
+2026-11-10 01:11:11.409 [br8_order_velocity_alerts] batch 50: 80 events after cleaning, watermark 2019-11-17 18:59:56, 575 ms
+2026-11-10 01:11:15.510 [br8_order_velocity_alerts] batch 51: upserted 97 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 336 ms
+2026-11-10 01:11:15.513 [br5_abandoned_carts] batch 51: upserted 32 carts into abandoned_carts (1 partitions) in 356 ms
+2026-11-10 01:11:15.542 [br1_gmv_by_minute] batch 51: upserted 60 rows into gmv_by_minute (12 partitions) in 373 ms
+2026-11-10 01:11:15.847 [br3_trending_products] batch 51: replaced 5 windows in trending_products (100 rows, windows from 18:45 to 18:49) in 655 ms
+2026-11-10 01:11:16.424 [br1_gmv_by_minute] batch 51: 2,650 events after cleaning, watermark 2019-11-17 19:04:59, 632 ms
+2026-11-10 01:11:16.426 [br3_trending_products] batch 51: 2,551 events after cleaning, watermark 2019-11-17 19:04:59, 890 ms
+2026-11-10 01:11:16.426 [br5_abandoned_carts] batch 51: 2,650 events after cleaning, watermark 2019-11-17 19:04:59, 618 ms
+2026-11-10 01:11:16.427 [br8_order_velocity_alerts] batch 51: 99 events after cleaning, watermark 2019-11-17 19:04:54, 589 ms
+2026-11-10 01:11:20.452 [br8_order_velocity_alerts] batch 52: upserted 73 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 283 ms
+2026-11-10 01:11:20.454 [br1_gmv_by_minute] batch 52: upserted 57 rows into gmv_by_minute (13 partitions) in 282 ms
+2026-11-10 01:11:20.458 [br5_abandoned_carts] batch 52: upserted 37 carts into abandoned_carts (1 partitions) in 304 ms
+2026-11-10 01:11:20.734 [br3_trending_products] batch 52: replaced 5 windows in trending_products (100 rows, windows from 18:50 to 18:54) in 544 ms
+2026-11-10 01:11:21.451 [br1_gmv_by_minute] batch 52: 2,605 events after cleaning, watermark 2019-11-17 19:09:59, 536 ms
+2026-11-10 01:11:21.451 [br3_trending_products] batch 52: 2,526 events after cleaning, watermark 2019-11-17 19:09:59, 775 ms
+2026-11-10 01:11:21.454 [br5_abandoned_carts] batch 52: 2,605 events after cleaning, watermark 2019-11-17 19:09:59, 542 ms
+2026-11-10 01:11:21.454 [br8_order_velocity_alerts] batch 52: 79 events after cleaning, watermark 2019-11-17 19:09:59, 536 ms
+2026-11-10 01:11:25.479 [br8_order_velocity_alerts] batch 53: upserted 82 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 309 ms
+2026-11-10 01:11:25.480 [br5_abandoned_carts] batch 53: upserted 25 carts into abandoned_carts (1 partitions) in 323 ms
+2026-11-10 01:11:25.506 [br1_gmv_by_minute] batch 53: upserted 59 rows into gmv_by_minute (12 partitions) in 340 ms
+2026-11-10 01:11:25.820 [br3_trending_products] batch 53: replaced 5 windows in trending_products (100 rows, windows from 18:55 to 18:59) in 618 ms
+2026-11-10 01:11:26.470 [br1_gmv_by_minute] batch 53: 2,567 events after cleaning, watermark 2019-11-17 19:14:59, 586 ms
+2026-11-10 01:11:26.471 [br3_trending_products] batch 53: 2,477 events after cleaning, watermark 2019-11-17 19:14:59, 862 ms
+2026-11-10 01:11:26.472 [br5_abandoned_carts] batch 53: 2,567 events after cleaning, watermark 2019-11-17 19:14:59, 557 ms
+2026-11-10 01:11:26.473 [br8_order_velocity_alerts] batch 53: 90 events after cleaning, watermark 2019-11-17 19:14:59, 559 ms
+2026-11-10 01:11:30.462 [br8_order_velocity_alerts] batch 54: upserted 68 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 287 ms
+2026-11-10 01:11:30.473 [br5_abandoned_carts] batch 54: upserted 38 carts into abandoned_carts (1 partitions) in 314 ms
+2026-11-10 01:11:30.488 [br1_gmv_by_minute] batch 54: upserted 58 rows into gmv_by_minute (12 partitions) in 317 ms
+2026-11-10 01:11:30.756 [br3_trending_products] batch 54: replaced 5 windows in trending_products (100 rows, windows from 19:00 to 19:04) in 565 ms
+2026-11-10 01:11:31.492 [br1_gmv_by_minute] batch 54: 2,698 events after cleaning, watermark 2019-11-17 19:19:59, 546 ms
+2026-11-10 01:11:31.493 [br3_trending_products] batch 54: 2,626 events after cleaning, watermark 2019-11-17 19:19:59, 796 ms
+2026-11-10 01:11:31.495 [br5_abandoned_carts] batch 54: 2,698 events after cleaning, watermark 2019-11-17 19:19:59, 535 ms
+2026-11-10 01:11:31.495 [br8_order_velocity_alerts] batch 54: 72 events after cleaning, watermark 2019-11-17 19:19:58, 528 ms
+2026-11-10 01:11:35.454 [br8_order_velocity_alerts] batch 55: upserted 82 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 288 ms
+2026-11-10 01:11:35.455 [br5_abandoned_carts] batch 55: upserted 34 carts into abandoned_carts (1 partitions) in 299 ms
+2026-11-10 01:11:35.476 [br1_gmv_by_minute] batch 55: upserted 58 rows into gmv_by_minute (12 partitions) in 311 ms
+2026-11-10 01:11:35.785 [br3_trending_products] batch 55: replaced 5 windows in trending_products (100 rows, windows from 19:05 to 19:09) in 596 ms
+2026-11-10 01:11:36.514 [br1_gmv_by_minute] batch 55: 2,872 events after cleaning, watermark 2019-11-17 19:24:59, 540 ms
+2026-11-10 01:11:36.516 [br3_trending_products] batch 55: 2,783 events after cleaning, watermark 2019-11-17 19:24:59, 826 ms
+2026-11-10 01:11:36.517 [br5_abandoned_carts] batch 55: 2,872 events after cleaning, watermark 2019-11-17 19:24:59, 518 ms
+2026-11-10 01:11:36.518 [br8_order_velocity_alerts] batch 55: 89 events after cleaning, watermark 2019-11-17 19:24:58, 516 ms
+2026-11-10 01:11:40.513 [br8_order_velocity_alerts] batch 56: upserted 91 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 332 ms
+2026-11-10 01:11:40.514 [br5_abandoned_carts] batch 56: upserted 34 carts into abandoned_carts (1 partitions) in 354 ms
+2026-11-10 01:11:40.543 [br1_gmv_by_minute] batch 56: upserted 58 rows into gmv_by_minute (13 partitions) in 363 ms
+2026-11-10 01:11:40.811 [br3_trending_products] batch 56: replaced 5 windows in trending_products (100 rows, windows from 19:10 to 19:14) in 604 ms
+2026-11-10 01:11:41.539 [br1_gmv_by_minute] batch 56: 2,875 events after cleaning, watermark 2019-11-17 19:29:59, 616 ms
+2026-11-10 01:11:41.540 [br3_trending_products] batch 56: 2,777 events after cleaning, watermark 2019-11-17 19:29:59, 854 ms
+2026-11-10 01:11:41.542 [br5_abandoned_carts] batch 56: 2,875 events after cleaning, watermark 2019-11-17 19:29:59, 587 ms
+2026-11-10 01:11:41.542 [br8_order_velocity_alerts] batch 56: 98 events after cleaning, watermark 2019-11-17 19:29:59, 586 ms
+2026-11-10 01:11:45.499 [br8_order_velocity_alerts] batch 57: upserted 62 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 329 ms
+2026-11-10 01:11:45.504 [br5_abandoned_carts] batch 57: upserted 50 carts into abandoned_carts (1 partitions) in 353 ms
+2026-11-10 01:11:45.505 [br1_gmv_by_minute] batch 57: upserted 63 rows into gmv_by_minute (14 partitions) in 339 ms
+2026-11-10 01:11:45.864 [br3_trending_products] batch 57: replaced 5 windows in trending_products (100 rows, windows from 19:15 to 19:19) in 651 ms
+2026-11-10 01:11:46.560 [br1_gmv_by_minute] batch 57: 2,821 events after cleaning, watermark 2019-11-17 19:34:59, 564 ms
+2026-11-10 01:11:46.561 [br3_trending_products] batch 57: 2,756 events after cleaning, watermark 2019-11-17 19:34:59, 923 ms
+2026-11-10 01:11:46.563 [br5_abandoned_carts] batch 57: 2,821 events after cleaning, watermark 2019-11-17 19:34:59, 564 ms
+2026-11-10 01:11:46.564 [br8_order_velocity_alerts] batch 57: 65 events after cleaning, watermark 2019-11-17 19:34:59, 562 ms
+2026-11-10 01:11:50.495 [br8_order_velocity_alerts] batch 58: upserted 87 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 318 ms
+2026-11-10 01:11:50.498 [br5_abandoned_carts] batch 58: upserted 60 carts into abandoned_carts (1 partitions) in 338 ms
+2026-11-10 01:11:50.525 [br1_gmv_by_minute] batch 58: upserted 62 rows into gmv_by_minute (14 partitions) in 349 ms
+2026-11-10 01:11:50.578 [br5_abandoned_carts] batch 58: 2,747 events after cleaning, watermark 2019-11-17 19:39:59, 568 ms
+2026-11-10 01:11:50.580 [br8_order_velocity_alerts] batch 58: 93 events after cleaning, watermark 2019-11-17 19:39:58, 566 ms
+2026-11-10 01:11:50.683 [br3_trending_products] batch 58: replaced 5 windows in trending_products (100 rows, windows from 19:20 to 19:24) in 495 ms
+2026-11-10 01:11:51.582 [br1_gmv_by_minute] batch 58: 2,747 events after cleaning, watermark 2019-11-17 19:39:59, 596 ms
+2026-11-10 01:11:51.584 [br3_trending_products] batch 58: 2,654 events after cleaning, watermark 2019-11-17 19:39:59, 722 ms
+2026-11-10 01:11:55.491 [br8_order_velocity_alerts] batch 59: upserted 78 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 304 ms
+2026-11-10 01:11:55.494 [br5_abandoned_carts] batch 59: upserted 46 carts into abandoned_carts (1 partitions) in 315 ms
+2026-11-10 01:11:55.517 [br1_gmv_by_minute] batch 59: upserted 61 rows into gmv_by_minute (13 partitions) in 321 ms
+2026-11-10 01:11:55.598 [br1_gmv_by_minute] batch 59: 2,709 events after cleaning, watermark 2019-11-17 19:44:59, 577 ms
+2026-11-10 01:11:55.601 [br5_abandoned_carts] batch 59: 2,709 events after cleaning, watermark 2019-11-17 19:44:59, 552 ms
+2026-11-10 01:11:55.602 [br8_order_velocity_alerts] batch 59: 87 events after cleaning, watermark 2019-11-17 19:44:59, 552 ms
+2026-11-10 01:11:55.746 [br3_trending_products] batch 59: replaced 5 windows in trending_products (100 rows, windows from 19:25 to 19:29) in 537 ms
+2026-11-10 01:11:56.604 [br3_trending_products] batch 59: 2,622 events after cleaning, watermark 2019-11-17 19:44:59, 784 ms
+2026-11-10 01:12:00.552 [br8_order_velocity_alerts] batch 60: upserted 94 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 303 ms
+2026-11-10 01:12:00.558 [br5_abandoned_carts] batch 60: upserted 41 carts into abandoned_carts (1 partitions) in 349 ms
+2026-11-10 01:12:00.572 [br1_gmv_by_minute] batch 60: upserted 61 rows into gmv_by_minute (13 partitions) in 313 ms
+2026-11-10 01:12:00.620 [br5_abandoned_carts] batch 60: 2,738 events after cleaning, watermark 2019-11-17 19:49:59, 617 ms
+2026-11-10 01:12:00.622 [br8_order_velocity_alerts] batch 60: 98 events after cleaning, watermark 2019-11-17 19:49:53, 614 ms
+2026-11-10 01:12:00.819 [br3_trending_products] batch 60: replaced 5 windows in trending_products (100 rows, windows from 19:30 to 19:34) in 523 ms
+2026-11-10 01:12:01.623 [br1_gmv_by_minute] batch 60: 2,738 events after cleaning, watermark 2019-11-17 19:49:59, 631 ms
+2026-11-10 01:12:01.624 [br3_trending_products] batch 60: 2,640 events after cleaning, watermark 2019-11-17 19:49:59, 868 ms
+2026-11-10 01:12:05.474 [br8_order_velocity_alerts] batch 61: upserted 71 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 301 ms
+2026-11-10 01:12:05.477 [br5_abandoned_carts] batch 61: upserted 41 carts into abandoned_carts (1 partitions) in 321 ms
+2026-11-10 01:12:05.496 [br1_gmv_by_minute] batch 61: upserted 59 rows into gmv_by_minute (13 partitions) in 325 ms
+2026-11-10 01:12:05.643 [br1_gmv_by_minute] batch 61: 2,705 events after cleaning, watermark 2019-11-17 19:54:59, 554 ms
+2026-11-10 01:12:05.644 [br5_abandoned_carts] batch 61: 2,705 events after cleaning, watermark 2019-11-17 19:54:59, 536 ms
+2026-11-10 01:12:05.645 [br8_order_velocity_alerts] batch 61: 79 events after cleaning, watermark 2019-11-17 19:54:56, 527 ms
+2026-11-10 01:12:05.723 [br3_trending_products] batch 61: replaced 5 windows in trending_products (100 rows, windows from 19:35 to 19:39) in 520 ms
+2026-11-10 01:12:06.648 [br3_trending_products] batch 61: 2,626 events after cleaning, watermark 2019-11-17 19:54:59, 760 ms
+2026-11-10 01:12:10.574 [br8_order_velocity_alerts] batch 62: upserted 69 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 358 ms
+2026-11-10 01:12:10.576 [br5_abandoned_carts] batch 62: upserted 36 carts into abandoned_carts (1 partitions) in 375 ms
+2026-11-10 01:12:10.599 [br1_gmv_by_minute] batch 62: upserted 58 rows into gmv_by_minute (14 partitions) in 352 ms
+2026-11-10 01:12:10.664 [br5_abandoned_carts] batch 62: 2,861 events after cleaning, watermark 2019-11-17 19:59:59, 637 ms
+2026-11-10 01:12:10.666 [br8_order_velocity_alerts] batch 62: 75 events after cleaning, watermark 2019-11-17 19:59:51, 634 ms
+2026-11-10 01:12:10.858 [br3_trending_products] batch 62: replaced 5 windows in trending_products (100 rows, windows from 19:40 to 19:44) in 572 ms
+2026-11-10 01:12:11.668 [br1_gmv_by_minute] batch 62: 2,861 events after cleaning, watermark 2019-11-17 19:59:59, 659 ms
+2026-11-10 01:12:11.669 [br3_trending_products] batch 62: 2,786 events after cleaning, watermark 2019-11-17 19:59:59, 898 ms
+2026-11-10 01:12:15.475 [br5_abandoned_carts] batch 63: upserted 51 carts into abandoned_carts (1 partitions) in 299 ms
+2026-11-10 01:12:15.542 [br8_order_velocity_alerts] batch 63: upserted 73 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 339 ms
+2026-11-10 01:12:15.556 [br1_gmv_by_minute] batch 63: upserted 57 rows into gmv_by_minute (12 partitions) in 353 ms
+2026-11-10 01:12:15.682 [br1_gmv_by_minute] batch 63: 2,647 events after cleaning, watermark 2019-11-17 20:04:59, 626 ms
+2026-11-10 01:12:15.684 [br5_abandoned_carts] batch 63: 2,647 events after cleaning, watermark 2019-11-17 20:04:59, 538 ms
+2026-11-10 01:12:15.686 [br8_order_velocity_alerts] batch 63: 76 events after cleaning, watermark 2019-11-17 20:04:56, 612 ms
+2026-11-10 01:12:15.698 [br3_trending_products] batch 63: replaced 5 windows in trending_products (100 rows, windows from 19:45 to 19:49) in 480 ms
+2026-11-10 01:12:16.689 [br3_trending_products] batch 63: 2,571 events after cleaning, watermark 2019-11-17 20:04:59, 738 ms
+2026-11-10 01:12:20.593 [br8_order_velocity_alerts] batch 64: upserted 70 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 373 ms
+2026-11-10 01:12:20.596 [br5_abandoned_carts] batch 64: upserted 48 carts into abandoned_carts (1 partitions) in 433 ms
+2026-11-10 01:12:20.619 [br1_gmv_by_minute] batch 64: upserted 56 rows into gmv_by_minute (12 partitions) in 448 ms
+2026-11-10 01:12:20.700 [br1_gmv_by_minute] batch 64: 2,669 events after cleaning, watermark 2019-11-17 20:09:59, 681 ms
+2026-11-10 01:12:20.703 [br5_abandoned_carts] batch 64: 2,669 events after cleaning, watermark 2019-11-17 20:09:59, 658 ms
+2026-11-10 01:12:20.705 [br8_order_velocity_alerts] batch 64: 76 events after cleaning, watermark 2019-11-17 20:09:56, 659 ms
+2026-11-10 01:12:20.859 [br3_trending_products] batch 64: replaced 5 windows in trending_products (100 rows, windows from 19:50 to 19:54) in 597 ms
+2026-11-10 01:12:21.707 [br3_trending_products] batch 64: 2,593 events after cleaning, watermark 2019-11-17 20:09:59, 899 ms
+2026-11-10 01:12:25.522 [br8_order_velocity_alerts] batch 65: upserted 77 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 345 ms
+2026-11-10 01:12:25.524 [br5_abandoned_carts] batch 65: upserted 52 carts into abandoned_carts (1 partitions) in 369 ms
+2026-11-10 01:12:25.542 [br1_gmv_by_minute] batch 65: upserted 59 rows into gmv_by_minute (12 partitions) in 363 ms
+2026-11-10 01:12:25.717 [br3_trending_products] batch 65: replaced 5 windows in trending_products (100 rows, windows from 19:55 to 19:59) in 522 ms
+2026-11-10 01:12:25.721 [br1_gmv_by_minute] batch 65: 2,574 events after cleaning, watermark 2019-11-17 20:14:59, 619 ms
+2026-11-10 01:12:25.723 [br5_abandoned_carts] batch 65: 2,574 events after cleaning, watermark 2019-11-17 20:14:59, 594 ms
+2026-11-10 01:12:25.724 [br8_order_velocity_alerts] batch 65: 82 events after cleaning, watermark 2019-11-17 20:14:57, 596 ms
+2026-11-10 01:12:26.727 [br3_trending_products] batch 65: 2,492 events after cleaning, watermark 2019-11-17 20:14:59, 759 ms
+2026-11-10 01:12:30.556 [br8_order_velocity_alerts] batch 66: upserted 71 rows into order_velocity_alerts (1 partitions, 1 high-severity) in 392 ms[br1_gmv_by_minute] batch 66: upserted 59 rows into gmv_by_minute (12 partitions) in 393 ms
+2026-11-10 01:12:30.556 
+2026-11-10 01:12:30.558 [br5_abandoned_carts] batch 66: upserted 40 carts into abandoned_carts (1 partitions) in 411 ms
+2026-11-10 01:12:30.741 [br1_gmv_by_minute] batch 66: 2,886 events after cleaning, watermark 2019-11-17 20:19:59, 612 ms
+2026-11-10 01:12:30.744 [br5_abandoned_carts] batch 66: 2,886 events after cleaning, watermark 2019-11-17 20:19:59, 612 ms
+2026-11-10 01:12:30.746 [br8_order_velocity_alerts] batch 66: 76 events after cleaning, watermark 2019-11-17 20:19:59, 614 ms
+2026-11-10 01:12:30.838 [br3_trending_products] batch 66: replaced 5 windows in trending_products (100 rows, windows from 20:00 to 20:04) in 642 ms
+2026-11-10 01:12:31.748 [br3_trending_products] batch 66: 2,810 events after cleaning, watermark 2019-11-17 20:19:59, 879 ms
+2026-11-10 01:12:35.486 [br8_order_velocity_alerts] batch 67: upserted 83 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 316 ms
+2026-11-10 01:12:35.486 [br5_abandoned_carts] batch 67: upserted 49 carts into abandoned_carts (1 partitions) in 327 ms
+2026-11-10 01:12:35.497 [br1_gmv_by_minute] batch 67: upserted 60 rows into gmv_by_minute (12 partitions) in 327 ms
+2026-11-10 01:12:35.686 [br3_trending_products] batch 67: replaced 5 windows in trending_products (100 rows, windows from 20:05 to 20:09) in 499 ms
+2026-11-10 01:12:35.762 [br1_gmv_by_minute] batch 67: 3,024 events after cleaning, watermark 2019-11-17 20:24:59, 558 ms
+2026-11-10 01:12:35.763 [br3_trending_products] batch 67: 2,934 events after cleaning, watermark 2019-11-17 20:24:59, 725 ms
+2026-11-10 01:12:35.764 [br5_abandoned_carts] batch 67: 3,024 events after cleaning, watermark 2019-11-17 20:24:59, 549 ms
+2026-11-10 01:12:35.765 [br8_order_velocity_alerts] batch 67: 90 events after cleaning, watermark 2019-11-17 20:24:58, 552 ms
+2026-11-10 01:12:40.473 [br8_order_velocity_alerts] batch 68: upserted 77 rows into order_velocity_alerts (1 partitions, 1 high-severity) in 303 ms
+2026-11-10 01:12:40.475 [br5_abandoned_carts] batch 68: upserted 42 carts into abandoned_carts (1 partitions) in 328 ms
+2026-11-10 01:12:40.494 [br1_gmv_by_minute] batch 68: upserted 60 rows into gmv_by_minute (12 partitions) in 328 ms
+2026-11-10 01:12:40.780 [br1_gmv_by_minute] batch 68: 2,839 events after cleaning, watermark 2019-11-17 20:29:59, 574 ms
+2026-11-10 01:12:40.782 [br5_abandoned_carts] batch 68: 2,839 events after cleaning, watermark 2019-11-17 20:29:59, 544 ms
+2026-11-10 01:12:40.784 [br8_order_velocity_alerts] batch 68: 84 events after cleaning, watermark 2019-11-17 20:29:57, 547 ms
+2026-11-10 01:12:40.810 [br3_trending_products] batch 68: replaced 5 windows in trending_products (100 rows, windows from 20:10 to 20:14) in 623 ms
+2026-11-10 01:12:41.787 [br3_trending_products] batch 68: 2,755 events after cleaning, watermark 2019-11-17 20:29:59, 853 ms
+2026-11-10 01:12:45.481 [br8_order_velocity_alerts] batch 69: upserted 89 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 316 ms
+2026-11-10 01:12:45.483 [br5_abandoned_carts] batch 69: upserted 39 carts into abandoned_carts (1 partitions) in 331 ms
+2026-11-10 01:12:45.504 [br1_gmv_by_minute] batch 69: upserted 59 rows into gmv_by_minute (12 partitions) in 331 ms
+2026-11-10 01:12:45.674 [br3_trending_products] batch 69: replaced 5 windows in trending_products (100 rows, windows from 20:15 to 20:19) in 494 ms
+2026-11-10 01:12:45.801 [br1_gmv_by_minute] batch 69: 2,811 events after cleaning, watermark 2019-11-17 20:34:59, 574 ms
+2026-11-10 01:12:45.802 [br3_trending_products] batch 69: 2,717 events after cleaning, watermark 2019-11-17 20:34:59, 716 ms
+2026-11-10 01:12:45.803 [br5_abandoned_carts] batch 69: 2,811 events after cleaning, watermark 2019-11-17 20:34:59, 554 ms
+2026-11-10 01:12:45.804 [br8_order_velocity_alerts] batch 69: 94 events after cleaning, watermark 2019-11-17 20:34:58, 549 ms
+2026-11-10 01:12:50.444 [br8_order_velocity_alerts] batch 70: upserted 81 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 282 ms
+2026-11-10 01:12:50.446 [br5_abandoned_carts] batch 70: upserted 42 carts into abandoned_carts (1 partitions) in 297 ms
+2026-11-10 01:12:50.471 [br1_gmv_by_minute] batch 70: upserted 61 rows into gmv_by_minute (13 partitions) in 303 ms
+2026-11-10 01:12:50.741 [br3_trending_products] batch 70: replaced 5 windows in trending_products (100 rows, windows from 20:20 to 20:24) in 551 ms
+2026-11-10 01:12:50.817 [br1_gmv_by_minute] batch 70: 2,814 events after cleaning, watermark 2019-11-17 20:39:59, 524 ms
+2026-11-10 01:12:50.819 [br3_trending_products] batch 70: 2,732 events after cleaning, watermark 2019-11-17 20:39:59, 784 ms
+2026-11-10 01:12:50.820 [br5_abandoned_carts] batch 70: 2,814 events after cleaning, watermark 2019-11-17 20:39:59, 497 ms
+2026-11-10 01:12:50.821 [br8_order_velocity_alerts] batch 70: 82 events after cleaning, watermark 2019-11-17 20:39:55, 498 ms
+2026-11-10 01:12:55.549 [br8_order_velocity_alerts] batch 71: upserted 73 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 325 ms
+2026-11-10 01:12:55.550 [br5_abandoned_carts] batch 71: upserted 42 carts into abandoned_carts (1 partitions) in 348 ms
+2026-11-10 01:12:55.576 [br1_gmv_by_minute] batch 71: upserted 59 rows into gmv_by_minute (14 partitions) in 354 ms
+2026-11-10 01:12:55.837 [br1_gmv_by_minute] batch 71: 2,760 events after cleaning, watermark 2019-11-17 20:44:59, 634 ms
+2026-11-10 01:12:55.841 [br5_abandoned_carts] batch 71: 2,760 events after cleaning, watermark 2019-11-17 20:44:59, 606 ms
+2026-11-10 01:12:55.842 [br8_order_velocity_alerts] batch 71: 79 events after cleaning, watermark 2019-11-17 20:44:49, 602 ms
+2026-11-10 01:12:55.845 [br3_trending_products] batch 71: replaced 5 windows in trending_products (100 rows, windows from 20:25 to 20:29) in 551 ms
+2026-11-10 01:12:56.844 [br3_trending_products] batch 71: 2,681 events after cleaning, watermark 2019-11-17 20:44:59, 890 ms
+2026-11-10 01:13:00.538 [br8_order_velocity_alerts] batch 72: upserted 78 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 331 ms
+2026-11-10 01:13:00.541 [br5_abandoned_carts] batch 72: upserted 44 carts into abandoned_carts (1 partitions) in 379 ms
+2026-11-10 01:13:00.570 [br1_gmv_by_minute] batch 72: upserted 63 rows into gmv_by_minute (14 partitions) in 364 ms
+2026-11-10 01:13:00.805 [br3_trending_products] batch 72: replaced 5 windows in trending_products (100 rows, windows from 20:30 to 20:34) in 564 ms
+2026-11-10 01:13:00.858 [br1_gmv_by_minute] batch 72: 2,593 events after cleaning, watermark 2019-11-17 20:49:59, 632 ms
+2026-11-10 01:13:00.859 [br3_trending_products] batch 72: 2,511 events after cleaning, watermark 2019-11-17 20:49:59, 844 ms
+2026-11-10 01:13:00.860 [br5_abandoned_carts] batch 72: 2,593 events after cleaning, watermark 2019-11-17 20:49:59, 598 ms
+2026-11-10 01:13:00.861 [br8_order_velocity_alerts] batch 72: 82 events after cleaning, watermark 2019-11-17 20:49:56, 597 ms
+2026-11-10 01:13:05.559 [br8_order_velocity_alerts] batch 73: upserted 88 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 346 ms
+2026-11-10 01:13:05.561 [br5_abandoned_carts] batch 73: upserted 40 carts into abandoned_carts (1 partitions) in 380 ms
+2026-11-10 01:13:05.574 [br1_gmv_by_minute] batch 73: upserted 64 rows into gmv_by_minute (14 partitions) in 374 ms
+2026-11-10 01:13:05.807 [br3_trending_products] batch 73: replaced 5 windows in trending_products (100 rows, windows from 20:35 to 20:39) in 571 ms
+2026-11-10 01:13:05.876 [br1_gmv_by_minute] batch 73: 2,865 events after cleaning, watermark 2019-11-17 20:54:59, 635 ms
+2026-11-10 01:13:05.877 [br3_trending_products] batch 73: 2,770 events after cleaning, watermark 2019-11-17 20:54:59, 852 ms
+2026-11-10 01:13:05.878 [br5_abandoned_carts] batch 73: 2,865 events after cleaning, watermark 2019-11-17 20:54:59, 627 ms
+2026-11-10 01:13:05.879 [br8_order_velocity_alerts] batch 73: 95 events after cleaning, watermark 2019-11-17 20:54:57, 625 ms
+2026-11-10 01:13:10.532 [br8_order_velocity_alerts] batch 74: upserted 71 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 358 ms
+2026-11-10 01:13:10.535 [br5_abandoned_carts] batch 74: upserted 36 carts into abandoned_carts (1 partitions) in 378 ms
+2026-11-10 01:13:10.565 [br1_gmv_by_minute] batch 74: upserted 63 rows into gmv_by_minute (14 partitions) in 395 ms
+2026-11-10 01:13:10.725 [br3_trending_products] batch 74: replaced 5 windows in trending_products (100 rows, windows from 20:40 to 20:44) in 540 ms
+2026-11-10 01:13:10.893 [br1_gmv_by_minute] batch 74: 2,789 events after cleaning, watermark 2019-11-17 20:59:59, 638 ms
+2026-11-10 01:13:10.894 [br3_trending_products] batch 74: 2,713 events after cleaning, watermark 2019-11-17 20:59:59, 777 ms
+2026-11-10 01:13:10.895 [br5_abandoned_carts] batch 74: 2,789 events after cleaning, watermark 2019-11-17 20:59:59, 605 ms
+2026-11-10 01:13:10.896 [br8_order_velocity_alerts] batch 74: 76 events after cleaning, watermark 2019-11-17 20:59:56, 604 ms
+2026-11-10 01:13:15.497 [br8_order_velocity_alerts] batch 75: upserted 70 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 329 ms
+2026-11-10 01:13:15.500 [br5_abandoned_carts] batch 75: upserted 32 carts into abandoned_carts (1 partitions) in 359 ms
+2026-11-10 01:13:15.507 [br1_gmv_by_minute] batch 75: upserted 60 rows into gmv_by_minute (13 partitions) in 346 ms
+2026-11-10 01:13:15.792 [br3_trending_products] batch 75: replaced 5 windows in trending_products (100 rows, windows from 20:45 to 20:49) in 607 ms
+2026-11-10 01:13:15.912 [br1_gmv_by_minute] batch 75: 2,891 events after cleaning, watermark 2019-11-17 21:04:59, 580 ms
+2026-11-10 01:13:15.913 [br3_trending_products] batch 75: 2,813 events after cleaning, watermark 2019-11-17 21:04:59, 829 ms
+2026-11-10 01:13:15.914 [br5_abandoned_carts] batch 75: 2,891 events after cleaning, watermark 2019-11-17 21:04:59, 572 ms
+2026-11-10 01:13:15.915 [br8_order_velocity_alerts] batch 75: 78 events after cleaning, watermark 2019-11-17 21:04:56, 573 ms
+2026-11-10 01:13:20.441 [br8_order_velocity_alerts] batch 76: upserted 85 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 269 ms
+2026-11-10 01:13:20.453 [br5_abandoned_carts] batch 76: upserted 40 carts into abandoned_carts (1 partitions) in 300 ms
+2026-11-10 01:13:20.474 [br1_gmv_by_minute] batch 76: upserted 64 rows into gmv_by_minute (15 partitions) in 305 ms
+2026-11-10 01:13:20.799 [br3_trending_products] batch 76: replaced 5 windows in trending_products (100 rows, windows from 20:50 to 20:54) in 598 ms
+2026-11-10 01:13:20.928 [br1_gmv_by_minute] batch 76: 2,886 events after cleaning, watermark 2019-11-17 21:09:59, 533 ms
+2026-11-10 01:13:20.930 [br3_trending_products] batch 76: 2,797 events after cleaning, watermark 2019-11-17 21:09:59, 851 ms
+2026-11-10 01:13:20.930 [br5_abandoned_carts] batch 76: 2,886 events after cleaning, watermark 2019-11-17 21:09:59, 510 ms
+2026-11-10 01:13:20.931 [br8_order_velocity_alerts] batch 76: 89 events after cleaning, watermark 2019-11-17 21:09:52, 501 ms
+2026-11-10 01:13:25.440 [br5_abandoned_carts] batch 77: upserted 48 carts into abandoned_carts (1 partitions) in 295 ms
+2026-11-10 01:13:25.513 [br8_order_velocity_alerts] batch 77: upserted 81 rows into order_velocity_alerts (1 partitions, 0 high-severity) in 346 ms
+2026-11-10 01:13:25.529 [br1_gmv_by_minute] batch 77: upserted 63 rows into gmv_by_minute (13 partitions) in 363 ms
+2026-11-10 01:13:25.753 [br3_trending_products] batch 77: replaced 5 windows in trending_products (100 rows, windows from 20:55 to 20:59) in 552 ms
+2026-11-10 01:13:25.948 [br1_gmv_by_minute] batch 77: 2,889 events after cleaning, watermark 2019-11-17 21:14:59, 601 ms
+2026-11-10 01:13:25.949 [br3_trending_products] batch 77: 2,803 events after cleaning, watermark 2019-11-17 21:14:59, 794 ms
+2026-11-10 01:13:25.950 [br5_abandoned_carts] batch 77: 2,889 events after cleaning, watermark 2019-11-17 21:14:59, 509 ms
+2026-11-10 01:13:25.951 [br8_order_velocity_alerts] batch 77: 86 events after cleaning, watermark 2019-11-17 21:14:45, 580 ms
+2026-11-10 01:13:30.530 [br5_abandoned_carts] batch 78: upserted 36 carts into abandoned_carts (1 partitions) in 392 ms
+2026-11-10 01:13:30.533 [br8_order_velocity_alerts] batch 78: no window changed (watermark moved on)
+2026-11-10 01:13:30.537 [br1_gmv_by_minute] batch 78: no window changed (watermark moved on)
+2026-11-10 01:13:30.610 [br3_trending_products] batch 78: replaced 5 windows in trending_products (100 rows, windows from 21:00 to 21:04) in 388 ms

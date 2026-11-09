@@ -1,0 +1,78 @@
+streaming_perf - throughput and micro-batch latency of streaming_gold.py during the demo replay (sprint task T14 step 6)
+
+date      2026-11-10, main at 02b22f1
+machine   Dat's machine (Dat-Xiaoxin: 20 logical cores, 15 GB RAM, Ubuntu 26.04.1 in WSL2)
+versions  PySpark 4.1.3 local[*], OpenJDK 21.0.12.1, Cassandra 4.1.12 in Docker; trigger every 5 s
+command   ./run_demo.sh stream   (streaming_gold.py --fresh, then replayer.py --speed 60 --start "2019-11-17 08:00:00");
+          the replayer was stopped with SIGINT (= Ctrl-C) right after file 78 (Vietnam 21:25-21:30), the stream 90 s later.
+          run_demo.sh stamps every log line with local wall-clock time to the millisecond (T07). Logs: t14_logs/.
+analysis  python3 streaming_perf.py <stream log> <replayer log>   (source at the end of this file)
+
+How to read the table
+- events     rows the job read after clean()'s row rules. BR3 reads view and cart only, BR8 purchases only.
+- events/s   events / (time from the job's first to last micro-batch + one 5 s trigger). This is the sustained
+             rate during the replay. At --speed 60 it equals what the replayer offers (one file every 5 s), so
+             it measures the source, not Spark's ceiling.
+- trig p50/p95/max   durationMs.triggerExecution per micro-batch in ms, nearest rank: the time Spark took to
+             process one micro-batch end to end, Cassandra writes included. Batch #0 carries JVM and query warm-up.
+- proc/s p50 events / triggerExecution per batch: how fast a batch is chewed through while it runs, i.e. the
+             headroom above the offered rate. It is not a measured maximum; no overload test was run.
+- An event reaches Cassandra at most one trigger interval (5 s) plus one triggerExecution after its file lands.
+
+== Run 1 (the measurement run; nothing else running: API and web were not started yet) ==
+stream log    docs/evidence/t14_logs/stream_20261110_010633.txt
+replayer log  docs/evidence/t14_logs/replayer_20261110_010633.txt
+replayer      78 files, 187,468 rows, first file 2026-11-10 01:06:55.380, last 2026-11-10 01:13:20.354 (385.0 s); offered rate 480.7 rows/s (rows / (span + one 5 s file interval))
+
+job                          batches   events  events/s  trig p50    p95    max  max at  proc/s p50
+br1_gmv_by_minute                 78  186,794     483.0       616    877  3,201      #0       4,193
+br3_trending_products             78  180,591     466.9       852  1,252  3,524      #0       2,874
+br5_abandoned_carts               78  186,794     483.0       587    800  3,199      #0       4,391
+br8_order_velocity_alerts         78    6,203      16.0       590    865  3,200      #0         136
+
+== Run 2 (repeat for the live screen checks; API, web and a headless browser were running) ==
+stream log    docs/evidence/t14_logs/stream_20261110_012111.txt
+replayer log  docs/evidence/t14_logs/replayer_20261110_012111.txt
+replayer      78 files, 187,468 rows, first file 2026-11-10 01:21:35.153, last 2026-11-10 01:28:00.127 (385.0 s); offered rate 480.7 rows/s (rows / (span + one 5 s file interval))
+
+job                          batches   events  events/s  trig p50    p95    max  max at  proc/s p50
+br1_gmv_by_minute                 78  186,794     485.3       583  1,321  5,087      #0       4,408
+br5_abandoned_carts               78  186,794     485.3       573  1,224  5,085      #0       4,555
+br8_order_velocity_alerts         78    6,203      16.1       562  1,163  5,085      #0         140
+br3_trending_products             77  180,591     469.2       795  1,808  5,849      #0       3,199
+
+Run 2's p95 is higher because the API, vite and Chromium shared the CPU; run 1 is the one to quote.
+Both runs stored the same result: checks/correctness_8br.py scored all eight BRs 100% after each (t14_checks.txt).
+
+== Source: streaming_perf.py ==
+"""Streaming throughput and micro-batch latency from one ./run_demo.sh stream log (sprint task T14 step 6)."""
+import math, re, sys, datetime as dt
+L, R = sys.argv[1], sys.argv[2]
+P = re.compile(r'^(\S+ \S+) \[(\w+)\] batch (\d+): ([\d,]+) events after cleaning, watermark (.*?), ([\d,]+) ms')
+ts = lambda s: dt.datetime.strptime(s, '%Y-%m-%d %H:%M:%S.%f')
+def pr(v, p):
+    v = sorted(v); return v[math.ceil(p * len(v) / 100) - 1]
+jobs = {}
+for line in open(L):
+    m = P.match(line)
+    if m:
+        jobs.setdefault(m[2], []).append((ts(m[1]), int(m[3]), int(m[4].replace(',', '')), int(m[6].replace(',', ''))))
+files = [l for l in open(R) if re.search(r' file \d{6} ', l)]
+rows = sum(int(re.search(r'\s([\d,]+) rows', l)[1].replace(',', '')) for l in files)
+f0, f1 = ts(files[0][:23]), ts(files[-1][:23])
+print(f'stream log    {L}')
+print(f'replayer log  {R}')
+print(f'replayer      {len(files)} files, {rows:,} rows, first file {files[0][:23]}, last {files[-1][:23]} '
+      f'({(f1 - f0).total_seconds():.1f} s); offered rate {rows / ((f1 - f0).total_seconds() + 5):.1f} rows/s '
+      f'(rows / (span + one 5 s file interval))')
+print()
+print(f"{'job':28}{'batches':>8}{'events':>9}{'events/s':>10}{'trig p50':>10}{'p95':>7}{'max':>7}"
+      f"{'max at':>8}{'proc/s p50':>12}")
+for j, r in jobs.items():
+    ev = sum(x[2] for x in r)
+    span = (r[-1][0] - r[0][0]).total_seconds() + 5          # n batches cover n trigger intervals of 5 s
+    d = [x[3] for x in r]
+    mx = max(r, key=lambda x: x[3])
+    proc = [x[2] / (x[3] / 1000) for x in r if x[3] > 0]
+    print(f'{j:28}{len(r):>8}{ev:>9,}{ev / span:>10.1f}{pr(d, 50):>10,}{pr(d, 95):>7,}{mx[3]:>7,}{"#" + str(mx[1]):>8}'
+          f'{pr(proc, 50):>12,.0f}')

@@ -1,0 +1,16 @@
+Postgres vs Parquet row counts, 8 star tables (sprint task T14 step 5)
+date       2026-11-10T01:17:33+07:00
+commit     02b22f1
+method     Postgres: SELECT count(*) FROM <table>; Parquet: DuckDB 1.5.5 count(*) over data/warehouse/<table>/**/*.parquet
+
+table                     postgres     parquet  equal
+dim_date                        92          92  yes
+dim_event_type                   5           5  yes
+dim_warehouse                    5           5  yes
+dim_product                210,454     210,454  yes
+dim_user                   319,426     319,426  yes
+fact_event               4,754,015   4,754,015  yes
+fact_session_funnel        970,797     970,797  yes
+fact_inventory_daily     1,909,650   1,909,650  yes
+
+PG_VS_PARQUET OK

@@ -72,3 +72,15 @@ Cassandra unreachable (simulated): BR4 and BR7 print their lines, then "MISS BR6
 
 This re-run is a reviewer's reproduction, not the record. T19 quotes the owner's run of the fixed check
 on the owner's machine, with the replay span that machine used.
+
+== T14 measurement run (Dat's machine, 10 November 2026, main at 02b22f1) ==
+Commands typed by Claude Code in Dat's session at Dat's request. Replay and machine as in t14_checks.txt: ./run_demo.sh stream,
+78 files, 187,468 rows, 15:00-21:30 Vietnam time. Cassandra holds order_velocity_alerts 5,815 rows with the 10 Nov thresholds.
+
+  python checks/ground_truth.py --replay-start "2019-11-17 15:00:00" --replay-end "2019-11-17 21:30:00"
+OK  BR4 rfm_segments  100.00%  (31,005/31,005)  gold 31,005 buyers, truth 31,005: frequency, monetary, recency as of each user's current snapshot
+OK  BR6 stockout_risk  100.00%  (63,655/63,655)  gold 63,655 rows, truth 63,655 rows
+OK  BR7 product_affinity  100.00%  (314/314)  gold 314 rows, truth 314 rows: co_count, support, lift per pair
+OK  BR8 order_velocity_alerts  100.00%  (5,815/5,815)  windows inside 2019-11-17 15:00:00 .. 2019-11-17 21:30:00, gold 5,815, truth 5,815
+GROUND TRUTH OK
+(exit 0)
