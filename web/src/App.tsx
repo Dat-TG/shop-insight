@@ -19,15 +19,37 @@ import BR6Page from './pages/BR6Page';
 import BR7Page from './pages/BR7Page';
 import BR8Page from './pages/BR8Page';
 
-const NAV_TABS = [
-  { path: '/br1', label: 'Real-time Ops', id: 'BR1', icon: Activity },
-  { path: '/br2', label: 'Conversion Funnel', id: 'BR2', icon: Filter },
-  { path: '/br3', label: 'Trending Products', id: 'BR3', icon: Flame },
-  { path: '/br4', label: 'RFM Segments', id: 'BR4', icon: Users },
-  { path: '/br5', label: 'Abandoned Carts', id: 'BR5', icon: ShoppingCart },
-  { path: '/br6', label: 'Stockout Risk', id: 'BR6', icon: AlertCircle },
-  { path: '/br7', label: 'Product Affinity', id: 'BR7', icon: GitFork },
-  { path: '/br8', label: 'Order Velocity', id: 'BR8', icon: Zap },
+// The eight screens, grouped by the user group each one is built for.
+// The navbar renders one labelled cluster per group, in this order.
+const NAV_GROUPS = [
+  {
+    label: 'Executives',
+    tabs: [
+      { path: '/br1', label: 'Real-time Ops', id: 'BR1', icon: Activity },
+    ],
+  },
+  {
+    label: 'Marketing',
+    tabs: [
+      { path: '/br2', label: 'Conversion Funnel', id: 'BR2', icon: Filter },
+      { path: '/br4', label: 'RFM Segments', id: 'BR4', icon: Users },
+      { path: '/br5', label: 'Abandoned Carts', id: 'BR5', icon: ShoppingCart },
+    ],
+  },
+  {
+    label: 'Merchandising',
+    tabs: [
+      { path: '/br3', label: 'Trending Products', id: 'BR3', icon: Flame },
+      { path: '/br7', label: 'Product Affinity', id: 'BR7', icon: GitFork },
+    ],
+  },
+  {
+    label: 'Operations & Risk',
+    tabs: [
+      { path: '/br6', label: 'Stockout Risk', id: 'BR6', icon: AlertCircle },
+      { path: '/br8', label: 'Order Velocity', id: 'BR8', icon: Zap },
+    ],
+  },
 ] as const;
 
 export default function App() {
@@ -45,31 +67,36 @@ export default function App() {
           </div>
         </div>
 
-        {/* ── Segmented Navigation Control ─────────────────── */}
+        {/* ── Navigation, one segmented control per user group ── */}
         <nav className="navbar" aria-label="Module Navigation">
-          <div className="navbar__segmented">
-            {NAV_TABS.map(tab => {
-              const Icon = tab.icon;
-              return (
-                <NavLink
-                  key={tab.path}
-                  to={tab.path}
-                  className={({ isActive }) =>
-                    ['navbar__tab', isActive ? 'navbar__tab--active' : ''].filter(Boolean).join(' ')
-                  }
-                >
-                  <Icon size={14} strokeWidth={1.75} className="navbar__icon" />
-                  <span className="navbar__id">{tab.id}</span>
-                  <span className="navbar__label">{tab.label}</span>
-                </NavLink>
-              );
-            })}
-          </div>
+          {NAV_GROUPS.map(group => (
+            <div key={group.label} className="navbar__group" role="group" aria-label={group.label}>
+              <span className="navbar__group-label">{group.label}</span>
+              <div className="navbar__segmented">
+                {group.tabs.map(tab => {
+                  const Icon = tab.icon;
+                  return (
+                    <NavLink
+                      key={tab.path}
+                      to={tab.path}
+                      className={({ isActive }) =>
+                        ['navbar__tab', isActive ? 'navbar__tab--active' : ''].filter(Boolean).join(' ')
+                      }
+                    >
+                      <Icon size={14} strokeWidth={1.75} className="navbar__icon" />
+                      <span className="navbar__id">{tab.id}</span>
+                      <span className="navbar__label">{tab.label}</span>
+                    </NavLink>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </nav>
 
         <div className="header__meta">
           <span className="header__status-dot" />
-          <span className="header__meta-text">CO5173 · Team 15</span>
+          <span className="header__meta-text">CO5173 · Group 15</span>
         </div>
       </header>
 
