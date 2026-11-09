@@ -2814,3 +2814,40 @@ in three documents, BR7 in the section 4.1 diagram, and a measured Big Data subs
   documents follow it. That closes the decision CLAUDE.md had open.
 - The Big Data text is a numbered §3.5 rather than an unheaded paragraph. That was the AI's choice, flagged for
   Khang, who owns the report.
+
+## Session 37 — 10 November 2026 (W46)
+
+**Tool:** Claude Code (Opus 5.5), one agent writing and one reviewer agent.
+**Scope:** sprint task T07's leftovers, done for Tín at Dat's request: `run_demo.sh` could not start Spark on a
+machine without `JAVA_HOME`, and its stream logs had no wall-clock time; plus a stale docstring and a stale DDL
+comment. No Spark or API logic changed.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| `run_demo.sh` — `JAVA_HOME` kept if set, else derived from `java` on PATH, else macOS `java_home -v 21`, else a clear error; every line of `logs/stream_*.log` and `logs/replayer_*.log` stamped with local wall-clock time to the millisecond, through process substitution so `$!` stays the python PID; READY detection follows the stamp | Tested in isolation; the real `stream` run is T14's |
+| `processing/batch_warehouse.py` — the module docstring describes today's nine tables, checks, step 6 and `WAREHOUSE OK` instead of "WAREHOUSE PARTIAL: 6 of 9" | AI-drafted, reviewed against the code |
+| `warehouse/ddl.sql` and `SYSTEM_DESIGN.md` §5.4 — "128,972 products -> 210,454 versions", measured 10 Nov | Measured |
+
+### How it was checked
+
+| Claim | How it was measured |
+|---|---|
+| This machine has no `JAVA_HOME`, and the derived one is JDK 21 | `readlink -f /usr/bin/java` gives `/usr/lib/jvm/java-21-openjdk-amd64/bin/java`, whose `-version` is 21.0.12.1 |
+| The stamper keeps the right PID and READY still works | A fake python printing to stdout and stderr: `$!` was the python PID, READY was seen after 2 s, `stop` killed python and nothing was left running; a fake that exits early hits the die branch |
+| dim_product has 128,972 products in 210,454 versions | `count(*), count(DISTINCT product_id)` in DuckDB on `data/warehouse/dim_product` and in Postgres `dim_product`: both (210454, 128972) |
+| `infra` still works | `./run_demo.sh infra` printed `INFRA OK`, `APPLY_SCHEMA OK` |
+
+### What the AI got wrong, and was corrected on
+
+- The first commit changed the count only in `ddl.sql`. `ddl.sql`'s header says its body is SYSTEM_DESIGN §5.4-5.5
+  verbatim, so the reviewer flagged the drift; §5.4 now carries the same comment. README line 167 and
+  SYSTEM_DESIGN line 92 still have the old count; T21 (Tín) owns them.
+- Reviewer notes left as known limits: the stamper needs bash 5 (Ubuntu 26.04 has 5.3; stock macOS bash 3.2 would
+  fail), and the stamp is local time while the replayer prints event times in UTC.
+
+### Judgement that stayed with the team
+
+- **Dat** asked for these fixes inside T07's scope during the code freeze; the timestamped log is in T07's own
+  description ("log có giờ thực").
