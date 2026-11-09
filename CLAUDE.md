@@ -177,8 +177,8 @@ and BR8 writes one row per 5-minute window and user with a purchase to
 (API_CONTRACT section 10; upsert, no delete). `docs/STREAMING_PATTERN.md` walks through it
 block by block, and `docs/SPARK_GUIDE_VI.md` Phần 10 is its Vietnamese twin (keep the
 two in step). All eight BRs are live end to end: `GET /api/br1/realtime`,
-`GET /api/br3/trending`, `GET /api/br5/carts`, `GET /api/br6/stockout` (one query per
-warehouse partition, at most 100 rows each) and `GET /api/br8/alerts` read Cassandra
+`GET /api/br3/trending`, `GET /api/br5/carts`, `GET /api/br6/stockout` (per
+warehouse partition the 100 most urgent rows, plus up to 5 no-sales rows unless `max_days` < 9999) and `GET /api/br8/alerts` read Cassandra
 through `serving/api/cassandra.py` (the one session every Cassandra router imports), and
 the BR1, BR3, BR5 and BR8 screens refresh every 10 s;
 `processing/batch_gold.py` writes BR6's `stockout_risk` from the last day of
