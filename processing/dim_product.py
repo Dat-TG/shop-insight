@@ -120,8 +120,10 @@ def build_dim_product(versioned_events, catalog):
         )
  
     return dim_product.select(
-        "product_sk", "product_id", "version_no", "price",
-        "brand", "category_id", "category_code",
+        F.col("product_sk").cast("long").alias("product_sk"),
+        "product_id",
+        F.col("version_no").cast("int").alias("version_no"),
+        "price", "brand", "category_id", "category_code",
         "category_l1", "category_l2", "category_l3",
         "attributes", "valid_from", "valid_to", "is_current",
     )

@@ -1,0 +1,201 @@
+E4 - same-sample CSV vs partitioned Parquet, DuckDB (Canva pages 4 and 17)
+
+====================================================================================================
+HEADER
+====================================================================================================
+date        2026-10-21T21:07:29+07:00
+machine     Dat-Xiaoxin | Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.43 | 20 logical cores
+versions    Python 3.14.4 | DuckDB 1.5.5
+repo        /home/dat/shop-insight @ 78fa4e3
+csv         data/scratch/sample_7pct.csv, 636,142,992 bytes, exported from data/bronze/*/*.parquet (bronze = the 7% sample)
+silver      data/silver/*/*/*.parquet, 93 files
+runs        1 warm-up + 5 timed runs per query, median reported
+command     .venv/bin/python presentation_csv_vs_parquet.py (source at the end of this file)
+
+====================================================================================================
+BEFORE  CSV
+====================================================================================================
+SELECT coalesce(nullif(split_part(category_code, '.', 1), ''), 'unknown') AS category_l1,
+       sum(price) AS revenue, count(*) AS orders
+FROM read_csv('data/scratch/sample_7pct.csv', header = true, columns = {
+    'event_time': 'VARCHAR', 'event_type': 'VARCHAR', 'product_id': 'BIGINT',
+    'category_id': 'BIGINT', 'category_code': 'VARCHAR', 'brand': 'VARCHAR',
+    'price': 'DECIMAL(10,2)', 'user_id': 'BIGINT', 'user_session': 'VARCHAR'})
+WHERE event_type = 'purchase'
+GROUP BY 1 ORDER BY revenue DESC
+
+runs ms     331.7, 206.2, 168.3, 176.3, 177.0
+median ms   177.0
+groups      14
+orders      65,150
+top 3       [('electronics', 14718472.58, 35156), ('unknown', 2024607.99, 16271), ('appliances', 1440093.8, 7185)]
+explain     Total Time: 0.185s
+            Function: READ_CSV
+            Total Files Read: 1
+
+====================================================================================================
+AFTER   Parquet
+====================================================================================================
+SELECT category_l1, sum(price) AS revenue, count(*) AS orders
+FROM read_parquet('data/silver/*/*/*.parquet', hive_partitioning = true)
+WHERE event_type = 'purchase'
+GROUP BY 1 ORDER BY revenue DESC
+
+runs ms     7.3, 9.4, 10.3, 9.0, 5.7
+median ms   9.0
+groups      14
+orders      65,150
+top 3       [('electronics', 14718472.58, 35156), ('unknown', 2024607.99, 16271), ('appliances', 1440093.8, 7185)]
+explain     Total Time: 0.0078s
+            Function: READ_PARQUET
+            File Filters: (event_type = 'purchase')
+            Scanning Files: 31/93
+            Total Files Read: 31
+
+====================================================================================================
+CHECK
+====================================================================================================
+identical result sets: True
+
+====================================================================================================
+SOURCE
+====================================================================================================
+"""E4 - same-sample CSV vs partitioned Parquet for the indexing presentation.
+
+Question: revenue per category (level 1) over the whole month, the query behind
+the '50 giây' on Canva page 4, but run on the 7% sample the system uses, so the
+before and after numbers are comparable.
+
+  before  DuckDB read_csv on a CSV export of the sample (same 9 columns as the raw file)
+  after   DuckDB read_parquet on data/silver (event_date=*/event_type=*), hive_partitioning
+
+Both sides run in the same DuckDB process: same engine, same rows, only the layout differs.
+Each query runs once to warm the OS cache, then RUNS times; the median is reported.
+
+Run from the repo root:  .venv/bin/python presentation_csv_vs_parquet.py > docs/evidence/presentation_csv_vs_parquet.txt
+"""
+
+import datetime
+import os
+import platform
+import statistics
+import subprocess
+import sys
+import time
+
+import duckdb
+
+RUNS = 5
+BRONZE = "data/bronze/*/*.parquet"
+SILVER = "data/silver/*/*/*.parquet"
+CSV = "data/scratch/sample_7pct.csv"
+
+BEFORE = f"""
+SELECT coalesce(nullif(split_part(category_code, '.', 1), ''), 'unknown') AS category_l1,
+       sum(price) AS revenue, count(*) AS orders
+FROM read_csv('{CSV}', header = true, columns = {{
+    'event_time': 'VARCHAR', 'event_type': 'VARCHAR', 'product_id': 'BIGINT',
+    'category_id': 'BIGINT', 'category_code': 'VARCHAR', 'brand': 'VARCHAR',
+    'price': 'DECIMAL(10,2)', 'user_id': 'BIGINT', 'user_session': 'VARCHAR'}})
+WHERE event_type = 'purchase'
+GROUP BY 1 ORDER BY revenue DESC
+"""
+
+AFTER = f"""
+SELECT category_l1, sum(price) AS revenue, count(*) AS orders
+FROM read_parquet('{SILVER}', hive_partitioning = true)
+WHERE event_type = 'purchase'
+GROUP BY 1 ORDER BY revenue DESC
+"""
+
+
+def rule(title):
+    print("=" * 100)
+    print(title)
+    print("=" * 100)
+
+
+def export_csv(con):
+    """Write the 7% sample as a CSV shaped like data/raw/2019-Nov.csv (bronze is already the sample)."""
+    os.makedirs(os.path.dirname(CSV), exist_ok=True)
+    con.execute(f"""
+        COPY (
+            SELECT strftime(event_time, '%Y-%m-%d %H:%M:%S') || ' UTC' AS event_time,
+                   event_type, product_id, category_id, category_code, brand, price,
+                   user_id, user_session
+            FROM read_parquet('{BRONZE}', hive_partitioning = true)
+            ORDER BY event_time
+        ) TO '{CSV}' (HEADER, DELIMITER ',')
+    """)
+
+
+def timed(con, sql):
+    con.execute(sql).fetchall()  # warm-up, not counted
+    times = []
+    for _ in range(RUNS):
+        start = time.perf_counter()
+        rows = con.execute(sql).fetchall()
+        times.append((time.perf_counter() - start) * 1000)
+    return rows, times
+
+
+def scan_lines(con, sql):
+    """Keep only the EXPLAIN ANALYZE lines that say how many files were scanned."""
+    plan = con.execute("EXPLAIN ANALYZE " + sql).fetchall()[0][1]
+    keep = ("Total Time", "Files Read", "Scanning Files", "File Filters", "Function")
+    lines = [line.strip(" │┌┐└┘─") for line in plan.splitlines()]
+    out = []
+    for i, line in enumerate(lines):
+        if any(k in line for k in keep):
+            # A key whose value sits on the next line ("File Filters:" then the filter).
+            out.append(line + (" " + lines[i + 1] if line.endswith(":") and i + 1 < len(lines) else ""))
+    return out
+
+
+def main():
+    con = duckdb.connect(":memory:")
+    commit = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip()
+    if not os.path.exists(CSV):
+        export_csv(con)
+
+    print("E4 - same-sample CSV vs partitioned Parquet, DuckDB (Canva pages 4 and 17)")
+    print()
+    rule("HEADER")
+    print(f"date        {datetime.datetime.now().astimezone().isoformat(timespec='seconds')}")
+    print(f"machine     {platform.node()} | {platform.platform()} | {os.cpu_count()} logical cores")
+    print(f"versions    Python {platform.python_version()} | DuckDB {duckdb.__version__}")
+    print(f"repo        {os.getcwd()} @ {commit}")
+    print(f"csv         {CSV}, {os.path.getsize(CSV):,} bytes, exported from {BRONZE} (bronze = the 7% sample)")
+    silver_files = con.execute(f"SELECT count(*) FROM glob('{SILVER}')").fetchone()[0]
+    print(f"silver      {SILVER}, {silver_files} files")
+    print(f"runs        1 warm-up + {RUNS} timed runs per query, median reported")
+    print(f"command     .venv/bin/python presentation_csv_vs_parquet.py (source at the end of this file)")
+    print()
+
+    results = {}
+    for name, sql in (("BEFORE  CSV", BEFORE), ("AFTER   Parquet", AFTER)):
+        rule(name)
+        print(sql.strip())
+        print()
+        rows, times = timed(con, sql)
+        results[name] = rows
+        print("runs ms     " + ", ".join(f"{t:.1f}" for t in times))
+        print(f"median ms   {statistics.median(times):.1f}")
+        print(f"groups      {len(rows)}")
+        print(f"orders      {sum(r[2] for r in rows):,}")
+        print(f"top 3       {[(r[0], float(r[1]), r[2]) for r in rows[:3]]}")
+        print("explain     " + "\n            ".join(scan_lines(con, sql)))
+        print()
+
+    rule("CHECK")
+    same = results["BEFORE  CSV"] == results["AFTER   Parquet"]
+    print(f"identical result sets: {same}")
+    print()
+    rule("SOURCE")
+    print(open(__file__).read())
+    sys.exit(0 if same else 1)
+
+
+if __name__ == "__main__":
+    main()
+

@@ -48,7 +48,8 @@ team reinstates it in PLAN.md first.
 ## 2. Spark query
 
 Batch BR, in order:
-1. Read the star from `data/warehouse/`: `fact_session_funnel` for BR2, `dim_user`
+1. Read the star from `data/warehouse/`: `fact_session_funnel` for BR2 (its category rows through `fact_event` + `dim_product`
+   on `product_sk`), `dim_user`
    where `is_current` for BR4, `fact_inventory_daily` + `dim_warehouse` for BR6,
    `fact_event` for BR7 (self-join purchases grouped by `user_session`).
 2. Aggregate to exactly the columns the screen prints — nothing wider.

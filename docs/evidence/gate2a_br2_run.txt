@@ -1,0 +1,97 @@
+Gate 2a, BR2: evidence captured 2026-10-07 on Dat's machine (branch w41-br2-slice).
+Text copies of what the screenshots show; the screenshots themselves go to the group chat.
+
+== Commands, in this order ==
+python processing/batch_warehouse.py                              # fact_session_funnel, fact_event, dim_product must exist
+python processing/batch_gold.py                                   -> FUNNEL_DAILY OK, GOLD OK
+uvicorn serving.api.main:app --port 8000; cd web && npm run dev   # then open /br2
+
+== batch_gold.py (the BR2 block; RFM_SEGMENTS OK prints first, unchanged) ==
+fact_event rows                4,754,015
+events lost in the joins               0
+events with no category                0
+sessions with another stage            0
+sessions                         970,797
+cart sessions                    132,002
+purchase sessions                 54,904
+session_start_date dirs               31
+funnel_daily rows                    465
+event_date partitions                 31
+categories incl. all                  15
+null category_l1                       0
+all: view sessions               970,797
+all: cart sessions               132,002
+all: purchase sessions            54,904
+all: view events               4,474,579
+all: cart events                 214,286
+all: purchase events              65,150
+categories: view events        4,474,579
+categories: cart events          214,286
+categories: purchase events       65,150
+rows where sessions rise               0
+lowest cart->purchase day     2019-11-15   (0.0071)
+FUNNEL_DAILY OK
+GOLD OK
+Whole script (BR4 and BR2): 29 s wall clock.
+
+The first three zero lines are checked before the write; any non-zero one stops the job with
+"nothing was overwritten". "sessions with another stage" compares, per session, the furthest
+stage over its categories with fact_session_funnel.funnel_stage: 0 of 970,797 disagree.
+data/gold/funnel_daily: 31 event_date directories, one parquet file in each.
+
+== Correctness: funnel_daily vs the star, recomputed with DuckDB ==
+fact_session_funnel for 'all'; fact_event JOIN dim_product USING (product_sk) JOIN
+fact_session_funnel USING (user_session) for the categories, each (session, category) staged
+by its own events. 465 rows each side.
+star EXCEPT gold: 0 rows. gold EXCEPT star: 0 rows.
+cr_view_to_cart and cr_cart_to_purchase equal carts/views and purchases/carts on all 465 rows
+(NULL on the 50 rows with carts = 0).
+grep -nE "valid_from|valid_to|BETWEEN" processing/batch_gold.py serving/api/routers/br2.py: no match.
+(One-off DuckDB script, not committed.)
+
+== API: GET /api/br2/funnel (slowest of 3 warm calls) ==
+defaults (2019-11-01..2019-11-30, all)
+  meta ms 16.36, Parquet, partitions 30, rows 3
+  sessions 966,143 / 131,498 / 54,676 | events 4,451,411 / 213,486 / 64,883 | rate 1.0 / 0.1361 / 0.0566
+category_l1=electronics
+  meta ms 16.25, Parquet, partitions 30, rows 3
+  sessions 418,282 / 66,436 / 29,689 | events 1,541,267 / 108,022 / 34,997 | rate 1.0 / 0.1588 / 0.071
+start_date=end_date=2019-11-15 (the purchase hole, SYSTEM_DESIGN 3.1)
+  meta ms 9.93, Parquet, partitions 1, rows 3
+  sessions 53,553 / 18,416 / 131 | events 388,871 / 35,936 / 159 | rate 1.0 / 0.3439 / 0.0024
+2019-11-01..2019-12-01 (all 31 dates)
+  meta ms 17.52, Parquet, partitions 31, rows 3
+  sessions 970,797 / 132,002 / 54,904 | events 4,474,579 / 214,286 / 65,150 | rate 1.0 / 0.136 / 0.0566
+2019-11-01..2019-11-07
+  meta ms 12.67, Parquet, partitions 7, rows 3
+  sessions 174,457 / 12,611 / 9,893 | events 776,295 / 9,228 / 11,511 | rate 1.0 / 0.0723 / 0.0567
+  Sessions decrease; events do not (9,228 cart < 11,511 purchase): 6,649 of the month's 8,845
+  purchase-without-cart sessions started on these days. In the source, not a bug.
+category_l1=stationery, 2019-11-01
+  meta ms 10.76, Parquet, partitions 1, rows 3
+  sessions 2 / 0 / 0 | events 10 / 0 / 0 | rate 1.0 / 0.0 / 0.0
+
+Edge cases, all HTTP 200 with data []:
+category_l1=nope                          partitions 30, rows 0
+start_date=bad                            partitions 0, rows 0
+start_date=2019-11-20&end_date=2019-11-10 partitions 0, rows 0
+start_date=2019-10-01&end_date=2019-10-31 partitions 0, rows 0
+
+== Screen /br2 ==
+Defaults:
+  KPIs: Sessions 966,143 (100% Top of Funnel) | Reached Cart 131,498 (13.61% view-to-cart)
+        | Purchased 54,676 (41.58% cart-to-buy) | Overall Conversion 5.66%
+  Bars: View 966,143 > Cart 131,498 > Purchase 54,676
+  Step table: View 966,143 sessions, 4,451,411 events, 100.00%, drop-off —
+              Cart 131,498, 213,486, 13.61%, -86.39%
+              Purchase 54,676, 64,883, 5.66%, -58.42%
+  Footer: <ms> ms / Parquet / 30 partitions / 3 rows
+  Conversion by Category: 15 rows (All Categories first, then by sessions), e.g.
+    electronics 418,282 / 66,436 / 29,689, 15.88% view-to-cart, 44.69% cart-to-purchase
+  Its footer: slowest of 15 calls / Parquet / 30 partitions / 45 rows
+Category -> electronics: KPIs 418,282 / 66,436 / 29,689, overall 7.10%.
+Dates -> 15 Nov only: footer 1 partition; electronics 27,135 / 10,008 / 82 (0.30% overall).
+Category -> stationery, 1 Nov only: 2 / 0 / 0, cart-to-buy and drop-off show "—", no NaN.
+Click the "appliances" row of the category table: the funnel switches to appliances.
+1-7 Nov, all: 174,457 > 12,611 > 9,893, still decreasing.
+(Read off the built app in headless Chromium; the screenshots for the gate are Dat's.)

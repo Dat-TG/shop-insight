@@ -1,0 +1,145 @@
+<!doctype html>
+<!-- Figure for the Indexing deck (Canva DAHYkUBuuhM), slide "Áp dụng cho ShopInsight".
+     Render at 3x to the 5241x1800 PNG uploaded to Canva:
+     chrome-headless-shell --no-sandbox --hide-scrollbars --force-device-scale-factor=3 \
+       --window-size=1747,600 --virtual-time-budget=4000 --screenshot=out.png shopinsight_applied_map.html
+     fonts/ holds Arimo (Apache 2.0) from Google Fonts, so it renders the same offline. -->
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="fonts/arimo.css">
+<style>
+  :root {
+    --navy: #1e3a5f; --blue: #2b6cb0; --edge: #405777; --inner: #9fb3c8;
+    --grey: #6b7785; --label: #4a5568; --faint: #97a2ae; --dash: #9aa5b1;
+    --panel: #eef4fb; --chip: #e6ebf0;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 1747px; height: 600px; background: #fff; overflow: hidden; }
+  body { position: relative; font-family: 'Arimo', sans-serif; color: var(--navy); font-size: 21.8px; }
+  .abs { position: absolute; }
+  .box { position: absolute; background: #fff; border: 2.5px solid var(--edge); border-radius: 9px; }
+  .inner { position: absolute; border: 2px solid var(--inner); border-radius: 7px; background: #fff; }
+  .t26 { font-size: 25.8px; font-weight: 700; }
+  .t24 { font-size: 23.8px; font-weight: 700; }
+  .grey { color: var(--grey); }
+  .line { position: absolute; white-space: nowrap; line-height: 1; transform: translateY(-50%); }
+  .badge { position: absolute; height: 29px; border-radius: 15px; background: var(--navy); color: #fff;
+           font-weight: 700; font-size: 21.8px; display: flex; align-items: center; justify-content: center;
+           padding: 0 8px; transform: translateY(-50%); white-space: nowrap; }
+  .badge.chip { background: var(--chip); color: #4a5a6a; }
+  .chipi { display: inline-flex; align-items: center; height: 29px; border-radius: 15px; background: var(--chip);
+           color: #4a5a6a; font-weight: 700; padding: 0 8px; margin-left: 8px; }
+  .check { position: absolute; width: 22px; height: 20px; transform: translateY(-50%); }
+  .center { text-align: center; transform: translate(-50%, -50%); }
+  svg.arrows { position: absolute; left: 0; top: 0; width: 1747px; height: 600px; overflow: visible; }
+</style>
+</head>
+<body>
+
+<!-- caption -->
+<div class="line" style="left:4px; top:16px; color:var(--faint);">Hình minh hoạ</div>
+
+<!-- replayer -->
+<div class="box" style="left:2px; top:62px; width:328px; height:120px;"></div>
+<div class="line" style="left:16px; top:88px;"><span class="t26">Phát lại log</span><span class="grey" style="font-size:21.8px; margin-left:10px;">(giả lập luồng)</span></div>
+<div class="line" style="left:16px; top:124px;">đọc mẫu 7% theo thời gian</div>
+<div class="line" style="left:16px; top:156px;">ghi từng file JSON</div>
+
+<!-- Spark Structured Streaming -->
+<div class="box" style="left:372px; top:55px; width:379px; height:133px;"></div>
+<div class="line t26" style="left:389px; top:81px;">Spark Structured Streaming</div>
+<div class="inner" style="left:384px; top:104px; width:356px; height:70px;"></div>
+<svg class="check" style="left:394px; top:123px;" viewBox="0 0 22 20"><path d="M2 10.5 L8.5 17 L20 3" fill="none" stroke="#2b6cb0" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+<div class="line" style="left:424px; top:124px;">state theo khoá</div>
+<div class="line" style="left:424px; top:154px;">+ watermark 10 phút</div>
+<div class="badge" style="left:689px; top:125px; width:42px;">04</div>
+
+<!-- Cassandra -->
+<div class="box" style="left:791px; top:69px; width:410px; height:105px;"></div>
+<div class="line t26" style="left:806px; top:95px;">Cassandra</div>
+<div class="inner" style="left:803px; top:116px; width:387px; height:44px;"></div>
+<svg class="check" style="left:812px; top:138px;" viewBox="0 0 22 20"><path d="M2 10.5 L8.5 17 L20 3" fill="none" stroke="#2b6cb0" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+<div class="line" style="left:841px; top:138px;">partition key + clustering key</div>
+<div class="badge" style="left:1138px; top:138px; width:44px;">03</div>
+
+<!-- source log -->
+<svg class="abs" style="left:82px; top:276px; width:168px; height:100px; overflow:visible;" viewBox="0 0 168 100">
+  <path d="M8 1.25 H146 L166.75 22 V92 Q166.75 98.75 160 98.75 H8 Q1.25 98.75 1.25 92 V8 Q1.25 1.25 8 1.25 Z" fill="#fff" stroke="#405777" stroke-width="2.5" stroke-linejoin="round"/>
+  <path d="M146 1.25 V22 H166.75" fill="none" stroke="#405777" stroke-width="2.5" stroke-linejoin="round"/>
+</svg>
+<div class="line t24 center" style="left:166px; top:312px;">Log hành vi</div>
+<div class="line grey center" style="left:166px; top:345px;">(CSV)</div>
+
+<!-- Spark batch -->
+<div class="box" style="left:372px; top:258px; width:379px; height:136px;"></div>
+<div class="line t26" style="left:389px; top:283px;">Spark batch</div>
+<div class="line grey" style="left:389px; top:314px;">mẫu 7%, làm sạch, kho dữ liệu</div>
+<div class="inner" style="left:384px; top:336px; width:356px; height:43px;"></div>
+<svg class="check" style="left:394px; top:358px;" viewBox="0 0 22 20"><path d="M2 10.5 L8.5 17 L20 3" fill="none" stroke="#2b6cb0" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+<div class="line" style="left:424px; top:358px;">broadcast hash join</div>
+<div class="badge" style="left:689px; top:358px; width:42px;">04</div>
+
+<!-- Parquet -->
+<div class="box" style="left:791px; top:235px; width:410px; height:182px;"></div>
+<div class="line t26" style="left:806px; top:261px;">Parquet</div>
+<div class="inner" style="left:803px; top:281px; width:387px; height:43px;"></div>
+<svg class="check" style="left:812px; top:303px;" viewBox="0 0 22 20"><path d="M2 10.5 L8.5 17 L20 3" fill="none" stroke="#2b6cb0" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+<div class="line" style="left:841px; top:303px;">thư mục theo ngày</div>
+<div class="badge" style="left:1041px; top:303px; width:141px;">04 · trang 16</div>
+<div class="abs" style="left:803px; top:335px; width:387px; height:70px; background:#fff;"></div>
+<div class="line grey" style="left:841px; top:354px;">min/max theo giờ</div>
+<div class="line grey" style="left:841px; top:384px;">chưa có tác dụng, INT96</div>
+<div class="badge chip" style="left:1080px; top:356px; width:99px;">trang 17</div>
+
+<!-- DuckDB -->
+<div class="abs" style="left:1229px; top:307px; width:147px; height:38px; border:2px solid #405777; border-radius:19px; background:#fff;"></div>
+<div class="line center" style="left:1302.5px; top:326px;">DuckDB đọc</div>
+
+<!-- Dashboard -->
+<div class="abs" style="left:1394px; top:2px; width:351px; height:400px; background:var(--panel); border:2.5px solid var(--blue); border-radius:11px;"></div>
+<div class="line t26 center" style="left:1569.5px; top:22px;">Dashboard</div>
+<div class="line center" style="left:1569.5px; top:50px; color:var(--blue); font-weight:700;">8 màn hình · yêu cầu &lt; 2 s</div>
+<div class="abs" style="left:1407px; top:70px; width:328px; height:102px; background:#fff; border:2.5px solid var(--blue); border-radius:8px;"></div>
+<div class="line t24 center" style="left:1571px; top:94px;">5 màn hình tra theo khoá</div>
+<div class="line grey center" style="left:1571px; top:122px;">riêng top sản phẩm: quét khoá</div>
+<div class="line grey center" style="left:1571px; top:150px;">4 từ luồng, 1 tính theo lô</div>
+<div class="abs" style="left:1407px; top:286px; width:328px; height:80px; background:#fff; border:2.5px solid var(--blue); border-radius:8px;"></div>
+<div class="line t24 center" style="left:1571px; top:326px;">3 màn hình báo cáo</div>
+
+<!-- PostgreSQL -->
+<div class="abs" style="left:437px; top:471px; width:765px; height:122px; background:#fff;"></div>
+<div class="line grey" style="left:455px; top:497px;"><span class="t26">PostgreSQL</span><span style="font-style:italic; margin-left:14px;">bản dựng thứ hai, chỉ để so sánh, không phục vụ màn hình</span></div>
+<div class="line grey" style="left:455px; top:534px; display:flex; align-items:center;">partitioning theo ngày (như trang 16) · B+-tree, partial, GIN<span class="chipi">02</span></div>
+<div class="line grey" style="left:455px; top:568px;">đo trên 3 ngày dữ liệu; BRIN mới tạo, chưa đo</div>
+
+<!-- arrows -->
+<svg class="arrows" viewBox="0 0 1747 600">
+  <defs>
+    <marker id="hb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="4.2" markerHeight="4.2" orient="auto"><path d="M0 0 L10 5 L0 10 Z" fill="#2b6cb0"/></marker>
+    <marker id="hg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="4.5" markerHeight="4.5" orient="auto"><path d="M0 0 L10 5 L0 10 Z" fill="#8d9bae"/></marker>
+    <marker id="hd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="4.5" markerHeight="4.5" orient="auto"><path d="M0 0 L10 5 L0 10 Z" fill="#6b7785"/></marker>
+  </defs>
+  <g stroke="#2b6cb0" stroke-width="2.5" fill="none" marker-end="url(#hb)">
+    <line x1="331" y1="121" x2="371" y2="121"/>
+    <line x1="752" y1="121" x2="790" y2="121"/>
+    <line x1="1202" y1="121" x2="1406" y2="121"/>
+    <line x1="251" y1="325" x2="371" y2="325"/>
+    <line x1="752" y1="325" x2="790" y2="325"/>
+    <line x1="1202" y1="325" x2="1228" y2="325"/>
+    <line x1="1377" y1="325" x2="1406" y2="325"/>
+  </g>
+  <g stroke="#8d9bae" stroke-width="2" fill="none" marker-end="url(#hg)">
+    <line x1="406" y1="257" x2="299" y2="182"/>
+    <line x1="705" y1="257" x2="851" y2="174"/>
+  </g>
+  <rect x="438" y="472" width="763" height="120" rx="9" fill="none" stroke="#9aa5b1" stroke-width="2" stroke-dasharray="9 6"/>
+  <rect x="804" y="336" width="385" height="68" rx="7" fill="none" stroke="#9aa5b1" stroke-width="2" stroke-dasharray="6 5"/>
+  <line x1="997" y1="418" x2="997" y2="471" stroke="#6b7785" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#hd)"/>
+</svg>
+<div class="line" style="left:255px; top:226px; color:#4b617f;">mẫu 7%</div>
+<div class="line" style="left:822px; top:207px; color:#4b617f;">nguy cơ hết hàng</div>
+<div class="line grey" style="left:1011px; top:442px;">nạp lại để so sánh</div>
+
+</body>
+</html>

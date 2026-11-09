@@ -14,7 +14,7 @@ has the same walk-through in Vietnamese.
 
     BR1  Dat     1-minute windows              gmv_by_minute            done (W40)
     BR3  Khang   15-minute window, 1-min slide trending_products        done (W41)
-    BR5  Nguyen  cart, no purchase in 30 min   abandoned_carts          stub (W41)
+    BR5  Nguyen  cart, no purchase in 30 min   abandoned_carts          done (W41)
     BR8  Tin     5-minute windows per user     order_velocity_alerts    stub (W41)
 
 THIS JOB NEVER WRITES data/silver/. Silver has exactly one writer,
@@ -127,6 +127,12 @@ ALL_CATEGORIES = "all"
 
 # BR3 only: how many products each window keeps (API_CONTRACT section 5).
 TRENDING_TOP = 20
+
+
+# BR5 only: rows per UNLOGGED batch. A micro-batch that catches up can close
+# hundreds of sessions of the same day, and Cassandra refuses a batch above its
+# size limit (50 KB by default). Every batch still stays inside one partition.
+BR5_BATCH_ROWS = 30
 
 
 # ---------------------------------------------------------------------------
@@ -331,28 +337,185 @@ def start_br3(events, cassandra):
 
 
 def start_br5(events, cassandra):
-    """BR5 (Nguyen, W41): sessions with a cart and no purchase 30 minutes later.
+    """Sessions that added to cart and had no purchase in the 30 minutes after their last event.
 
-    Sink: abandoned_carts, key ((event_date), user_session).
-    Trap: NEVER delete from this table inside write_batch. (The only exception
-    is --fresh emptying it before any query starts.) It accumulates all day;
-    deleting the event_date partition erases every cart found by earlier
-    micro-batches and the screen empties itself mid-demo. The key has no
-    cart_value in it, so a plain INSERT of the same session overwrites its own
-    row: already idempotent.
-    Checkpoint: data/checkpoints/br5_abandoned_carts/.
+    One row per session in abandoned_carts, key ((event_date), user_session), with
+    cart_value a plain column. Writing the same session again overwrites its own
+    row: an upsert, already idempotent. NEVER delete or truncate this table in
+    write_batch: it accumulates all day, and deleting the event_date partition
+    would erase every cart found by earlier micro-batches (the BR5 screen would
+    empty itself mid-demo). The only reset is --fresh, before any query starts.
+
+    events: the cleaned, watermarked stream built in main(). clean() has already
+    run all seven rules, including the UTC+7 shift, event_date recomputed, and
+    the drop of rows with no user_session (the clustering key of this table,
+    which Cassandra refuses to take as null). Returns the running StreamingQuery.
     """
-    return None
+    insert = cassandra.prepare(
+        "INSERT INTO abandoned_carts "
+        "(event_date, user_session, cart_value, user_id, item_count, last_event_at) "
+        "VALUES (?, ?, ?, ?, ?, ?)"
+    )
+
+    def write_batch(batch, batch_id):
+        """Runs once per micro-batch, on the driver. batch is a plain static DataFrame."""
+        started = time.monotonic()
+        # Append mode hands over only the sessions the watermark has closed in this
+        # micro-batch: a handful at a time, hundreds at most when catching up.
+        rows = batch.select(
+            "event_date", "user_session", "cart_value", "user_id", "item_count", "last_event_at",
+        ).collect()
+        rows.sort(key=lambda row: row.event_date)
+        partitions = 0
+        for _, same_day in itertools.groupby(rows, key=lambda row: row.event_date):
+            same_day = list(same_day)
+            partitions += 1
+            for start in range(0, len(same_day), BR5_BATCH_ROWS):
+                statement = BatchStatement(batch_type=BatchType.UNLOGGED)  # one partition per batch
+                for row in same_day[start:start + BR5_BATCH_ROWS]:
+                    statement.add(insert, (row.event_date, row.user_session, row.cart_value,
+                                           row.user_id, row.item_count, row.last_event_at))
+                cassandra.execute(statement)
+        if rows:
+            print(f"[br5_abandoned_carts] batch {batch_id}: upserted {len(rows)} carts into abandoned_carts "
+                  f"({partitions} partitions) in {(time.monotonic() - started) * 1000:.0f} ms", flush=True)
+        else:
+            # Append mode writes only the sessions the watermark has closed.
+            print(f"[br5_abandoned_carts] batch {batch_id}: no session closed yet", flush=True)
+
+    is_cart = F.col("event_type") == "cart"
+    is_purchase = F.col("event_type") == "purchase"
+    abandoned_carts = (
+        events
+        # No explode: that is BR1's alone. A session window per user_session: Spark
+        # closes it once the watermark passes its last event + 30 minutes. That
+        # comparison (last event against the stream's own clock) is the whole "no
+        # purchase after 30 minutes" rule, so there is no timestamp test of our own.
+        .groupBy(F.session_window("event_time", "30 minutes"), "user_session")
+        .agg(
+            F.max(F.when(is_cart, 1).otherwise(0)).alias("has_cart"),
+            F.max(F.when(is_purchase, 1).otherwise(0)).alias("has_purchase"),  # the purchase flag
+            F.sum(F.when(is_cart, F.col("price")).otherwise(0)).alias("cart_value"),
+            # count(distinct) is not allowed on a stream; collect_set is.
+            F.size(F.collect_set(F.when(is_cart, F.col("product_id")))).alias("item_count"),
+            F.max("user_id").alias("user_id"),
+            F.max("event_time").alias("last_event_at"),
+        )
+        .where((F.col("has_cart") == 1) & (F.col("has_purchase") == 0))
+        # event_date of the LAST event (Vietnam time, clean() shifted event_time).
+        .withColumn("event_date", F.to_date("last_event_at"))
+    )
+    return (
+        abandoned_carts.writeStream
+        .queryName("br5_abandoned_carts")
+        # append, as the question needs: a session is abandoned only once 30 minutes
+        # have passed with no purchase, and only the watermark can say that. A
+        # session shows up about 40 minutes of event time after its last event (30
+        # gap + 10 watermark): at --speed 60, about 40 seconds of wall clock.
+        .outputMode("append")
+        .foreachBatch(write_batch)
+        .option("checkpointLocation", str(CHECKPOINT_DIR / "br5_abandoned_carts"))
+        .trigger(processingTime=TRIGGER)
+        .start()
+    )
 
 
 def start_br8(events, cassandra):
     """BR8 (Tin, W41): purchases per user in 5-minute windows, with a severity label.
 
-    Sink: order_velocity_alerts, key ((event_date), window_start, user_id). The
-    key never changes for a (window, user), so an upsert is enough, as in BR1.
+    Counts purchase events and their total_value per (user_id, 5-minute window).
+    Labels each (window, user) row as low / medium / high based on order_count:
+        low    : 1 order  (within expected range)
+        medium : 2–3 orders (moderately above baseline)
+        high   : >= 4 orders (flagged for manual review)
+
+    Sink: order_velocity_alerts, key ((event_date), window_start, user_id).
+    The primary key never changes for a (window, user) pair, so a plain INSERT
+    (upsert) is safe — same as BR1. No delete needed.
+
     Checkpoint: data/checkpoints/br8_order_velocity_alerts/.
     """
-    return None
+    # Severity thresholds — matches API_CONTRACT section 10 & canonical fixture.
+    # Tuned to the 7% sample: no (user, 5-minute window) in silver has more than 5
+    # purchases (52 windows reach 4 or 5 in the whole month, 8 of them on 17 Nov),
+    # so the old >= 10 rule never fired and high must start at 4 to show in a demo.
+    MED_THRESHOLD = 2   # order_count >= 2 → medium (2–3)
+    HIGH_THRESHOLD = 4  # order_count >= 4 → high (≥4)
+
+    insert = cassandra.prepare(
+        "INSERT INTO order_velocity_alerts "
+        "(event_date, window_start, user_id, order_count, total_value, severity) "
+        "VALUES (?, ?, ?, ?, ?, ?)"
+    )
+
+    def write_batch(batch, batch_id):
+        """Runs once per micro-batch, on the driver. batch is a plain static DataFrame."""
+        started = time.monotonic()
+        # Collect: at most a few hundred (user, window) pairs per micro-batch at
+        # --speed 60. Update mode passes only the (user, window) pairs whose
+        # counts changed in this micro-batch.
+        rows = batch.select(
+            "event_date",
+            F.col("window.start").alias("window_start"),
+            "user_id",
+            "order_count",
+            "total_value",
+        ).collect()
+
+        rows.sort(key=lambda row: row.event_date)
+        partitions = 0
+        for event_date, same_partition in itertools.groupby(rows, key=lambda row: row.event_date):
+            statement = BatchStatement(batch_type=BatchType.UNLOGGED)
+            for row in same_partition:
+                if row.order_count >= HIGH_THRESHOLD:
+                    severity = "high"
+                elif row.order_count >= MED_THRESHOLD:
+                    severity = "medium"
+                else:
+                    severity = "low"
+                statement.add(insert, (
+                    row.event_date,
+                    row.window_start,
+                    row.user_id,
+                    row.order_count,
+                    row.total_value,
+                    severity,
+                ))
+            cassandra.execute(statement)
+            partitions += 1
+        if rows:
+            high_count = sum(1 for row in rows if row.order_count >= HIGH_THRESHOLD)
+            print(f"[br8_order_velocity_alerts] batch {batch_id}: upserted {len(rows)} rows into "
+                  f"order_velocity_alerts ({partitions} partitions, {high_count} high-severity) "
+                  f"in {(time.monotonic() - started) * 1000:.0f} ms", flush=True)
+        else:
+            print(f"[br8_order_velocity_alerts] batch {batch_id}: no window changed (watermark moved on)",
+                  flush=True)
+
+    is_purchase = F.col("event_type") == "purchase"
+    alerts = (
+        events
+        # Only purchase events contribute to order velocity.
+        .where(is_purchase)
+        # 5-minute tumbling window, not sliding: each purchase lands in exactly
+        # one window, so the count is the true number of orders in that slot.
+        .groupBy(F.window("event_time", "5 minutes"), "event_date", "user_id")
+        .agg(
+            F.count("*").alias("order_count"),
+            F.sum("price").alias("total_value"),
+        )
+    )
+    return (
+        alerts.writeStream
+        .queryName("br8_order_velocity_alerts")
+        # update: emit every (window, user) whose count changed in this micro-batch,
+        # with the running total. The screen sees each window grow as events arrive.
+        .outputMode("update")
+        .foreachBatch(write_batch)
+        .option("checkpointLocation", str(CHECKPOINT_DIR / "br8_order_velocity_alerts"))
+        .trigger(processingTime=TRIGGER)
+        .start()
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -1,0 +1,299 @@
+batch_timings - wall-clock time of each one-time batch job, load_bronze -> gold_br7 (sprint task T02)
+
+====================================================================================================
+HEADER
+====================================================================================================
+started     2026-11-03T20:07:20+07:00
+finished    2026-11-03T20:14:27+07:00
+machine     Dat-Xiaoxin | Linux 6.18.33.2-microsoft-standard-WSL2 | 20 logical cores | 15 GB RAM
+versions    Python 3.14.4 | PySpark 4.1.3 | openjdk version "21.0.12.1" 2026-08-18
+spark conf  spark.driver.memory 6g; spark.sql.session.timeZone UTC (conf/spark-defaults.conf)
+docker      shopinsight-postgres postgres:16.15 Up 14 minutes (healthy); shopinsight-cassandra cassandra:4.1.12 Up 14 minutes (healthy)
+repo        /home/dat/shop-insight @ aa65472 (main)
+input       data/raw/2019-Nov.csv, 8.4G
+command     bash batch_timings.sh /home/dat/shop-insight (source at the end of this file)
+
+Jobs run one after another, nothing else running. Wall clock includes JVM start and stop,
+so it is a few seconds above the 'took' line some jobs print themselves.
+
+====================================================================================================
+1  WALL-CLOCK TIME PER JOB
+====================================================================================================
+step job                      seconds  exit   last status line
+1    load_bronze.py              34.6     0   BRONZE OK
+2    batch_silver.py             17.9     0   SILVER OK
+3    gen_catalog.py               9.4     0   CATALOG OK
+4    gen_inventory.py            19.5     0   INVENTORY OK
+5    batch_warehouse.py         273.0     0   WAREHOUSE OK
+6    batch_gold.py               57.0     0   GOLD OK
+7    gold_br7.py                 15.2     0   BR7 OK
+     total                      426.5
+
+====================================================================================================
+2  STDOUT OF EACH JOB
+====================================================================================================
+---- ingestion/load_bronze.py
+
+rows               4,767,012
+users                258,390
+products             129,899
+date directories          30   (expect 30: event_date=2019-11-01 .. event_date=2019-11-30)
+null event_time            0   (expect 0)
+took                      34 s
+BRONZE OK
+
+---- processing/batch_silver.py
+
+rows                      4,754,015   (bronze 4,767,012, 12,997 dropped)
+users                       258,330
+products                    128,972
+category_l1 'unknown'     1,534,249
+category_l2 'unknown'     1,534,249
+category_l3 'unknown'     3,428,388
+brand 'unknown'             634,202
+null values                       0   (expect 0; only category_code may be null)
+price <= 0                        0   (expect 0)
+event_date wrong                  0   (expect 0: the Vietnam date of event_time)
+event_date range      2019-11-01 .. 2019-12-01   (expect 2019-11-01 .. 2019-12-01)
+rows on 2019-12-01           25,859   (expect 25,859: 30 Nov 17:00-24:00 UTC)
+event_time range      2019-11-01 07:00:02 .. 2019-12-01 06:59:49   (expect 2019-11-01 07:00:02 .. 2019-12-01 06:59:49)
+directories           31 dates, 93 date/type   (expect 31 and 93)
+took                             18 s
+SILVER OK
+
+---- ingestion/gen_catalog.py
+products                  128,972
+distinct product_id       128,972   (expect equal to the line count above)
+took                           9 s
+CATALOG OK
+
+---- ingestion/gen_inventory.py
+products                          12,731
+rows                           1,909,650
+negative values                        0
+broken balance                         0
+below reorder 2019-11-30           10.6%
+under 3 days per warehouse    120 / 118 / 111 / 104 / 113
+INVENTORY OK
+
+---- processing/batch_warehouse.py
+Python 3.14.4 | Spark 4.1.3 | Java 21.0.12.1
+Driver heap: 6.0 GiB (expect 6.0; about 1.0 means conf/spark-defaults.conf was not read)
+Time zone:   UTC (expect UTC)
+silver                       4,754,015   (EVENT_SCHEMA types OK)
+
+dim_date                            92
+dim_event_type                       5
+dim_warehouse                        5
+dim_product                    210,454
+stg_rfm_snapshot             1,291,650   (5 snapshot_date directories)
+dim_user                       319,426
+fact_event                   4,754,015   (31 event_date directories)
+fact_session_funnel            970,797   (31 session_start_date directories)
+fact_inventory_daily         1,909,650   (30 snapshot_date directories)
+
+fact_event rows              4,754,015   (expect 4,754,015)
+event_date values                   31   (expect 31)
+null values                          0   (expect 0)
+duplicate event_sk                   0   (expect 0)
+event_sk on another day              0   (expect 0)
+date_key wrong                       0   (expect 0)
+event_date wrong                     0   (expect 0)
+price <= 0                           0   (expect 0)
+event_type_key 1             4,474,579   (expect 4,474,579)
+event_type_key 2               214,286   (expect 214,286)
+event_type_key 3                65,150   (expect 65,150)
+event_type_key -1                    0   (expect 0)
+event_sk ties that differ            0   (expect 0)
+product_sk not in force              0   (expect 0)
+user_sk not in force                 0   (expect 0)
+fact rows not in silver              0   (expect 0)
+events on wrong product              0   (expect 0)
+events                       4,754,015   (expect 4,754,015)
+events without user_sk               0   (expect 0)
+events on wrong version              0   (expect 0)
+most events in one day         482,049   (event_sk has room for 9,999,999)
+price != version price         677,255   (14.2%, versions are per day: not an error)
+
+fact_session_funnel rows       970,797   (expect 970,797)
+null values                          0   (expect 0)
+duplicate session_sk                 0   (expect 0)
+session_start_date wrong             0   (expect 0)
+ck_fsf_stage violated                0   (expect 0)
+ck_fsf_lags violated                 0   (expect 0)
+view_count total             4,474,579   (expect 4,474,579)
+cart_count total               214,286   (expect 214,286)
+purchase_count total            65,150   (expect 65,150)
+cart_value total         62,570,985.31   (expect 62,570,985.31)
+purchase_value total     19,785,531.43   (expect 19,785,531.43)
+user_sk not in force                 0   (expect 0)
+funnel_stage 1 / 2 / 3         838,795 / 77,098 / 54,904
+is_abandoned                    77,098   (a cart, no purchase: funnel_stage 2)
+negative lags                      521 / 448   (view->cart / cart->purchase, kept as measured)
+
+stg_rfm_snapshot             1,291,650   (expect 1,291,650)
+dim_user versions              319,426   (expect 258,330 to 1,291,650)
+dim_user current               258,330   (expect 258,330)
+duplicate user_sk                    0   (expect 0)
+non-buyers not 1 version             0   (expect 0)
+overlaps                             0   (expect 0)
+not_one_current                      0   (expect 0)
+gaps                                 0   (expect 0)
+empty_ranges                         0   (expect 0)
+current_flag_wrong                   0   (expect 0)
+null_fields                          0   (expect 0)
+  dim_product               210,454 rows
+  dim_user                  319,426 rows
+  fact_event              4,754,015 rows
+  fact_session_funnel       970,797 rows
+  fact_inventory_daily    1,909,650 rows
+postgres                 loaded
+took                               273 s
+WAREHOUSE OK
+
+---- processing/batch_gold.py
+users with >1 current version          0
+current versions                 258,330
+rfm_segments rows                258,330
+distinct users                   258,330
+buyers                            31,005
+segments                               7
+score and segment disagree             0
+unknown segment                        0
+snapshot partitions                    1
+RFM_SEGMENTS OK
+fact_event rows                4,754,015
+events lost in the joins               0
+events with no category                0
+sessions with another stage            0
+sessions                         970,797
+cart sessions                    132,002
+purchase sessions                 54,904
+session_start_date dirs               31
+funnel_daily rows                    465
+event_date partitions                 31
+categories incl. all                  15
+null category_l1                       0
+all: view sessions               970,797
+all: cart sessions               132,002
+all: purchase sessions            54,904
+all: view events               4,474,579
+all: cart events                 214,286
+all: purchase events              65,150
+categories: view events        4,474,579
+categories: cart events          214,286
+categories: purchase events       65,150
+rows where sessions rise               0
+lowest cart->purchase day     2019-11-15   (0.0071)
+FUNNEL_DAILY OK
+reading fact_inventory_daily ...
+  warehouse 1: 12,731 rows written to Cassandra
+  warehouse 2: 12,731 rows written to Cassandra
+  warehouse 3: 12,731 rows written to Cassandra
+  warehouse 4: 12,731 rows written to Cassandra
+  warehouse 5: 12,731 rows written to Cassandra
+BR6 OK: 63,655 rows across 5 warehouses in 31.6 s
+GOLD OK
+
+---- processing/gold_br7.py
+
+purchase sessions         54,904
+products >= 20 sessions    364
+affinity rows                314   (both directions, so even)
+anchor products               98
+anchors with >= 10             8   (the 'XONG khi' needs at least one)
+lift min / max        1.01 / 631.08
+null lift                      0   (expect 0)
+took                        14 s   (expect under 600)
+BR7 OK
+
+====================================================================================================
+SOURCE
+====================================================================================================
+#!/usr/bin/env bash
+# Time each job of the one-time batch build (README section (c), steps 1-6 plus gold_br7),
+# in README order, one after another, and write docs/evidence/batch_timings.txt.
+# Run with Postgres and Cassandra up and nothing else running (no streaming job, no API,
+# no web), so no job competes for CPU:
+#     bash batch_timings.sh /home/dat/shop-insight
+# stdout of each job goes into the evidence file; stderr (Spark's own log) stays in
+# $LOGS/<job>.err next to this script.
+set -uo pipefail
+SRC=$(realpath "$0")
+LOGS="$(dirname "$SRC")/batch_timings_logs"
+cd "$1"
+
+OUT=docs/evidence/batch_timings.txt
+mkdir -p "$LOGS"
+rm -f "$LOGS"/*.out "$LOGS"/*.err    # a stale log from an earlier run must not reach the evidence file
+
+JOBS=(
+  ingestion/load_bronze.py
+  processing/batch_silver.py
+  ingestion/gen_catalog.py
+  ingestion/gen_inventory.py
+  processing/batch_warehouse.py
+  processing/batch_gold.py
+  processing/gold_br7.py
+)
+
+rule() { printf '%s\n' "$(printf '=%.0s' {1..100})" "$1" "$(printf '=%.0s' {1..100})"; }
+
+started_at=$(date --iso-8601=seconds)
+summary=()
+total=0
+failed=""
+
+for i in "${!JOBS[@]}"; do
+  job=${JOBS[$i]}
+  name=$(basename "$job" .py)
+  t0=$(date +%s.%N)
+  .venv/bin/python "$job" > "$LOGS/$name.out" 2> "$LOGS/$name.err"
+  rc=$?
+  t1=$(date +%s.%N)
+  secs=$(echo "$t1 - $t0" | bc)
+  total=$(echo "$total + $secs" | bc)
+  last=$(grep -E 'OK|MISMATCH|FAILED' "$LOGS/$name.out" | tail -1)
+  summary+=("$(printf '%-4s %-22s %9.1f %5s   %s' "$((i + 1))" "$name.py" "$secs" "$rc" "$last")")
+  echo "$(date +%T) $name.py rc=$rc ${secs}s $last"
+  if [ "$rc" -ne 0 ]; then failed=$name; break; fi
+done
+
+{
+  echo "batch_timings - wall-clock time of each one-time batch job, load_bronze -> gold_br7 (sprint task T02)"
+  echo
+  rule "HEADER"
+  echo "started     $started_at"
+  echo "finished    $(date --iso-8601=seconds)"
+  echo "machine     $(hostname) | $(uname -sr) | $(nproc) logical cores | $(free -g | awk '/Mem:/ {print $2}') GB RAM"
+  echo "versions    Python $(.venv/bin/python -c 'import platform; print(platform.python_version())') | PySpark $(.venv/bin/python -c 'import pyspark; print(pyspark.__version__)') | $(java -version 2>&1 | head -1)"
+  echo "spark conf  $(grep -v '^#' conf/spark-defaults.conf | grep . | tr '\n' ';' | sed 's/;$//; s/;/; /g') (conf/spark-defaults.conf)"
+  echo "docker      $(docker ps --format '{{.Names}} {{.Image}} {{.Status}}' | tr '\n' ';' | sed 's/;$//; s/;/; /g')"
+  echo "repo        $(pwd) @ $(git rev-parse --short HEAD) ($(git rev-parse --abbrev-ref HEAD))"
+  echo "input       data/raw/2019-Nov.csv, $(du -h data/raw/2019-Nov.csv | cut -f1)"
+  echo "command     bash batch_timings.sh /home/dat/shop-insight (source at the end of this file)"
+  echo
+  echo "Jobs run one after another, nothing else running. Wall clock includes JVM start and stop,"
+  echo "so it is a few seconds above the 'took' line some jobs print themselves."
+  echo
+  rule "1  WALL-CLOCK TIME PER JOB"
+  printf '%-4s %-22s %9s %5s   %s\n' "step" "job" "seconds" "exit" "last status line"
+  printf '%s\n' "${summary[@]}"
+  printf '%-4s %-22s %9.1f\n' "" "total" "$total"
+  if [ -n "$failed" ]; then echo; echo "STOPPED: $failed.py exited non-zero; later jobs were not run."; fi
+  echo
+  rule "2  STDOUT OF EACH JOB"
+  for job in "${JOBS[@]}"; do
+    name=$(basename "$job" .py)
+    [ -f "$LOGS/$name.out" ] || continue
+    echo "---- $job"
+    cat "$LOGS/$name.out"
+    if [ "$name" = "$failed" ]; then echo "---- last 40 lines of stderr"; tail -40 "$LOGS/$name.err"; fi
+    echo
+  done
+  rule "SOURCE"
+  cat "$SRC"
+} > "$OUT"
+
+echo "wrote $OUT"
+[ -z "$failed" ]

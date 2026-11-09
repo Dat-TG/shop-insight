@@ -1,0 +1,502 @@
+E1 - Spark and Parquet evidence for the indexing presentation
+Plan pages 11-12 (Canva pages 12-13): '93 thư mục ... chỉ mở 1/93 file' and
+'cột thời gian lưu kiểu cũ INT96 ... không có min/max; lọc theo giờ không bỏ được row group nào'.
+
+====================================================================================================
+HEADER
+====================================================================================================
+date        2026-10-20T23:57:06+07:00
+machine     Dat-Xiaoxin | Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.43 | 20 logical cores
+versions    Python 3.14.4 | Spark 4.1.3 | Java 21.0.12.1
+repo        /home/dat/shop-insight @ 03394c9; SPARK_CONF_DIR=conf/, master local[*]
+data state  silver written 2026-09-25T19:04:43 (+07) by processing/batch_silver.py
+            silver = 31 event_date directories (event_date=2019-11-01 .. event_date=2019-12-01), 93 event_date=*/event_type=* directories, 93 parquet files
+command     .venv/bin/python presentation_parquet_run.py (source at the end of this file)
+
+Reading notes
+  - 'number of files read' counts the files left after partition pruning.
+  - Scan 'number of output rows' counts rows the Parquet reader returned before the Filter node
+    (spark.sql.parquet.recordLevelFilter.enabled=false), so output rows = all rows means no
+    row group was skipped.
+  - PushedFilters prints timestamp literals in the JVM default time zone (+07 on this machine),
+    while the Filter node prints them in the session time zone (UTC). Same instant, different
+    text: crop the PushedFilters line out of any overlay.
+
+====================================================================================================
+1. EFFECTIVE DEFAULTS (spark.conf.get; conf/spark-defaults.conf sets none of these)
+====================================================================================================
+spark.sql.parquet.outputTimestampType = INT96
+spark.sql.parquet.filterPushdown = true
+spark.sql.parquet.recordLevelFilter.enabled = false
+spark.sql.optimizer.dynamicPartitionPruning.enabled = true
+spark.sql.optimizer.dynamicPartitionPruning.reuseBroadcastOnly = true
+spark.sql.autoBroadcastJoinThreshold = 10485760b
+spark.sql.join.preferSortMergeJoin = true
+spark.sql.streaming.stateStore.providerClass = org.apache.spark.sql.execution.streaming.state.HDFSBackedStateStoreProvider
+spark.sql.session.timeZone = UTC
+
+====================================================================================================
+2. Q0  no filter: every directory is read
+====================================================================================================
+== Physical Plan ==
+AdaptiveSparkPlan (6)
++- HashAggregate (5)
+   +- Exchange (4)
+      +- HashAggregate (3)
+         +- Project (2)
+            +- Scan parquet  (1)
+
+
+(1) Scan parquet 
+Output [2]: [event_date#11, event_type#12]
+Batched: true
+Location: InMemoryFileIndex [file:/home/dat/shop-insight/data/silver]
+ReadSchema: struct<>
+
+(2) Project
+Output: []
+Input [2]: [event_date#11, event_type#12]
+
+(3) HashAggregate
+Input: []
+Keys: []
+Functions [1]: [partial_count(1)]
+Aggregate Attributes [1]: [count#28L]
+Results [1]: [count#29L]
+
+(4) Exchange
+Input [1]: [count#29L]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=13]
+
+(5) HashAggregate
+Input [1]: [count#29L]
+Keys: []
+Functions [1]: [count(1)]
+Aggregate Attributes [1]: [count(1)#27L]
+Results [1]: [count(1)#27L AS rows#13L]
+
+(6) AdaptiveSparkPlan
+Output [1]: [rows#13L]
+Arguments: isFinalPlan=false
+
+RESULT  [{'rows': 4754015}]
+METRICS Scan parquet: {'number of files read': '93', 'number of partitions read': '93', 'size of files read': '133.9 MiB', 'number of output rows': '4,754,015', 'dynamic partition pruning time': '0 ms'}
+
+====================================================================================================
+3. Q1  one day and one event type, both partition columns: 1 directory, 1 file
+====================================================================================================
+== Physical Plan ==
+AdaptiveSparkPlan (6)
++- HashAggregate (5)
+   +- Exchange (4)
+      +- HashAggregate (3)
+         +- Project (2)
+            +- Scan parquet  (1)
+
+
+(1) Scan parquet 
+Output [3]: [price#8, event_date#11, event_type#12]
+Batched: true
+Location: InMemoryFileIndex [file:/home/dat/shop-insight/data/silver]
+PartitionFilters: [isnotnull(event_date#11), isnotnull(event_type#12), (event_date#11 = 2019-11-15), (event_type#12 = purchase)]
+ReadSchema: struct<price:decimal(10,2)>
+
+(2) Project
+Output [1]: [price#8]
+Input [3]: [price#8, event_date#11, event_type#12]
+
+(3) HashAggregate
+Input [1]: [price#8]
+Keys: []
+Functions [2]: [partial_count(1), partial_sum(price#8)]
+Aggregate Attributes [3]: [count#48L, sum#49, isEmpty#50]
+Results [3]: [count#51L, sum#52, isEmpty#53]
+
+(4) Exchange
+Input [3]: [count#51L, sum#52, isEmpty#53]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=57]
+
+(5) HashAggregate
+Input [3]: [count#51L, sum#52, isEmpty#53]
+Keys: []
+Functions [2]: [count(1), sum(price#8)]
+Aggregate Attributes [2]: [count(1)#46L, sum(price#8)#47]
+Results [2]: [count(1)#46L AS rows#31L, sum(price#8)#47 AS gmv#32]
+
+(6) AdaptiveSparkPlan
+Output [2]: [rows#31L, gmv#32]
+Arguments: isFinalPlan=false
+
+RESULT  [{'rows': 170, 'gmv': Decimal('71279.04')}]
+METRICS Scan parquet: {'number of files read': '1', 'number of partitions read': '1', 'size of files read': '14.8 KiB', 'number of output rows': '170', 'dynamic partition pruning time': '0 ms'}
+
+====================================================================================================
+4. Q2  one hour on event_time only (not a partition column; INT96, no min/max)
+====================================================================================================
+== Physical Plan ==
+AdaptiveSparkPlan (7)
++- HashAggregate (6)
+   +- Exchange (5)
+      +- HashAggregate (4)
+         +- Project (3)
+            +- Filter (2)
+               +- Scan parquet  (1)
+
+
+(1) Scan parquet 
+Output [3]: [event_time#0, event_date#11, event_type#12]
+Batched: true
+Location: InMemoryFileIndex [file:/home/dat/shop-insight/data/silver]
+PushedFilters: [IsNotNull(event_time), GreaterThanOrEqual(event_time,2019-11-15 17:00:00.0), LessThan(event_time,2019-11-15 18:00:00.0)]
+ReadSchema: struct<event_time:timestamp>
+
+(2) Filter
+Input [3]: [event_time#0, event_date#11, event_type#12]
+Condition : ((isnotnull(event_time#0) AND (event_time#0 >= 2019-11-15 10:00:00)) AND (event_time#0 < 2019-11-15 11:00:00))
+
+(3) Project
+Output: []
+Input [3]: [event_time#0, event_date#11, event_type#12]
+
+(4) HashAggregate
+Input: []
+Keys: []
+Functions [1]: [partial_count(1)]
+Aggregate Attributes [1]: [count#73L]
+Results [1]: [count#74L]
+
+(5) Exchange
+Input [1]: [count#74L]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=105]
+
+(6) HashAggregate
+Input [1]: [count#74L]
+Keys: []
+Functions [1]: [count(1)]
+Aggregate Attributes [1]: [count(1)#72L]
+Results [1]: [count(1)#72L AS rows#58L]
+
+(7) AdaptiveSparkPlan
+Output [1]: [rows#58L]
+Arguments: isFinalPlan=false
+
+RESULT  [{'rows': 20403}]
+METRICS Scan parquet: {'number of files read': '93', 'number of partitions read': '93', 'size of files read': '133.9 MiB', 'number of output rows': '4,754,015', 'dynamic partition pruning time': '0 ms'}
+
+dim_date columns: ['date_key', 'full_date', 'year', 'quarter', 'month', 'month_name', 'day_of_month', 'day_of_week', 'day_name', 'iso_week', 'is_weekend', 'is_holiday', 'holiday_name', 'holiday_type']
+
+====================================================================================================
+5. Q3  dynamic partition pruning: join on the partition column, filter only on the small side
+====================================================================================================
+== Physical Plan ==
+AdaptiveSparkPlan (12)
++- HashAggregate (11)
+   +- Exchange (10)
+      +- HashAggregate (9)
+         +- Project (8)
+            +- BroadcastHashJoin Inner BuildRight (7)
+               :- Project (2)
+               :  +- Scan parquet  (1)
+               +- BroadcastExchange (6)
+                  +- Project (5)
+                     +- Filter (4)
+                        +- Scan parquet  (3)
+
+
+(1) Scan parquet 
+Output [2]: [event_date#11, event_type#12]
+Batched: true
+Location: InMemoryFileIndex [file:/home/dat/shop-insight/data/silver]
+PartitionFilters: [isnotnull(event_date#11), dynamicpruningexpression(event_date#11 IN dynamicpruning#106)]
+ReadSchema: struct<>
+
+(2) Project
+Output [1]: [event_date#11]
+Input [2]: [event_date#11, event_type#12]
+
+(3) Scan parquet 
+Output [3]: [full_date#76, month#79, day_of_month#81]
+Batched: true
+Location: InMemoryFileIndex [file:/home/dat/shop-insight/data/warehouse/dim_date]
+PushedFilters: [IsNotNull(month), IsNotNull(day_of_month), EqualTo(month,11), LessThanOrEqual(day_of_month,3), IsNotNull(full_date)]
+ReadSchema: struct<full_date:date,month:smallint,day_of_month:smallint>
+
+(4) Filter
+Input [3]: [full_date#76, month#79, day_of_month#81]
+Condition : ((((isnotnull(month#79) AND isnotnull(day_of_month#81)) AND (month#79 = 11)) AND (day_of_month#81 <= 3)) AND isnotnull(full_date#76))
+
+(5) Project
+Output [1]: [full_date#76]
+Input [3]: [full_date#76, month#79, day_of_month#81]
+
+(6) BroadcastExchange
+Input [1]: [full_date#76]
+Arguments: HashedRelationBroadcastMode(List(input[0, date, true]),false), [plan_id=183]
+
+(7) BroadcastHashJoin
+Left keys [1]: [event_date#11]
+Right keys [1]: [full_date#76]
+Join type: Inner
+Join condition: None
+
+(8) Project
+Output: []
+Input [2]: [event_date#11, full_date#76]
+
+(9) HashAggregate
+Input: []
+Keys: []
+Functions [1]: [partial_count(1)]
+Aggregate Attributes [1]: [count#107L]
+Results [1]: [count#108L]
+
+(10) Exchange
+Input [1]: [count#108L]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [plan_id=188]
+
+(11) HashAggregate
+Input [1]: [count#108L]
+Keys: []
+Functions [1]: [count(1)]
+Aggregate Attributes [1]: [count(1)#105L]
+Results [1]: [count(1)#105L AS rows#90L]
+
+(12) AdaptiveSparkPlan
+Output [1]: [rows#90L]
+Arguments: isFinalPlan=false
+
+===== Subqueries =====
+
+Subquery:1 Hosting operator id = 1 Hosting Expression = event_date#11 IN dynamicpruning#106
+AdaptiveSparkPlan (16)
++- Project (15)
+   +- Filter (14)
+      +- Scan parquet  (13)
+
+
+(13) Scan parquet 
+Output [3]: [full_date#76, month#79, day_of_month#81]
+Batched: true
+Location: InMemoryFileIndex [file:/home/dat/shop-insight/data/warehouse/dim_date]
+PushedFilters: [IsNotNull(month), IsNotNull(day_of_month), EqualTo(month,11), LessThanOrEqual(day_of_month,3), IsNotNull(full_date)]
+ReadSchema: struct<full_date:date,month:smallint,day_of_month:smallint>
+
+(14) Filter
+Input [3]: [full_date#76, month#79, day_of_month#81]
+Condition : ((((isnotnull(month#79) AND isnotnull(day_of_month#81)) AND (month#79 = 11)) AND (day_of_month#81 <= 3)) AND isnotnull(full_date#76))
+
+(15) Project
+Output [1]: [full_date#76]
+Input [3]: [full_date#76, month#79, day_of_month#81]
+
+(16) AdaptiveSparkPlan
+Output [1]: [full_date#76]
+Arguments: isFinalPlan=false
+
+RESULT  [{'rows': 294206}]
+METRICS Scan parquet: {'number of files read': '1', 'size of files read': '5.3 KiB', 'number of output rows': '92'}
+METRICS Scan parquet: {'number of files read': '9', 'number of partitions read': '9', 'size of files read': '8.1 MiB', 'number of output rows': '294,206', 'static number of files read': '93', 'dynamic partition pruning time': '18 ms'}
+
+====================================================================================================
+6. PARQUET FOOTERS (DuckDB, no Spark)
+====================================================================================================
+duckdb 1.5.5
+
+-- silver: per-column statistics, every file
+   event_time  type=INT96  chunks=93   with_min=0    with_max=0
+   price       type=INT64  chunks=93   with_min=93   with_max=93
+   product_id  type=INT64  chunks=93   with_min=93   with_max=93
+   files=93 row_groups_per_file min=1 max=1 rows=4,754,015 created_by='parquet-mr version 1.16.0 (build 402c3810c372d29603e181771acebfecc71bef61)'
+
+-- fact_event: per-column statistics, every file
+   event_time  type=INT96  chunks=31   with_min=0    with_max=0
+   price       type=INT64  chunks=31   with_min=31   with_max=31
+   files=31 row_groups_per_file min=1 max=1 rows=4,754,015 created_by='parquet-mr version 1.16.0 (build 402c3810c372d29603e181771acebfecc71bef61)'
+
+Why INT96 has no min/max: parquet-format leaves the sort order of INT96 undefined
+(parquet.thrift ColumnOrder: 'INT96 (only used for legacy timestamps) - undefined'), so
+parquet-mr writes no min_value/max_value for it, and Spark pushes timestamp predicates only
+for TIMESTAMP_MICROS / TIMESTAMP_MILLIS. Fix: spark.sql.parquet.outputTimestampType=TIMESTAMP_MICROS.
+
+====================================================================================================
+SOURCE OF THIS RUN (presentation_parquet_run.py)
+====================================================================================================
+"""E1 for the Group 15 indexing presentation (plan pages 11-12, Canva pages 12-13).
+
+Read-only on data/. One Spark session, same conf as processing/kata.py
+(SPARK_CONF_DIR=conf/ before the JVM starts), plus DuckDB for the Parquet footers.
+Prints the evidence text to stdout.
+
+Run from anywhere:
+    /home/dat/shop-insight/.venv/bin/python presentation_parquet_run.py > presentation_parquet_run.txt
+"""
+import contextlib
+import datetime as dt
+import io
+import json
+import os
+import platform
+import socket
+import subprocess
+import sys
+import urllib.request
+from pathlib import Path
+
+REPO = Path("/home/dat/shop-insight")
+os.environ["SPARK_CONF_DIR"] = str(REPO / "conf")
+
+from pyspark.sql import SparkSession, functions as F  # noqa: E402
+
+SILVER = REPO / "data" / "silver"
+DIM_DATE = REPO / "data" / "warehouse" / "dim_date"
+FACT_EVENT = REPO / "data" / "warehouse" / "fact_event"
+RULE = "=" * 100
+
+
+def section(title):
+    print()
+    print(RULE)
+    print(title)
+    print(RULE)
+
+
+def explain(df):
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        df.explain(mode="formatted")
+    return buf.getvalue().rstrip()
+
+
+def last_scan_metrics(spark):
+    """Scan-node metrics of the most recent SQL execution, from the Spark UI REST API."""
+    sc = spark.sparkContext
+    url = f"{sc.uiWebUrl}/api/v1/applications/{sc.applicationId}/sql?details=true&planDescription=false&length=1000"
+    with urllib.request.urlopen(url) as r:
+        executions = json.load(r)
+    last = max(executions, key=lambda e: e["id"])
+    out = []
+    for node in last["nodes"]:
+        if node["nodeName"].startswith("Scan parquet"):
+            m = {x["name"]: x["value"] for x in node["metrics"]}
+            keep = ["number of files read", "number of partitions read", "size of files read",
+                    "number of output rows", "static number of files read", "dynamic partition pruning time"]
+            out.append((node["nodeName"], {k: m[k] for k in keep if k in m}))
+    return out
+
+
+def run(spark, label, df):
+    section(label)
+    print(explain(df))
+    rows = df.collect()
+    print()
+    print(f"RESULT  {[r.asDict() for r in rows]}")
+    for name, m in last_scan_metrics(spark):
+        print(f"METRICS {name}: {m}")
+
+
+def main():
+    spark = (SparkSession.builder.master("local[*]")
+             .appName("e1_presentation_parquet_run").getOrCreate())
+    jvm = spark.sparkContext._jvm
+    head = subprocess.run(["git", "-C", str(REPO), "rev-parse", "--short", "HEAD"],
+                          capture_output=True, text=True).stdout.strip()
+    success = SILVER / "_SUCCESS"
+
+    print("E1 - Spark and Parquet evidence for the indexing presentation")
+    print("Plan pages 11-12 (Canva pages 12-13): '93 thư mục ... chỉ mở 1/93 file' and")
+    print("'cột thời gian lưu kiểu cũ INT96 ... không có min/max; lọc theo giờ không bỏ được row group nào'.")
+    section("HEADER")
+    print(f"date        {dt.datetime.now().astimezone().isoformat(timespec='seconds')}")
+    print(f"machine     {socket.gethostname()} | {platform.platform()} | {os.cpu_count()} logical cores")
+    print(f"versions    Python {platform.python_version()} | Spark {spark.version} | "
+          f"Java {jvm.java.lang.System.getProperty('java.version')}")
+    print(f"repo        {REPO} @ {head}; SPARK_CONF_DIR=conf/, master local[*]")
+    print(f"data state  silver written {dt.datetime.fromtimestamp(success.stat().st_mtime).isoformat(timespec='seconds')} "
+          f"(+07) by processing/batch_silver.py")
+    dirs = sorted(p for p in SILVER.glob("event_date=*/event_type=*") if p.is_dir())
+    files = sorted(SILVER.glob("event_date=*/event_type=*/*.parquet"))
+    dates = sorted({p.parent.name for p in dirs})
+    print(f"            silver = {len(dates)} event_date directories ({dates[0]} .. {dates[-1]}), "
+          f"{len(dirs)} event_date=*/event_type=* directories, {len(files)} parquet files")
+    print("command     .venv/bin/python presentation_parquet_run.py (source at the end of this file)")
+    print()
+    print("Reading notes")
+    print("  - 'number of files read' counts the files left after partition pruning.")
+    print("  - Scan 'number of output rows' counts rows the Parquet reader returned before the Filter node")
+    print("    (spark.sql.parquet.recordLevelFilter.enabled=false), so output rows = all rows means no")
+    print("    row group was skipped.")
+    print("  - PushedFilters prints timestamp literals in the JVM default time zone (+07 on this machine),")
+    print("    while the Filter node prints them in the session time zone (UTC). Same instant, different")
+    print("    text: crop the PushedFilters line out of any overlay.")
+
+    section("1. EFFECTIVE DEFAULTS (spark.conf.get; conf/spark-defaults.conf sets none of these)")
+    for key in ["spark.sql.parquet.outputTimestampType",
+                "spark.sql.parquet.filterPushdown",
+                "spark.sql.parquet.recordLevelFilter.enabled",
+                "spark.sql.optimizer.dynamicPartitionPruning.enabled",
+                "spark.sql.optimizer.dynamicPartitionPruning.reuseBroadcastOnly",
+                "spark.sql.autoBroadcastJoinThreshold",
+                "spark.sql.join.preferSortMergeJoin",
+                "spark.sql.streaming.stateStore.providerClass",
+                "spark.sql.session.timeZone"]:
+        print(f"{key} = {spark.conf.get(key)}")
+
+    silver = spark.read.parquet(str(SILVER))
+    day = dt.date(2019, 11, 15)
+
+    run(spark, "2. Q0  no filter: every directory is read",
+        silver.agg(F.count(F.lit(1)).alias("rows")))
+
+    run(spark, "3. Q1  one day and one event type, both partition columns: 1 directory, 1 file",
+        silver.where((F.col("event_date") == F.lit(day)) & (F.col("event_type") == "purchase"))
+              .agg(F.count(F.lit(1)).alias("rows"), F.sum("price").alias("gmv")))
+
+    run(spark, "4. Q2  one hour on event_time only (not a partition column; INT96, no min/max)",
+        silver.where((F.col("event_time") >= F.lit("2019-11-15 10:00:00").cast("timestamp"))
+                     & (F.col("event_time") < F.lit("2019-11-15 11:00:00").cast("timestamp")))
+              .agg(F.count(F.lit(1)).alias("rows")))
+
+    dim_date = spark.read.parquet(str(DIM_DATE))
+    print()
+    print(f"dim_date columns: {dim_date.columns}")
+    picked = dim_date.where((F.col("month") == 11) & (F.col("day_of_month") <= 3)).select("full_date")
+    run(spark, "5. Q3  dynamic partition pruning: join on the partition column, filter only on the small side",
+        silver.join(picked, silver["event_date"] == picked["full_date"])
+              .agg(F.count(F.lit(1)).alias("rows")))
+
+    spark.stop()
+
+    section("6. PARQUET FOOTERS (DuckDB, no Spark)")
+    import duckdb
+    con = duckdb.connect()
+    print(f"duckdb {duckdb.__version__}")
+    for name, glob in [("silver", f"{SILVER}/*/*/*.parquet"), ("fact_event", f"{FACT_EVENT}/*/*.parquet")]:
+        print()
+        print(f"-- {name}: per-column statistics, every file")
+        q = f"""
+            select path_in_schema as col, type, count(*) as chunks,
+                   count(stats_min_value) as with_min, count(stats_max_value) as with_max
+            from parquet_metadata('{glob}')
+            where path_in_schema in ('event_time', 'product_id', 'price')
+            group by all order by col"""
+        for r in con.sql(q).fetchall():
+            print(f"   {r[0]:<11} type={r[1]:<6} chunks={r[2]:<4} with_min={r[3]:<4} with_max={r[4]}")
+        q = f"""
+            select count(*) as files, min(num_row_groups), max(num_row_groups),
+                   sum(num_rows), min(created_by), max(created_by)
+            from parquet_file_metadata('{glob}')"""
+        f, rg_min, rg_max, rows, cb_min, cb_max = con.sql(q).fetchone()
+        print(f"   files={f} row_groups_per_file min={rg_min} max={rg_max} rows={rows:,} created_by={cb_min!r}"
+              + ("" if cb_min == cb_max else f" .. {cb_max!r}"))
+    print()
+    print("Why INT96 has no min/max: parquet-format leaves the sort order of INT96 undefined")
+    print("(parquet.thrift ColumnOrder: 'INT96 (only used for legacy timestamps) - undefined'), so")
+    print("parquet-mr writes no min_value/max_value for it, and Spark pushes timestamp predicates only")
+    print("for TIMESTAMP_MICROS / TIMESTAMP_MILLIS. Fix: spark.sql.parquet.outputTimestampType=TIMESTAMP_MICROS.")
+
+    section("SOURCE OF THIS RUN (presentation_parquet_run.py)")
+    print(Path(__file__).read_text().rstrip())
+
+
+if __name__ == "__main__":
+    main()

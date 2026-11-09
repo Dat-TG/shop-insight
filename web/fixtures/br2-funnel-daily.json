@@ -3,32 +3,32 @@
   "_endpoint": "GET /api/br2/funnel",
   "_warehouse": "Parquet",
   "_table": "funnel_daily",
-  "_gold_columns": "event_date, category_l1, views, carts, purchases, cr_view_to_cart, cr_cart_to_purchase",
-  "_source": "fact_session_funnel",
-  "_note": "API returns 3 rows (one per stage). funnel_stage source: 0=no events, 1=view, 2=cart, 3=purchase",
+  "_gold_columns": "event_date, category_l1, views, carts, purchases, cr_view_to_cart, cr_cart_to_purchase, view_events, cart_events, purchase_events",
+  "_source": "fact_session_funnel ('all' rows); fact_event + dim_product on product_sk (category rows)",
+  "_note": "API returns 3 rows (one per stage). count = *_events (raw events), session_count = views/carts/purchases (sessions with funnel_stage >= 1 / >= 2 / = 3), conversion_rate = session_count / view session_count. default = the measured response for 2019-11-01..2019-11-30, category all (2026-10-07).",
   "default": {
     "data": [
       {
         "step": "view",
-        "count": 3801822,
-        "session_count": 1058882,
+        "count": 4451411,
+        "session_count": 966143,
         "conversion_rate": 1.0
       },
       {
         "step": "cart",
-        "count": 474997,
-        "session_count": 316027,
-        "conversion_rate": 0.1249
+        "count": 213486,
+        "session_count": 131498,
+        "conversion_rate": 0.1361
       },
       {
         "step": "purchase",
-        "count": 186720,
-        "session_count": 154672,
-        "conversion_rate": 0.0491
+        "count": 64883,
+        "session_count": 54676,
+        "conversion_rate": 0.0566
       }
     ],
     "meta": {
-      "ms": 18.3,
+      "ms": 16.1,
       "warehouse": "Parquet",
       "partitions": 30,
       "rows": 3

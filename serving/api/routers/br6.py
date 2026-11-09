@@ -43,49 +43,37 @@ Semi-additive: stock_on_hand is a point-in-time snapshot. batch_gold.py
     deletes and rewrites each warehouse partition on every run, so the table
     holds exactly one snapshot. Summing stock_on_hand across warehouses is
     valid (total network stock); summing it across dates never is.
-
-Now:  returns fixture data from web/fixtures/br6-stockout-risk.json -> "default",
-      with meta.warehouse "Fixture" and partitions 0, because nothing was read
-      from storage (docs/API_CONTRACT.md section 1.2). The fixture file itself
-      carries the production meta shown above.
-Next: replace _load_fixture() with cassandra-driver, one query per warehouse:
-          SELECT warehouse_id, days_to_stockout, product_id,
-                 stock_on_hand, velocity_7d
-          FROM stockout_risk
-          WHERE warehouse_id = ? [AND days_to_stockout <= ?]
-      warehouse_id given -> one query; omitted -> five. meta.partitions is the
-      number of warehouses queried. Merge the results by days_to_stockout
-      ascending and set meta.warehouse to "Cassandra".
 """
 
 from __future__ import annotations
 
-import json
+import functools
 import time
-from pathlib import Path
-from typing import Any
 
 from fastapi import APIRouter, Query
 
-from serving.api.models import ApiResponse, QueryMeta
+from serving.api.cassandra import session
+from serving.api.models import ApiResponse, QueryMeta, StockoutRow
 
 router = APIRouter(prefix="/api/br6", tags=["BR6 — Stockout Risk"])
 
-# Path to the canonical fixture bundle (relative to the repository root).
-_REPO = Path(__file__).resolve().parents[3]
-_FIXTURE_PATH = _REPO / "web" / "fixtures" / "br6-stockout-risk.json"
+_LIMIT_PER_WAREHOUSE = 100
 
 
-def _load_fixture(empty: bool = False) -> list[dict[str, Any]]:
-    """Return fixture data rows from the canonical bundle.
+@functools.cache
+def _select_with_max_days():
+    return session().prepare(
+        f"SELECT warehouse_id, days_to_stockout, product_id, stock_on_hand, velocity_7d "
+        f"FROM stockout_risk WHERE warehouse_id = ? AND days_to_stockout <= ? LIMIT {_LIMIT_PER_WAREHOUSE}"
+    )
 
-    Reads the "empty" scenario when empty=True, otherwise "default".
-    Next: swap this function body for one cassandra-driver query per warehouse.
-    """
-    with open(_FIXTURE_PATH) as fh:
-        bundle = json.load(fh)
-    scenario = "empty" if empty else "default"
-    return bundle[scenario]["data"]
+
+@functools.cache
+def _select_all_days():
+    return session().prepare(
+        f"SELECT warehouse_id, days_to_stockout, product_id, stock_on_hand, velocity_7d "
+        f"FROM stockout_risk WHERE warehouse_id = ? LIMIT {_LIMIT_PER_WAREHOUSE}"
+    )
 
 
 @router.get(
@@ -96,10 +84,7 @@ def _load_fixture(empty: bool = False) -> list[dict[str, Any]]:
         "Returns SKUs ordered by days until stockout, most urgent first, for one "
         "warehouse or all five.  `days_to_stockout = 9999.0` means no sales in the "
         "last 7 days.  The table holds one snapshot: summing `stock_on_hand` across "
-        "warehouses is valid, across dates never.\n\n"
-        "**Now**: returns fixture data (warehouse=Fixture, partitions=0).  "
-        "**Next**: one Cassandra query per warehouse on `stockout_risk`, then "
-        "warehouse=Cassandra."
+        "warehouses is valid, across dates never."
     ),
 )
 def get_stockout(
@@ -110,19 +95,42 @@ def get_stockout(
         None, gt=0, description="Only SKUs with days_to_stockout <= max_days; omit for all"
     ),
 ) -> ApiResponse:
-    t0 = time.perf_counter()
+    warehouses = [warehouse_id] if warehouse_id is not None else [1, 2, 3, 4, 5]
+    all_rows = []
+    started = time.perf_counter()
 
-    # Fixture for now.  Next: one query per warehouse on stockout_risk.
-    data = _load_fixture(empty=False)
+    if max_days is not None:
+        stmt = _select_with_max_days()
+        for wh in warehouses:
+            rows = session().execute(stmt, (wh, float(max_days)))
+            all_rows.extend(rows)
+    else:
+        stmt = _select_all_days()
+        for wh in warehouses:
+            rows = session().execute(stmt, (wh,))
+            all_rows.extend(rows)
 
-    elapsed_ms = (time.perf_counter() - t0) * 1000
+    # Sort merged rows: days_to_stockout ascending (most urgent first), then product_id
+    all_rows.sort(key=lambda r: (r.days_to_stockout, r.product_id))
+    elapsed_ms = (time.perf_counter() - started) * 1000
+
+    data = [
+        StockoutRow(
+            warehouse_id=row.warehouse_id,
+            days_to_stockout=round(float(row.days_to_stockout), 1),
+            product_id=row.product_id,
+            stock_on_hand=row.stock_on_hand,
+            velocity_7d=round(float(row.velocity_7d), 2),
+        )
+        for row in all_rows
+    ]
 
     return ApiResponse(
         data=data,
         meta=QueryMeta(
             ms=round(elapsed_ms, 2),
-            warehouse="Fixture",  # "Cassandra" once the driver reads stockout_risk
-            partitions=0,
+            warehouse="Cassandra",
+            partitions=len(warehouses),
             rows=len(data),
         ),
     )

@@ -180,47 +180,73 @@ customers drop off, with conversion rates. Supports date-range and category filt
 | `end_date` | `string` | No | `"2019-11-30"` | Inclusive end `YYYY-MM-DD` |
 | `category_l1` | `string` | No | `"all"` | Category filter or `"all"` |
 
-**Storage engine:** Parquet (future: DuckDB over Parquet)
+**Storage engine:** Parquet, read by DuckDB (`warehouse` stays `"Parquet"`, §2)
 
-**Gold table:** `funnel_daily`
+**Gold table:** `funnel_daily`, partitioned `event_date=YYYY-MM-DD/`, built by `batch_gold.py`
 
 **Gold columns:**
 ```
-event_date, category_l1, views, carts, purchases, cr_view_to_cart, cr_cart_to_purchase
+event_date, category_l1, views, carts, purchases, cr_view_to_cart, cr_cart_to_purchase,
+view_events, cart_events, purchase_events
 ```
 
-**Source:** `fact_session_funnel`
+The three `*_events` columns were added in W41 (Dat) so that gold carries both
+measures the response needs: `views`/`carts`/`purchases` count **sessions** and
+feed `session_count`; `*_events` count **raw events** and feed `count`. The
+response fields did not change.
+
+**Source:** `fact_session_funnel` for the `"all"` rows; for the category rows,
+`fact_event` joined to `dim_product` by equality on the `product_sk` the fact
+already carries (never a range join on the SCD2 validity dates).
 
 **Source `funnel_stage` values:**
 | Value | Meaning |
 |---|---|
-| `0` | Session has no recorded events (internal; not exposed in API) |
+| `0` | Session has no recorded events (internal; not exposed in API; 0 rows measured) |
 | `1` | Furthest milestone is `view` |
 | `2` | Furthest milestone is `cart` |
 | `3` | Furthest milestone is `purchase` (= conversion) |
+
+**Definitions:**
+- `event_date` is the day the **session started**, in Vietnam time (UTC+7).
+- A session **reaches** a step when its `funnel_stage` is at least that step:
+  view = `funnel_stage >= 1`, cart = `>= 2`, purchase = `= 3`. A purchase with no
+  cart event therefore counts as reaching the cart, so session counts always
+  decrease across the three steps. Event counts do not: on 1-7 Nov the source has
+  more purchase events than cart events.
+- For a category, the stage is the furthest step the session reached **on that
+  category's products alone**. A session that touches two categories counts in
+  both, so the category rows do not add up to `"all"`. `"all"` is a stored row per
+  date, never a sum made by the API (as BR1's `"all"`).
+- Over a date range the API **sums the counts** and recomputes the rates from the
+  sums. It never averages `cr_view_to_cart` or `cr_cart_to_purchase`. Those two
+  are per-day, per-category ratios kept for ad-hoc reads, `NULL` when the
+  denominator is 0.
+- `partitions` is the number of `event_date` directories inside the requested range.
 
 **Response row fields** (3 rows per request, one per stage):
 
 | Field | Type | Nullable | Notes |
 |---|---|---|---|
 | `step` | `"view" \| "cart" \| "purchase"` | No | Funnel stage |
-| `count` | `integer` | No | Raw event count at this stage |
-| `session_count` | `integer` | No | Distinct sessions reaching this stage |
-| `conversion_rate` | `number` | No | Fraction relative to view step (view = 1.0) |
+| `count` | `integer` | No | Raw event count at this stage (`view_events` / `cart_events` / `purchase_events`) |
+| `session_count` | `integer` | No | Sessions reaching this stage (`views` / `carts` / `purchases`) |
+| `conversion_rate` | `number` | No | `session_count` / view `session_count`, rounded to 4 places (view = 1.0) |
 
 **Sorting:** Fixed order: view, cart, purchase.
 
-**Empty result:** HTTP 200, `data: []`.
+**Empty result:** HTTP 200, `data: []`. Also for a malformed date, `start_date`
+after `end_date`, a range with no stored date, or an unknown `category_l1`.
 
-**Example response:**
+**Example response** (the default request, measured 2026-10-07):
 ```json
 {
   "data": [
-    { "step": "view",     "count": 3801822, "session_count": 1058882, "conversion_rate": 1.0 },
-    { "step": "cart",     "count": 474997,  "session_count": 316027,  "conversion_rate": 0.1249 },
-    { "step": "purchase", "count": 186720,  "session_count": 154672,  "conversion_rate": 0.0491 }
+    { "step": "view",     "count": 4451411, "session_count": 966143, "conversion_rate": 1.0 },
+    { "step": "cart",     "count": 213486,  "session_count": 131498, "conversion_rate": 0.1361 },
+    { "step": "purchase", "count": 64883,   "session_count": 54676,  "conversion_rate": 0.0566 }
   ],
-  "meta": { "ms": 18.3, "warehouse": "Parquet", "partitions": 30, "rows": 3 }
+  "meta": { "ms": 16.1, "warehouse": "Parquet", "partitions": 30, "rows": 3 }
 }
 ```
 
@@ -578,11 +604,11 @@ CREATE TABLE order_velocity_alerts (
 
 **Severity vocabulary (frozen):**
 
-| Value | Meaning |
-|---|---|
-| `"low"` | Within expected range |
-| `"medium"` | Moderately above baseline |
-| `"high"` | Flagged for manual review |
+| Value | Meaning | Threshold (5-minute window) |
+|---|---|---|
+| `"low"` | Within expected range | 1 order |
+| `"medium"` | Moderately above baseline | 2–3 orders |
+| `"high"` | Flagged for manual review | ≥ 4 orders |
 
 **Response row fields:**
 
@@ -603,11 +629,12 @@ CREATE TABLE order_velocity_alerts (
 ```json
 {
   "data": [
-    { "event_date": "2019-11-29", "window_start": "2019-11-29T14:10:00+07:00", "user_id": 541312140, "order_count": 18, "total_value": 8920.50, "severity": "high" },
-    { "event_date": "2019-11-29", "window_start": "2019-11-29T14:05:00+07:00", "user_id": 530253200, "order_count": 7,  "total_value": 3240.00, "severity": "medium" },
-    { "event_date": "2019-11-29", "window_start": "2019-11-29T14:00:00+07:00", "user_id": 572756958, "order_count": 2,  "total_value": 640.50,  "severity": "low" }
+    { "event_date": "2019-11-29", "window_start": "2019-11-29T14:10:00+07:00", "user_id": 541312140, "order_count": 5, "total_value": 8920.50, "severity": "high" },
+    { "event_date": "2019-11-29", "window_start": "2019-11-29T14:05:00+07:00", "user_id": 530253200, "order_count": 4, "total_value": 3240.00, "severity": "high" },
+    { "event_date": "2019-11-29", "window_start": "2019-11-29T14:05:00+07:00", "user_id": 515915625, "order_count": 3, "total_value": 1450.75, "severity": "medium" },
+    { "event_date": "2019-11-29", "window_start": "2019-11-29T14:00:00+07:00", "user_id": 572756958, "order_count": 1, "total_value": 640.50,  "severity": "low" }
   ],
-  "meta": { "ms": 7.8, "warehouse": "Cassandra", "partitions": 1, "rows": 3 }
+  "meta": { "ms": 7.8, "warehouse": "Cassandra", "partitions": 1, "rows": 4 }
 }
 ```
 

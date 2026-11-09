@@ -1,0 +1,39 @@
+                                                                                          QUERY PLAN                                                                                          
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ Sort  (cost=10138.57..10138.61 rows=14 width=49) (actual time=26.963..30.911 rows=14 loops=1)
+   Sort Key: (sum(f.price)) DESC
+   Sort Method: quicksort  Memory: 25kB
+   Buffers: shared hit=10217 read=11
+   ->  Finalize GroupAggregate  (cost=10122.83..10138.30 rows=14 width=49) (actual time=26.443..30.833 rows=14 loops=1)
+         Group Key: p.category_l1
+         Buffers: shared hit=10214 read=11
+         ->  Gather Merge  (cost=10122.83..10137.99 rows=14 width=49) (actual time=26.417..30.797 rows=24 loops=1)
+               Workers Planned: 1
+               Workers Launched: 1
+               Buffers: shared hit=10214 read=11
+               ->  Partial GroupAggregate  (cost=9122.82..9136.40 rows=14 width=49) (actual time=19.475..19.860 rows=12 loops=2)
+                     Group Key: p.category_l1
+                     Buffers: shared hit=10214 read=11
+                     ->  Sort  (cost=9122.82..9126.17 rows=1341 width=15) (actual time=19.461..19.544 rows=1126 loops=2)
+                           Sort Key: p.category_l1
+                           Sort Method: quicksort  Memory: 107kB
+                           Buffers: shared hit=10214 read=11
+                           Worker 0:  Sort Method: quicksort  Memory: 68kB
+                           ->  Nested Loop  (cost=60.67..9053.16 rows=1341 width=15) (actual time=1.833..18.661 rows=1126 loops=2)
+                                 Buffers: shared hit=10206 read=11
+                                 ->  Parallel Bitmap Heap Scan on fact_event_20191129 f  (cost=60.25..1806.17 rows=1341 width=14) (actual time=1.700..6.295 rows=1126 loops=2)
+                                       Recheck Cond: (event_type_key = 3)
+                                       Filter: (event_date = '2019-11-29'::date)
+                                       Heap Blocks: exact=702
+                                       Buffers: shared hit=1197 read=11
+                                       ->  Bitmap Index Scan on fact_event_20191129_user_sk_event_time_idx  (cost=0.00..59.68 rows=2280 width=0) (actual time=2.357..2.358 rows=2252 loops=1)
+                                             Buffers: shared read=11
+                                 ->  Index Scan using dim_product_pkey on dim_product p  (cost=0.42..5.40 rows=1 width=17) (actual time=0.010..0.010 rows=1 loops=2252)
+                                       Index Cond: (product_sk = f.product_sk)
+                                       Buffers: shared hit=9009
+ Planning:
+   Buffers: shared hit=613 read=10 dirtied=7
+ Planning Time: 19.713 ms
+ Execution Time: 31.372 ms
+(35 rows)
+

@@ -1945,3 +1945,753 @@ Made by AI, flagged for review:
 - **The events are not counted twice.** `check_fact_event()` already runs `user_scd2.check_events()`.
 - **`dim_user.py` run alone now prints its six SCD2 counts before the three event counts.** The counts and the
   pass rule are unchanged.
+
+## Session 21 — 6-7 October 2026 (W41)
+
+**Tool:** Claude Code (Opus 5.5).
+**Scope:** BR2 end to end (tracker row 68), branch `w41-br2-slice`. `batch_gold.py` builds `funnel_daily` from
+`fact_session_funnel`; `GET /api/br2/funnel` reads it with DuckDB; the BR2 screen shows real numbers and a
+by-category table. Planning was a read-only workflow: three agents mapped the data, the code and the project's
+rules, three Plan agents designed it from different angles, one merged them and two critics reviewed the merge.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| `processing/batch_gold.py` — `furthest_stage()`, `build_session_categories()`, `funnel_measures()`, `build_funnel_daily()`, `session_category_checks()`, `funnel_daily_stats()`, `run_funnel_daily()`; `main()` checks four `_SUCCESS` files and runs BR4 and BR2 independently | Run and verified (below) |
+| `serving/api/routers/br2.py` — `_load_fixture()` replaced by `_partitions()` + `_read_funnel()` (DuckDB over the `event_date` directories in range); `warehouse="Parquet"`, `partitions` = directories read; docstring rewritten | Run and verified |
+| `web/src/pages/BR2Page.tsx` — KPIs, bars and drop-off on `session_count`, rates guarded against 0, the 14 categories copied from `BR1Page.tsx`, dates up to 2019-12-01, a 15-call "Conversion by Category" table with its own footer, notes on the counting rule and 15 Nov; `web/src/index.css` — `.panel__note`, `.category-button`, the selected row | Built and driven in headless Chromium |
+| `docs/API_CONTRACT.md` §4 — the three `*_events` gold columns, sources, definitions, empty cases, a measured example; response fields unchanged | AI-drafted, team sign-off pending |
+| `web/fixtures/br2-funnel-daily.json` — the measured default response and metadata; `serving/api/models.py`, `web/src/types/api.ts` — comments only | AI-drafted |
+| `SYSTEM_DESIGN.md` §3.1 (purchases without a cart, 1-7 Nov) and §7 (columns, the `'all'` row, BR1 vs BR2 per day); `CLAUDE.md` and `README.md` status; one phrase in `docs/STREAMING_PATTERN.md` and `docs/SPARK_GUIDE_VI.md` | AI-drafted |
+| `docs/evidence/gate2a_br2_run.txt` (new) — text copy of the run below | Captured from the run |
+| `docs/AI_USAGE.md` — this session | AI-drafted |
+
+### How it was checked
+
+| Claim | How it was measured |
+|---|---|
+| The gold job passes and agrees with its inputs | `python processing/batch_gold.py` on Dat's machine, 29 s: `RFM_SEGMENTS OK`; pre-write checks 0 events lost, 0 without a category, 0 sessions whose best category stage differs from `funnel_stage`; 465 rows, 31 partitions, 15 categories incl. `all`; `all` sessions 970,797 / 132,002 / 54,904 equal `fact_session_funnel`; `all` and category events both 4,474,579 / 214,286 / 65,150 equal `fact_event` per `event_type_key`; 0 rows where sessions rise; `FUNNEL_DAILY OK`, `GOLD OK` |
+| Gold equals the star | One-off DuckDB recompute from `fact_session_funnel`, `fact_event`, `dim_product`: `EXCEPT` 0 rows both ways on 465 rows; `cr_*` equal the ratios on all 465 (NULL on the 50 with `carts = 0`) |
+| No range join | `grep -nE "valid_from\|valid_to\|BETWEEN" processing/batch_gold.py serving/api/routers/br2.py`: no match |
+| The API returns the gold, under 2 s | `uvicorn` + curl, slowest of 3 warm: defaults 16.36 ms, 30 partitions, sessions 966,143 / 131,498 / 54,676, rates 1.0 / 0.1361 / 0.0566; 15 Nov 1 partition; 11-01..12-01 31 partitions. Bad date, start > end, October, unknown category: 200 and `data []` |
+| Contract and types | `python tests/test_fixtures.py`: all 8 bundles pass; `cd web && npx tsc -b && npm run build`: passes |
+| The screen works | Built app driven over the Chrome DevTools Protocol (scratch script, not committed): the category select, both dates and a table row change the KPIs and the footer's partition count; stationery on 1 Nov shows "—", no NaN; 1-7 Nov still decreases |
+| 8,845 purchases without a cart, 6,649 on 1-7 Nov, 695 sessions without a view | DuckDB on `fact_session_funnel`: `count_if(purchase_count>0 and cart_count=0)`, the same with `session_start_date <= '2019-11-07'`, `count_if(view_count=0)` |
+| 117,396 sessions touch more than one category | DuckDB: `fact_event JOIN dim_product USING (product_sk)`, `group by user_session having count(distinct category_l1) > 1` |
+| 7,433 sessions cross midnight; 17 Nov purchases 11,991 (BR2) vs 11,736 (BR1) | DuckDB on `fact_event` (`count(distinct event_date) > 1` per session) and `sum(purchase_count)` on `fact_session_funnel` vs `count(*)` of purchase events with `event_date = '2019-11-17'` |
+
+### What the AI got wrong, and was corrected on
+
+- **The chart had no bars.** The first headless screenshot showed axes only: Recharts' entry animation never ran
+  under the headless clock, and nothing proved it would in a recording. Fixed with `isAnimationActive={false}`,
+  as BR1's chart already does.
+- **The plan made the category table optional.** A critic found that `br-slice-auditor` checks the screen
+  against br-slice section 4, which lists the table, so an optional table could fail the gate. It became
+  must-ship (Dat's decision below).
+- **The plan's code comment named the tokens its own grep guard bans** (`valid_from`, `valid_to`, `BETWEEN`), so
+  the guard could never pass. The comment says "a range join on the SCD2 validity dates" instead.
+- **The first KPI label was "Sessions with a view".** 695 sessions reach the view step with no view event, so it
+  is "Sessions".
+- **The planned drop-off divided by zero.** Stationery on 1 Nov has 0 cart sessions; the column now shows "—".
+- **The plan rewrote SYSTEM_DESIGN 8 step 4 and section 10 to "BR4 and BR2".** Those lines describe the design,
+  and Tin's branch adds BR6 to `batch_gold.py` this week; they were left alone.
+- **The data-measuring agent returned nothing.** Its numbers came from the code-map agent, and every number in
+  the docs was measured again in this session before it went in.
+- **The new status text gave `funnel_daily` only half its lineage.** CLAUDE.md said "from `fact_session_funnel`",
+  and SYSTEM_DESIGN §7's older first line now contradicted the new paragraph under it; the category rows come
+  through `fact_event` + `dim_product`. Found by the review workflow's contract reviewer. Fixed in CLAUDE.md,
+  SYSTEM_DESIGN §5.2's "Serves" row and §7, README, `models.py`'s storage map, BR_SCOPE and the br-slice skill.
+- **README declared BR7 live, but its run order never ran `processing/gold_br7.py`.** On this machine
+  `data/gold/product_affinity` does not exist and `/api/br7/*` answers 500. Found by the same reviewer; the run
+  order now has the step. BR7's gold itself was not built here.
+
+### Judgement that stayed with the team
+
+Dat decided (7 October, in this session):
+- **D1.** `views`/`carts`/`purchases` become session counts, and gold gains `view_events`, `cart_events` and
+  `purchase_events`; the response is unchanged. This answers tracker row 46's note, "đổi cột gold hay đổi hợp đồng".
+- **D4.** The by-category table is built from 15 calls to the existing endpoint, as BR4 builds its heatmap. No
+  contract change; it ships with the slice.
+
+Needs all four before merge: the gold column names are frozen (API_CONTRACT §4, SYSTEM_DESIGN 7, PLAN.md), so D1
+goes to the group in Dat's Wednesday checkpoint. Not yet agreed.
+
+Made by AI, flagged for review:
+- **Reaching a step is `funnel_stage` >= 1 / >= 2 / = 3**, as `models.py` already said, not a non-null milestone
+  timestamp: with timestamps, 1-7 Nov shows more sessions at purchase than at cart.
+- **`conversion_rate` is a session ratio**, recomputed from the summed counts; the W38 fixture used an event
+  ratio. Event counts rise from cart to purchase on 1-7 Nov, which would break BR_SCOPE's "counts decrease".
+- **A category row stages each session on that category's events alone.** Giving every touched category the
+  session's own `funnel_stage` would count 63,351 purchases against 54,904 sessions that bought.
+- **Bad input returns 200 and `data []`**, as BR4 does and contract §1.3 says, not BR1's 422.
+- **The date inputs allow 2019-12-01**, the 31st partition; the defaults stay 11-01..11-30.
+- **CLAUDE.md and README now say BR7 is live too.** `br7.py` reads Parquet and its screen fetches it (Nguyen to
+  confirm).
+
+Closed here: `funnel_daily` has no session count (Sessions 8, 9, 10: lines 728, 860, 997); BR2's gold column or
+contract (Session 11, line 1098); `funnel_daily` needs `category_l1` (Session 18, line 1807).
+
+Carried forward:
+- `FunnelCategoryRow` in `models.py` and `api.ts` still has no route, fixture or contract section (Tin, 1d93340).
+  The screen does not use it.
+- SYSTEM_DESIGN 5.2's star still links `fact_session_funnel` to `dim_product` (Session 11, line 1103).
+- Tin's `origin/w41-tin-merge-br6` rewrites `batch_gold.py`'s `main()` (argparse, "BATCH GOLD OK"): whoever merges
+  second wires in the other's run function. His `br4.py` fallback labels fixture data `"Parquet"`, which the
+  contract calls fabricated meta; raise it in his review.
+- For Khang's report: the 1-7 Nov purchases without a cart, and BR2's 15 Nov (131 purchase sessions of 53,553).
+- The Gate 2a screenshot of `/br2` with its footer goes to the group chat (Dat).
+
+## Session 22 — 12 October 2026 (W42)
+
+**Tool:** Claude Code (Opus 5.5).
+**Scope:** Dat's review of Nguyen's PR #26 (BR5 end to end), then a run of BR5 on the PR head and small fixes on
+`w41-nguyen` before the merge. No query, endpoint or screen logic was changed: Nguyen's code is as Nguyen pushed it.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| Review of #26 — read-only, against CLAUDE.md, SYSTEM_DESIGN 6.1, API_CONTRACT §7, `STREAMING_PATTERN.md` and the Spark trap list; no blocking finding. Not posted (Dat's decision below) | Human-approved |
+| `=` — the empty file at the repo root that came in with 2e38359, removed | Run and verified (nothing reads it) |
+| `processing/streaming_gold.py` — docstring status line: BR5 `done (W41)` | Comment only |
+| `serving/api/routers/br5.py`, `web/src/pages/BR5Page.tsx` — "a few thousand rows at most" replaced with the measured partition sizes; final newline added | Comment only |
+| `SYSTEM_DESIGN.md` §6.1 — the same claim replaced with the measured sizes | AI-drafted |
+| `CLAUDE.md` and `README.md` status — BR5 live, `GET /api/br5/carts` reads Cassandra, Gate 2a open only for BR8 and BR6 | AI-drafted |
+| `docs/evidence/gate2a_br5_run.txt` (new) — text copy of the run below | Captured from the run |
+| `docs/AI_USAGE.md` — this session | AI-drafted |
+
+### How it was checked
+
+| Claim | How it was measured |
+|---|---|
+| BR5's stream runs and writes | Dat's machine, branch `w41-nguyen` at 2e38359: `python processing/streaming_gold.py --fresh` (`READY: 3 of 4 jobs`), then `python ingestion/replayer.py --speed 60 --start "2019-11-17 08:00:00"` for 78 files (15:00-21:30 Vietnam time, 187,468 rows). First carts in batch 9; 70 batches upserted 2,621 carts; no exception; Ctrl-C stopped cleanly |
+| The stream's rows are right | Scratch script (not committed): `abandoned_carts` for 2019-11-17 read with cassandra-driver against DuckDB on silver over the same hours, sessions split at 30-minute gaps, cart and no purchase, last event + 30 min <= the final watermark 21:19:59, the latest split per session kept. 2,600 rows both sides, 2,600 identical in value, items, user and time, 0 only on one side; Σ`cart_value` 1,411,565.93 both |
+| The API returns them sorted, with measured meta | `uvicorn` + curl: `?event_date=2019-11-17` 13.6 ms, 1 partition, 2,600 rows; no parameters 2 partitions (the `DISTINCT` listing + the day); `min_value=500` 721 rows, lowest 501.03; `2019-11-16` 200 with `data []`. Each sorted by `cart_value` descending, `meta.rows == len(data)` |
+| The screen compiles | `cd web && npx tsc -p tsconfig.app.json --noEmit`: exit 0. Not rendered in a browser |
+| Partition sizes in the comments and §6.1 | DuckDB on all of silver, the same 30-minute rule, grouped by the date of the last event: median 1,609; 17 Nov 8,774, of which 3,965 with the last event from 15:00; 15 Nov 18,303 or 18,304 between runs |
+| `cart_value` means what the star means | `processing/batch_warehouse.py:348`: `fact_session_funnel.cart_value` is also `sum(price)` over cart events |
+
+### What the AI got wrong, and was corrected on
+
+- **The first measurement queries globbed `data/silver/*/*.parquet`.** Silver is partitioned by `event_date` and
+  `event_type`, so they found no file. Rerun with `**/*.parquet` and `hive_partitioning=true`.
+- **The busiest-day count was first reported as exactly 18,303.** A rerun gave 18,304: ties in `event_time` make
+  the 30-minute split differ by one between runs. The docs say "about 18,300".
+- **The replayer was stopped with SIGTERM, not Ctrl-C,** so `replayer.log` ends in a Java `Connection reset`
+  trace. It is a stop artefact, not a fault; the evidence file says it was stopped after file 78.
+- **The stop command's `pgrep -f` matched its own shell** and sent that shell SIGINT too. The stream got its
+  SIGINT as well and stopped cleanly ("stopped; the checkpoints keep the progress", exit 0).
+
+### Judgement that stayed with the team
+
+Dat decided (12 October, in this session): no review comment on #26; fix what the review found, then merge.
+
+Made by AI, flagged for review:
+- **The fixes went onto Nguyen's branch** as a new commit (no force-push), and #26 is squash-merged, so the `=`
+  file never enters `main`'s history. Nguyen keeps authorship of the BR5 code.
+- **`cart_value` counts every cart event,** so one product added 32 times in 9 minutes makes the largest cart,
+  53,157.63 with `item_count` 1. It matches `fact_session_funnel.cart_value`, and nothing was changed. Nguyen to
+  say whether the BR5 list should keep it.
+- **One row per (day, session) keeps only the latest abandoned split:** 21 of 2,621 upserts in the run
+  overwrote an earlier one. That is the key SYSTEM_DESIGN 6.1 chose.
+
+Carried forward:
+- The Gate 2a screenshot of `/br5` with its footer goes to the group chat (Nguyen).
+- The BR5 numbers above are gate evidence, not evaluation results: the ≥99% correctness comparison and Gate 2b
+  timings stay with their owners in PLAN.md.
+- Session 21's carried-forward list is unchanged; nothing in it was touched here.
+
+## Session 23 — 13 October 2026 (W42)
+
+**Tool:** Claude Code (Opus 5.5).
+**Scope:** Dat's re-review of Tin's PR #23 (BR6 + BR8 + warehouse step 6) at 48b62de, then a fix for its two blocking
+findings on `w41-tin-merge-br6`, local test steps for the whole PR, and the pre-merge status docs. Tin's BR6 and BR8
+query, endpoint and screen code is as Tin pushed it; only the Postgres load of `fact_session_funnel` changed.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| Re-review of #23 — Khang's four points and the four must-fix items, the team decision, the questions and the nits from the 11 Oct review, each marked addressed or not; two new blocking findings in the `fact_session_funnel` load. Not posted (Dat's decision below) | Superseded by the fix |
+| `serving/load_star_postgres.py` — `load_fact_session_funnel()` now inserts `last_event_at` and `purchase_value`; its docstring no longer calls `cart_value` nullable | Run and verified (14235bd) |
+| `processing/batch_warehouse.py` — `load_postgres()` renders `fact_session_funnel`'s five timestamps with `date_format` before `toLocalIterator()`, as `fact_event`'s `event_time` already was | Run and verified (14235bd) |
+| Local test steps for the whole PR: `gen_inventory.py`, `batch_warehouse.py` with Postgres up, Postgres row counts, `batch_gold.py --br6`, the BR6 and BR8 curls, the BR8 stream with the replayer, both screens | Run by Dat, reported OK |
+| `CLAUDE.md` and `README.md` status — all nine tables and `WAREHOUSE OK`, step 6 loads Postgres, BR6 and BR8 live, next task Gate 2b, open items | AI-drafted |
+| `docs/AI_USAGE.md` — this session | AI-drafted |
+
+### How it was checked
+
+| Claim | How it was measured |
+|---|---|
+| Step 6 stopped whenever Postgres was up | `warehouse/ddl.sql`: `fact_session_funnel.last_event_at` and `.purchase_value` are `NOT NULL` with no default; the loader listed 17 of the table's 19 columns. Read from the DDL, not reproduced on the old code |
+| The old load shifted timestamps by 7 hours | `.venv/lib/python3.14/site-packages/pyspark/sql/types.py`: `TimestampType.fromInternal` calls `datetime.fromtimestamp` (local time); `date +%z` → `+0700`; `conf/spark-defaults.conf` → `spark.sql.session.timeZone UTC`. Reproduced: session -9223038402290496650 (`session_start_date` 2019-11-17) is collected as 2019-11-18 05:45:11 and rendered by the fix as 2019-11-17 22:45:11 |
+| The fixed load is right | Scratch database `scratch_pr23` with `warehouse/ddl.sql` applied; scratch script (not committed) runs the real `load_postgres()` on `fact_session_funnel` for 2019-11-17, `read_env` patched to the scratch database. Postgres vs Parquet: 71,594 rows both; 31,938 starting at 17:00 or later both; 0 rows where `session_start_at::date <> session_start_date`; min start 2019-11-17 00:00:07, max `last_event_at` 2019-11-23 13:02:13 and Σ`purchase_value` 3,799,654.81 equal. Database dropped afterwards |
+| The whole PR runs | Dat's machine, branch at 14235bd: the local test steps 1-7, reported "Run ok" by Dat. No log was captured in this session; that is what Tin's evidence files are for |
+| `fact_inventory_daily` 1,909,650 and `BR6 OK` 63,655 in CLAUDE.md and README | The expected values printed in the test steps (12,731 purchased SKUs x 5 warehouses x 30 days; 12,731 x 5 for the last day), which Dat's run reported OK against. Not re-measured by AI |
+| `dim_product` 210,454 and `dim_user` 319,426 (expected values in the test steps) | DuckDB `count(*)` over `data/warehouse/dim_product/*.parquet` and `data/warehouse/dim_user/*.parquet` on Dat's machine |
+| The earlier points are addressed | `git diff ab616d3 pr/23` (1db318b, 48b62de); `git diff --quiet main pr/23 -- serving/api/routers/br4.py serving/api/cassandra.py serving/check_infra.py` → identical; `gh pr view 23` → MERGEABLE, CLEAN; `git merge-tree --write-tree main pr/23` → no conflict |
+
+### What the AI got wrong, and was corrected on
+
+- **The 11 Oct review told Tin to bring `serving/load_star_postgres.py` over from `w40-tin-br6` without checking its
+  loaders against `warehouse/ddl.sql`.** That branch already left out `last_event_at` and `purchase_value`
+  (`git show origin/w40-tin-br6:serving/load_star_postgres.py`, line 540), so following the advice carried the
+  crash into #23. This re-review compared every loader's column list with the DDL and the Parquet builders.
+- **The message of commit 14235bd says the full `batch_warehouse.py` run passes on Dat's machine.** It was written
+  before Dat said which test "Run ok" covered. Dat then confirmed the full steps 1-7, so the claim stands, but it
+  went into a pushed commit before it was confirmed.
+
+### Judgement that stayed with the team
+
+Dat decided (13 October, in this session): fix the two findings on Tin's branch instead of posting the review and
+waiting; commit and push 14235bd to `w41-tin-merge-br6` (no force-push); update CLAUDE.md, README and this log
+before the merge; leave the Gate 2a evidence files to Tin in a follow-up PR; then squash-merge #23.
+
+Made by AI, flagged for review:
+- **CLAUDE.md's next task is now Gate 2b** (W42 in PLAN.md), with Gate 2a counted as met in code and its BR6 and
+  BR8 evidence still owed.
+- **A squash merge keeps Tin as the author** of the BR6, BR8 and step 6 code on `main`; Dat's fix commit is folded in.
+
+Carried forward:
+- Tin: `docs/evidence/gate2a_br6_run.txt` and `gate2a_br8_run.txt`, laid out like `gate2a_br5_run.txt`. They should
+  show the 1,909,650 and 63,655 above.
+- Team: `docs/BR_SCOPE.md` says BR8's demo opens an alert to its list of orders; the screen expands an alert to its
+  window totals, and `order_velocity_alerts` stores no orders. Tin proposes the wording, the team agrees.
+- Session 22's carried-forward list is unchanged; nothing in it was touched here.
+
+## Session 24 — 9 and 18 October 2026 (W41-W42)
+
+**Tool:** Claude Code (Opus 5.5).
+**Scope:** report section 4.2, Cassandra (tracker row 74): partition and clustering keys, keys designed backwards
+from the screen's question, and the three tables that leave stale rows. Branch `w41-khang-report-4-2`. On 18
+October, after #23 and #26 merged, `main` was merged into the branch (this entry was Session 22 until then; the
+12 October session took that number) and the BR5 and BR6 bullets were checked against the code that landed.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| `docs/REPORT.md` 4.2 — keys on `gmv_by_minute` and `trending_products`, the contrast with the star, the cost of BR3's "newest window" in four measured sizes, the stale-row paragraph (`stockout_risk`, `trending_products`, `abandoned_carts`) | AI-drafted, numbers measured or quoted from `docs/evidence/` |
+| `docs/REPORT.md` "Nguồn số liệu của mục 4" — one command per number | AI-drafted |
+| `docs/REPORT.md` 4.2, 18 October — one sentence with BR5's measured cost of sorting in the API; the source table's BR5 and BR6 row points to the code instead of `SYSTEM_DESIGN.md` 6.1 | AI-drafted, number quoted from `docs/evidence/gate2a_br5_run.txt` |
+| `docs/evidence/cassandra_describe_gmv_by_minute.png`, `docs/evidence/cassandra_describe_trending_products.png` | Taken by Khang with `cqlsh` |
+| `docs/AI_USAGE.md` — this session | AI-drafted |
+
+### How it was checked
+
+| Claim | How it was measured |
+|---|---|
+| Every key in 4.2 | The same text in `serving/cassandra_schema.cql`, `SYSTEM_DESIGN.md` 6 and 6.1, and the two `DESCRIBE TABLE` screenshots (`trending_products` shows the default `rank ASC`) |
+| BR3, newest window, at 19,669 windows | Khang's machine, 9 October, the table left by the replays of 1-3 October (17 Nov 14:46 to 1 Dec 06:34): `uvicorn` on a spare port, 15 calls to `GET /api/br3/trending`, median `meta.ms` 159.2, `partitions` 19,670, `rows` 20 |
+| BR3, one window | 15 calls with `window_start=2019-11-17T21:19:00+07:00`: median 2.26 ms, 1 partition, 20 rows |
+| BR1, 1 partition, 120 rows, 5.7 ms | Quoted from `docs/evidence/gate1a_br1_run.txt` (Dat's machine, Gate 1a); 4.2's source table says so |
+| 394, 1,440 and 43,200 windows (a scratch table with the same schema); the delete inside a batch; 7,600 of 7,600 rows; no duplicates after a restart | Quoted from `docs/evidence/gate1b_br3_run.txt`, not re-measured |
+| Which tables hold rows now | `SELECT count(*)`: `gmv_by_minute` 165,481, `trending_products` 393,121, `abandoned_carts`, `stockout_risk` and `order_velocity_alerts` 0. So BR5 and BR6 are described from the design, not measured |
+| The BR5 and BR6 bullets match the code (18 October, `main` at 03394c9) | `serving/cassandra_schema.cql`: `abandoned_carts` `((event_date), user_session)`, `stockout_risk` `((warehouse_id), days_to_stockout, product_id)`; `run_br6` in `processing/batch_gold.py` runs `DELETE FROM stockout_risk WHERE warehouse_id = ?` per warehouse, then inserts; `start_br5` in `processing/streaming_gold.py` only inserts; `serving/api/routers/br5.py` sorts by `cart_value` descending. The text of both bullets stands |
+| BR5, one day: 1 partition, 2,600 carts, 13.6 ms | Quoted from `docs/evidence/gate2a_br5_run.txt` (Dat's machine, Gate 2a, `?event_date=2019-11-17`), not re-measured |
+
+### What the AI got wrong, and was corrected on
+
+- It planned to quote 320 ms for the default BR3 call at about 19,670 windows: a single reading on 3 October,
+  never committed. The median of 15 calls is 159 ms; 4.2 uses the median and gives the command.
+
+### Judgement that stayed with the team
+
+Khang decided: take the two `DESCRIBE TABLE` screenshots himself. The tracker points to Nguyen's W39 screenshots in
+`docs/evidence/`, but `main` holds none.
+
+Made by AI, flagged for review:
+- **"Khoá phân vùng"**, not the tracker's "khoá phân mảnh": 4.1 and every screen footer already say "phân vùng".
+- **BR5 and BR6 were written from `SYSTEM_DESIGN.md` 6.1 on 9 October,** when `start_br5` was a stub and BR6's
+  writer was in Tin's #23. On 18 October both bullets were checked against the merged code and stand unchanged;
+  BR5 now has one number, quoted from Gate 2a. Nguyen and Tin: say if the wording misdescribes your code.
+
+Carried forward:
+- Session 23's carried-forward list is unchanged; nothing in it was touched here.
+
+## Session 25 — 18 October 2026 (W42)
+
+**Tool:** Claude Code (Opus 5.5).
+**Scope:** report section 4.3, Spark (tracker row 87): `local[*]`, batch against streaming, the five Structured
+Streaming concepts the jobs use, writing Cassandra with `cassandra-driver` inside `foreachBatch`, the two memory
+traps, and the null-safe version test of `dim_user`. Branch `w42-khang-report-4-3`, cut from
+`w41-khang-report-4-2` because both sections edit `docs/REPORT.md`.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| `docs/REPORT.md` 4.3 — five code excerpts copied from the repo (`read_events`, BR3's `writeStream`, the head of BR3's `write_batch`, the two settings of `conf/spark-defaults.conf`, `cell_changed` in `dim_user.py`) | AI-drafted, numbers measured or quoted |
+| `docs/REPORT.md` "Nguồn số liệu của mục 4" — seven rows for 4.3 | AI-drafted |
+| `docs/evidence/dim_user_null_compare.txt` (new) — the null shares and the `!=` comparison below | Captured from the run |
+| `docs/AI_USAGE.md` — this session | AI-drafted |
+
+### How it was checked
+
+| Claim | How it was measured |
+|---|---|
+| The five excerpts are verbatim | Scratch script (not committed): every line of each code block is a line of its file, and every block but the two-line config one is contiguous in it |
+| `rfm_cell` NULL for 97.3% of users on 7 Nov, 88.0% on 30 Nov | DuckDB on `data/warehouse/stg_rfm_snapshot` on Khang's machine; the query is in the evidence file |
+| With `!=`, 295,452 versions instead of 319,426, 5,529 current rows stale, all six SCD2 counts 0 | Scratch script (not committed) on Khang's machine: `version_no` recomputed from `stg_rfm_snapshot` with the repo's `eqNullSafe` line and with `!=`, then `build_dim_user()` and `scd2_violations()` imported from the repo. The `eqNullSafe` run gives back the 319,426 rows of `dim_user` on disk |
+| 200 against 4 shuffle partitions | Quoted from the comment in `main()` of `processing/streaming_gold.py` (W40 dry run, Dat's machine), not re-measured |
+| BR1 476 ms and BR3 719 ms per micro-batch; the restart after batch 11 | Quoted from `docs/evidence/gate1b_br3_run.txt`, not re-measured |
+| The builder-config trap, 1.0 GiB heap with `getConf()` at `6g` | Quoted from `docs/SETUP_SPARK.md` section 6 (measured on PySpark 4.1.3), not re-measured |
+| Every Spark script runs `local[*]` and sets `SPARK_CONF_DIR` first | `grep` over `processing/`, `ingestion/`, `checks/`: every file that builds a SparkSession sets `master("local[*]")`, and its `SPARK_CONF_DIR` line comes before its first `pyspark` import |
+
+### What the AI got wrong, and was corrected on
+
+- **The first draft said no later check could catch the `!=` mistake.** The integrity checks cannot, but comparing
+  the current segment with the last snapshot in `stg_rfm_snapshot` does (that is how the 5,529 were counted). The
+  sentence now says so.
+- **The first draft's `getConf()` sentence left out that the new session is built with `6g`.** Added, as in
+  `docs/SETUP_SPARK.md` section 6.
+
+### Judgement that stayed with the team
+
+Made by AI, flagged for review:
+- **Three statements of tracker row 87 are not followed, because the code and the data say otherwise.**
+  - 88% is the share of NULL `rfm_cell` at the last snapshot (30 Nov), not the first; the first, 7 Nov, is 97.3%.
+  - With `<>` the version test loses versions, it does not add them. The tracker says a non-buyer would get a new
+    version every snapshot. In this code a comparison with NULL is NULL and `sum()` skips it, so the first purchase
+    (NULL to a value) opens no version. Counting NULL as a change would give 1,254,555 versions instead (DuckDB,
+    same data, in the evidence file); 4.3 describes what Spark does with the code as written.
+  - `builder.config("spark.driver.memory")` is not always ignored. It works when that builder starts the JVM, as
+    `conf/spark-defaults.conf` and `docs/SETUP_SPARK.md` section 6 already say; 4.3 follows them.
+- **The shuffle-partition paragraph is not in the tracker row.** It is the one Spark setting the team changed on a
+  measurement; it can go if 4.3 must stay at two pages.
+- **4.3 is about 2.5 pages with its five excerpts.**
+
+Carried forward:
+- Session 23's carried-forward list is unchanged; nothing in it was touched here.
+
+## Session 26 — 21 October 2026 (W43)
+
+**Tool:** Claude Code (Opus 5.5).
+**Scope:** revision v3 of the indexing presentation (Canva `DAHYkUBuuhM`, 19 pages) against the reviewer's comments
+of 21 October, plus one new measurement for page 17. No application code was written; the measurement script was run
+and its source is appended to its evidence file.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| PR #31 (E1, `docs/evidence/presentation_parquet_run.txt`) merged with a merge commit | Done by the AI after Đắt approved the plan |
+| `docs/evidence/presentation_csv_vs_parquet.txt` (E4) — revenue per category on the same 7% sample, DuckDB on a CSV export of bronze vs DuckDB on `data/silver` with hive partitioning | Run and verified on Đắt's machine |
+| Canva `DAHYkUBuuhM` — slide text on 18 pages, speaker notes on 17, references with venues and docs URLs, title renamed to `Group15_Indexing_Presentation` | AI-edited; Đắt approved the 19 draft thumbnails before the commit |
+| Figures F14 (p17), F7 (p10), F8 (p11), F2 (p5), F9 (p12) redrawn as SVG and rendered to PNG with headless Chromium and Arimo; each checked by a second, independent agent | AI-drawn; approved with the thumbnails |
+| `docs/PRESENTATION_SLIDES.md` "Số được dùng" table — 19-page numbering, rows for "khớp 10%", "9 GB" and E4 | AI-drafted; local file, excluded by `.git/info/exclude` |
+| `docs/AI_USAGE.md` — this session | AI-drafted |
+
+### How it was checked
+
+- Every review point was checked read-only before anything was edited: four agents (repo facts, technical claims
+  with primary sources, Vietnamese wording, figures) and one adversarial agent over their combined output.
+- The draft deck was scanned for leftover terms ("ngược từ câu hỏi", "quét dải", "index học được", "hash table",
+  "9,009", …). Every "Nguồn:" footer matches a page 19 entry; page numbers run 1–19; notes exist on all 19 pages.
+
+| Claim | How it was measured |
+|---|---|
+| CSV 177.0 ms → partitioned Parquet 9.0 ms; Parquet opens 31 of 93 files | `.venv/bin/python presentation_csv_vs_parquet.py` (source at the end of the evidence file): 1 warm-up + 5 timed runs each, median; `EXPLAIN ANALYZE` prints `Scanning Files: 31/93`; both sides return the same 14 groups and 65,150 orders |
+| "khớp 10% dòng", "gần 2/3 số trang" (p8) | `docs/evidence/gin_vs_seqscan.txt`: 21,078 / 210,454 rows; Heap Blocks 7,646 vs seq-scan buffers 11,608 |
+| Colour is synthetic | `ingestion/gen_catalog.py`, `COLORS` chosen by a hash of `product_id` |
+| BR6 is batch but writes Cassandra | `run_br6` in `processing/batch_gold.py` |
+| The total-revenue screen reads one partition | `serving/api/routers/br1.py` reads the `category_l1 = 'all'` partition |
+
+### What the AI got wrong, and was corrected on
+
+- While planning, it told Đắt the copy differed from the original deck "only on a few pages". It differs on almost
+  every page (v2 restructured it). It re-asked with the facts, and Đắt changed the decision to re-recording the video.
+- `update_fill` silently re-cropped images: F14 came out zoomed and cut at the edges, and the GIN figure and F5 (where
+  only the alt text was changed) were zoomed slightly. This was caught on the thumbnails; the crops were reset, and
+  F5's restored to its original values.
+- The first E4 run printed an empty `File Filters` line. The extraction was fixed and the script re-run; the committed
+  file is the second run (152.0 / 8.3 ms in the first run, 177.0 / 9.0 ms in the second).
+- Canva captions were added at the default 16 px black and then reformatted to 24 px grey. The page 15 strip wrapped
+  "xoá" onto a second line until the sentence was shortened and the box widened.
+- Three review claims were refuted rather than applied: "5 màn hình thời gian thực" (BR6 is batch), "the total screen
+  reads many partitions" (it reads `'all'`), and "Cassandra 5.0 replaced Summary/Index with BTI" (BTI is opt-in).
+
+### Judgement that stayed with the team
+
+Đắt decided:
+- submit the copy's PDF on 23/10 and re-record the video from it;
+- drop thousands separators in the speaker notes only; slides and the report keep rule 4;
+- run the CSV vs Parquet measurement and no Cassandra measurement;
+- approve the plan, then approve the commit after seeing the thumbnails.
+
+Made by AI, flagged for review:
+- the terminology choices (quét khoảng, khoá, bảng băm, join, máy, bỏ qua / xoá, English section names);
+- the declined review items: no ShopInsight example on pages 7 and 10, keep the DELETE + INSERT example on page 9,
+  keep "trả bằng" and M for LSM on page 15, no learned index on the RUM triangle, author-year references instead of
+  IEEE numbering;
+- the page 17 line carries two numbers, against the one-number rule, because it is a before/after pair;
+- F7's right panel is now 3 × 2 boxes; F9 keeps the root label `silver/`.
+
+Not done: the P3 items of the plan (F4b "key", F5 marker, taller F6 and F13, bullet unification) and the layout of
+pages 9 and 16.
+
+Carried forward:
+- The original deck `DAHYFi9Mr50` shows `updated_at` 21/10 19:07, from another account. This session never opened an
+  editing transaction on it. Its owner should check the version history.
+- Owners write the "Bản video" narration for their pages (only 12–15 have one) and re-record from the locked PDF;
+  Nguyên assembles; someone asks the lecturer about the deadline as a fallback.
+- `docs/PRESENTATION_REVISION_PLAN.md` (local) has a v3 section (§9); the F7, F8, F14 rows of its §4 still describe v2.
+- Session 24's carried-forward list is unchanged; nothing in it was touched here.
+
+## Session 27 — 23 October to 3 November 2026 (W43-W45)
+
+**Tool:** Claude Code (Opus 5.5).
+**Scope:** two artefacts of the indexing presentation that were made in Claude Code sessions not logged at the time,
+the "Áp dụng cho ShopInsight" figure F14 (23 October) and evidence E5 (26 October), brought to `main` through PR #32 on
+3 November (sprint task T01). This entry was written on 3 November from the files themselves and the "Số được dùng"
+table of `docs/PRESENTATION_SLIDES.md`, not from the two sessions' transcripts. No application code was written.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| `docs/figures/shopinsight_applied_map.html` — figure F14 of Canva `DAHYkUBuuhM` as HTML, rendered at 3x by headless Chromium to the PNG on the slide (the command is in the file's header) | AI-drawn on 23/10; it is the figure on the page 17 Đắt presented. Committed unchanged |
+| `docs/figures/fonts/` — Arimo (Apache 2.0) from Google Fonts: `arimo.css` and 16 woff2 subsets, so the figure renders the same on a machine without Arimo | Downloaded on 23/10; committed unchanged |
+| `docs/evidence/presentation_price_zonemap.txt` (E5) — the `price` min/max in the footer of each of the 93 silver row groups, and how many of them a `price > v` filter could skip | Run on Đắt's machine on 26/10; re-run on 3/11 (below) |
+| `docs/AI_USAGE.md` — the merge of `main` into this branch, which renumbered the E4 session from 25 to 26; this session | AI-drafted |
+
+### How it was checked
+
+On 3/11, before the merge, three independent agents checked these three artefacts read-only. Each check ran before `data/silver` was rebuilt for task T02.
+
+| Claim | How it was measured |
+|---|---|
+| E5 reproduces | The script in E5's SOURCE section, extracted verbatim and re-run with `.venv/bin/python` from the repo root: sections 1-3 (129 lines) are identical. Only the header date differs |
+| A filter `price > 1000` can skip 0 of the 93 row groups, although only 4.97% of rows match | E5 section 2, and a separate DuckDB query: `parquet_metadata('data/silver/*/*/*.parquet')`, `path_in_schema = 'price'`, 0 row groups with max <= 1000, and 236,207 of 4,754,015 rows with `price > 1000` |
+| The figure needs nothing from the network | Every `href`, `src` and `url()` in the HTML and `arimo.css` is relative and exists. A render inside `unshare -rn` (no network) is byte-identical to a normal one, and the browser requested only `file://` URLs |
+| The bundled Arimo is what the figure renders with | Rendered again with `fonts/` deleted, it is a different PNG, and DejaVu Sans overflows 5 boxes. With `fonts/` present, CDP `CSS.getPlatformFontsForNode` puts every glyph on the web font, Vietnamese diacritics included |
+| The conflict resolution drops nothing | The resolved file starts with `main`'s file byte for byte (`cmp`), followed by the branch's 74-line block with one changed line, the heading. Headings run 1 to 26 |
+
+### What the AI got wrong, and was corrected on
+
+- **Neither session was logged when it happened.** The figure and E5 stayed untracked on Đắt's machine for 11 and 8
+  days, so the project deck (T06), which redraws the figure, depended on one laptop. This entry is the late log.
+- **Session 26 (then numbered 25) took a number that `main` already had.** It was written on 21/10 without checking
+  `main` for the next free number, and Khang's report 4.3 entry, merged first, had taken 25. The heading was
+  renumbered and nothing else in the block changed. The merge commit says so, because the already-pushed `cf744d5`
+  message still says "session 25".
+- **E5 only reads the Parquet footers.** No Spark query filtering on price was timed. The file says this itself, and
+  the slide table keeps it in the spoken line only, not as a measured skip.
+
+### Judgement that stayed with the team
+
+Đắt decided (sprint sheet, row T01, 2/11): bring E5 and `docs/figures/` to `main` inside PR #32 rather than a new PR,
+and fix the duplicate session number while updating the branch. Then merge.
+
+Made by AI, flagged for review:
+- `main`'s Session 25 keeps its number because it reached `main` first; Đắt's E4 entry moved instead.
+- The HTML still carries the indexing talk's labels ("Hình minh hoạ", the badges 02/03/04, "trang 16", "trang 17",
+  "BRIN mới tạo, chưa đo"). They are part of F14 as presented. T06 removes them when it redraws the figure for the
+  project deck.
+- The Apache 2.0 licence is named in the HTML header but its text is not in the repo.
+
+Carried forward:
+- Session 26's carried-forward list is unchanged; nothing in it was touched here.
+
+## Session 28 — 3 November 2026 (W45)
+
+**Tool:** Claude Code (Opus 5.5).
+**Scope:** sprint task T02. Rebuild Đắt's demo machine from the raw CSV, time each batch job, start the stream in the
+README order, and check that all eight screens show real numbers. No application code was written or changed. The
+timing script was run, and its source is appended to its evidence file.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| `docs/evidence/batch_timings.txt` — wall-clock time of the seven one-time batch jobs (`load_bronze.py` to `gold_br7.py`), run one after another on `main` @ `aa65472` with nothing else running. It includes each job's stdout and the script source | Run on Đắt's machine, 3/11 |
+| The demo machine: Postgres and Cassandra up; `streaming_gold.py --fresh`, then after READY `replayer.py --speed 60 --start "2019-11-17 08:00:00"`; uvicorn on :8000; vite on :5173 | Run. The replayer and the streaming job were stopped once 17/11 (Vietnam time) had been replayed |
+| `docs/AI_USAGE.md` — this session | AI-drafted |
+
+### How it was checked
+
+| Claim | How it was measured |
+|---|---|
+| The seven jobs take 426.5 s, of which `batch_warehouse.py`, with its Postgres load, takes 273.0 s | `batch_timings.txt` section 1: `date +%s.%N` before and after each job. It is one run, not a median |
+| A re-run rebuilds the same data | `batch_timings.txt` section 2: every count each job prints equals the documented count. Silver has 4,754,015 rows in 31 dates and 93 directories. The facts have 4,754,015 / 970,797 / 1,909,650 rows. `dim_product` has 210,454 rows and `dim_user` 319,426, and every SCD2 check is 0 |
+| Gold is current (BR2 and BR4 had been stale since 7/10, and BR7 was missing) | Section 2: `funnel_daily` 465 rows, `rfm_segments` 258,330, `stockout_risk` 63,655 (12,731 per warehouse), `product_affinity` 314 |
+| All 8 screens show real numbers | Eight agents ran in parallel, one per screen. Each rendered it in headless Chromium over CDP, read the QueryMeta footer, and compared one number on screen with a direct `cqlsh` or DuckDB query taken at almost the same moment. All 8 matched, and the load footers ranged from 3.6 to 216 ms. Example: BR1 shows GMV 311.3K and 919 orders for 16:45-17:44 on 17/11, which is the sum of those minutes of `gmv_by_minute` (`category_l1 = 'all'`). BR2 shows 966,143 sessions, the sum of `funnel_daily` 'all' over 1-30 Nov |
+
+### What the AI got wrong, and was corrected on
+
+- **The first smoke test called each endpoint with no parameters.** BR1 and BR5 looked empty, BR7 returned 422 and BR4
+  returned all 258,330 rows, but no screen sends a bare call like that. Each one sends a date (BR1, BR5, BR8), a product (BR7) or
+  a segment and an R score (BR4). The verdict above comes from the rendered screens, not from that test.
+- **The evidence header shows the raw CSV as "8.4G".** `du -h` counts in GiB. The file is 9,006,762,395 bytes, the 9.0 GB
+  the docs give. The generated file was left as it ran, with this note as the explanation.
+- **Stopping the replayer with `pkill -f 'ingestion/replayer.py'` also killed the shell running that command**, because
+  the pattern was in the shell's own command line. The replayer did stop, and the streaming job was then stopped by PID.
+
+### Judgement that stayed with the team
+
+Đắt decided (sprint sheet, row T02, 2/11): re-run the whole chain once to time each job, and start the streaming job
+before the replayer.
+
+Made by AI, flagged for review:
+- The replay starts at 17/11 08:00 UTC, the date the streaming screens open on. The streaming tables hold 17/11 from
+  15:00 to about 00:50 Vietnam time. To demo again, run `streaming_gold.py --fresh` first.
+- The timings are one run each, and the wall clock includes JVM start and stop. They answer "how long does the batch
+  build take" and are not benchmark results. The benchmark with repeated runs is T12 and T14.
+- Seen on the screens and left to their owners, since T02 changes no code:
+  - **BR8:** `GET /api/br8/alerts` without `event_date` returns 500. `_latest_date()` returns the driver's
+    `cassandra.util.Date`, which has no `isoformat()` (`serving/api/routers/br8.py` line 105); the screen always sends
+    a date. The page logs React's "unique key" error, because the fragment in `rows.map` has no key. Its table and
+    footer disappear during each 10 s refresh. Its subtitle says "rolling", but the windows are tumbling.
+  - **BR3:** in Live mode the footer counts every window partition (126 at load, and growing), because the endpoint
+    runs `SELECT DISTINCT window_start` to find the newest window. With a chosen window it reads 2.
+  - **BR7:** there is no footer until an anchor product is clicked. **BR5:** the empty state has no footer.
+  - **All screens:** at 1440 px the nav bar hides the BR8 tab. T08 regroups the nav.
+  - Already in rows T09 and T10: BR6's cards count only the 100 rows read per warehouse; BR8 applies its severity filter
+    after `LIMIT 500`; BR8's thresholds text; BR5's two Vietnamese strings; BR4's single snapshot.
+
+Carried forward:
+- The owner issues above, until T09 and T10 close them. Session 27's list is unchanged.
+
+## Session 29 — 4 November 2026 (W45)
+
+**Tool:** Claude Code (Opus 5.5).
+**Scope:** sprint task T06: the skeleton of the project deck, the redrawn architecture figure, and the file the team
+writes the deck's content in. No application code was written.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| Claude Slides deck "Group15_ShopInsight_Project": 26 pages in the report's 6 sections. Each page has its section, a working title, its speaker taken from row T20, and a dashed box naming its block in `docs/project_deck.md` and its sources. The agenda table and the BR pages' user group, path (batch or real time) and serving table are filled in; everything else is left to T20 | AI-built; Đắt reviews before the PDF goes to the team |
+| `docs/figures/shopinsight_architecture.html` — F14 (`shopinsight_applied_map.html`) without the indexing talk's labels (02, 03, 04, "trang 16", "trang 17", "Hình minh hoạ") and without "đo trên 3 ngày dữ liệu; BRIN mới tạo, chưa đo". The PostgreSQL line now lists B+-tree, partial, BRIN and GIN, and its box is shorter. Rendered at 2x and placed on page 08 | AI-drawn; the render was viewed |
+| `docs/project_deck.md` — one block per page (`## Trang NN · name · writer`) with empty fields for the title, up to 4 key points, the spoken lines and the syllable count, plus a source hint. It ends with "## Lỗi trình bày (không phải trang slide)" for T26 | AI-drafted |
+| `docs/AI_USAGE.md` — this session | AI-drafted |
+
+### How it was checked
+
+| Claim | How it was measured |
+|---|---|
+| Deck and file agree page by page | A script compared `deck.json`'s order, each slide's speaker pill, its footer number and its title with the 26 `## Trang` headers of `project_deck.md`. All 26 match, and the per-person totals are Khang 7, Nguyên 8, Đắt 6, Tín 5 pages, as in row T20 |
+| No indexing-talk label is left in the figure | `grep` finds "trang 16", "trang 17", "Hình minh hoạ" and "BRIN mới tạo" only in the header comment, which names what was removed |
+| Postgres index types on the figure exist | `warehouse/ddl.sql`: GIN on `attributes jsonb_path_ops`, BRIN on `fact_event.event_time`, partial indexes (`WHERE is_current`, `WHERE event_type_key = 3`, ...) and B-tree |
+| The BR pages' user groups, paths and tables | REPORT.md §1.2 (user groups) and the BR table in CLAUDE.md (layer and sink); table names from `serving/cassandra_schema.cql` and `data/gold/` |
+
+### What the AI got wrong, and was corrected on
+
+- **The figure first kept the PostgreSQL box at its old height.** With the BRIN line gone, the box had an empty
+  third line. It was shortened from 122 to 88 px before the render that went onto the slide.
+- Nothing else was found. The check that could have found a speaker or page-number mismatch between the deck and
+  the file is the comparison above.
+
+### Judgement that stayed with the team
+
+Đắt decided (sprint sheet, rows T06 and T20, 2-3/11): the deck is Claude Slides; it follows the report's 6 sections;
+the speaker split is the one in T20; `project_deck.md` holds the content.
+
+Made by AI, flagged for review:
+- **26 pages.** Section 4 has two data-model pages (concept and logic, then physical), not three. Section 5 has one
+  page per BR, so each of the 8 gate2b screenshots gets a page. There are no section-divider pages.
+- **Section 5 follows the owners' order** (BR1, BR2 · BR3, BR4 · BR5, BR7 · BR6, BR8), not the user-group order, so
+  each person demos without a break.
+- **Page 26 (references) is shown but not read.** It is listed under Nguyên with no spoken lines.
+- **The cover's subtitle,** "Từ nhật ký hành vi mua sắm tới 8 màn hình trả lời dưới 2 giây", is a draft for Khang to
+  keep or change. The members' full names and student IDs are a placeholder.
+- **Typeface Be Vietnam Pro, for its Vietnamese diacritics;** the colours are the figure's navy and blue plus an orange
+  speaker pill.
+
+Carried forward:
+- The PDF of the skeleton deck goes to the team Drive, exported from the deck by Đắt, and the post to the group is
+  his. Session 28's list is unchanged.
+
+## Session 30 — 5 November 2026 (W45)
+
+**Tool:** Claude Code (Opus 5.5).
+**Scope:** two changes Đắt asked for after seeing the T06 skeleton deck: fewer changes of speaker, so the video
+needs fewer cuts, and a cover with the school's full name and logo. No application code was written.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| Claude Slides deck "Group15_ShopInsight_Project" — new page order and two pages that change speaker, with the speaker pills, footers, block numbers and agenda table updated to match | AI-edited after Đắt chose the option |
+| The deck's cover — HCMUT logo (`Logo_BK_TPHCM.png` from Đắt's Drive, 320 × 320) with "Đại học Quốc gia Thành phố Hồ Chí Minh / Trường Đại học Bách khoa / Khoa Khoa học và Kỹ thuật Máy tính", on a white background that matches the logo's opaque white; title in the logo's navy, edge bar and rule in its blue | AI-edited |
+| `docs/project_deck.md` — the blocks in the new order with their new numbers and writers; the assignment table now lists the eight speaking runs | AI-edited; block contents moved unchanged |
+| `docs/AI_USAGE.md` — this session | AI-drafted |
+
+### How it was checked
+
+| Claim | How it was measured |
+|---|---|
+| Each person speaks in exactly 2 runs; 7 changes of speaker instead of 12 | A script reads `deck.json`'s order and the 26 `## Trang` headers: the runs are Khang › Nguyên › Đắt › Tín › Đắt › Nguyên › Khang › Tín |
+| Deck and file still agree | The same script checks each edited slide's speaker pill, footer number and the block number in its text against the file's header: all 12 match. The other 14 slides kept their position, so their numbers did not change |
+| The logo is the school's | The PNG was viewed: the "BK TP.HCM" mark in navy and blue on white |
+
+### What the AI got wrong, and was corrected on
+
+- **The first round of slide edits failed: the local copies of the slides were gone,** because `/tmp` was cleared
+  overnight. Nothing was published. The 11 slides were read back from the deck (unchanged since 4/11), the edits
+  were applied again, and only then published.
+
+### Judgement that stayed with the team
+
+Đắt chose, out of three options put to him: reorder and move two pages from Nguyên to Tín. Cassandra (page 12) moved
+because both of Tín's BRs (BR6, BR8) write Cassandra. Kết luận (page 25) moved because it follows Tín's two evaluation
+pages. The other options were reorder only (Nguyên would still speak in 4 runs) and Cassandra to Đắt.
+
+Made by AI, flagged for review:
+- **The faculty line** "Khoa Khoa học và Kỹ thuật Máy tính" is inferred from the course code CO5173; Đắt confirms
+  or removes it.
+- **Section 4 now shows Spark before Cassandra** (pipeline order), while report 4.2 is Cassandra and 4.3 is Spark.
+- **Section 5 now starts with Tín (BR6, BR8),** so his Cassandra and alternatives pages lead straight into his demo.
+- **Row T20 of the sprint sheet still lists the old split.** The sheet cannot be edited from here; Đắt updates it.
+
+Carried forward:
+- Session 29's list is unchanged.
+
+## Session 31 — 6 November 2026 (W45)
+
+**Tool:** Claude Code (Opus 5.5).
+**Scope:** Khang's project-deck blocks (pages 01-04 and 20-22 of `docs/project_deck.md`, sprint row T20) and the
+correctness check that page 22 cites (T19): a rebuild of the batch layers and one replay on Khang's machine, an
+independent answer for each BR, and the SCD2 integrity of both dimensions.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| `checks/correctness_8br.py` (new) — DuckDB answer for each BR from silver (BR6: the inventory series), compared with the gold Parquet and Cassandra tables the screens read; matched / max(answer, stored) per BR, threshold 99% | Run and verified |
+| `docs/evidence/correctness_8br.txt` (new) — the run, the eight scores, BR4's raw-value limitation, a run that is meant to fail, SCD2 for both dimensions | Captured from the run |
+| `docs/project_deck.md` pages 01-04, 20-22 — title, up to four points, spoken lines and syllable count each; 549 syllables in total against the file's 540 | AI-drafted, Khang reviews |
+| `docs/AI_USAGE.md` — this session | AI-drafted |
+
+### How it was checked
+
+| Claim | How it was measured |
+|---|---|
+| The system side is current | Khang's machine on `main` at 3e632d8. `batch_warehouse.py` wrote all nine Parquet tables with every check at its expected value (step 6 stopped on a Postgres without the star DDL; no BR reads Postgres); `batch_gold.py` printed GOLD OK and `gold_br7.py` BR7 OK; `streaming_gold.py --fresh` ran 4 of 4 jobs while the replayer sent 78 files, 187,468 rows, 17 Nov 15:00-21:30 Vietnam time, as in `gate2a_br5_run.txt`. bronze, silver, catalogue and inventory were reused: their scripts are unchanged since those files were written (`git log` per script) |
+| All eight BRs match 100% | `python checks/correctness_8br.py` with the replay span and the final watermark 21:19:59 (BR3's last batch replaced the windows up to 21:00-21:04). BR2 465, BR4 258,330, BR6 63,655, BR7 314 rows over the whole month; BR1 4,563, BR3 7,580, BR5 2,600, BR8 5,815 over the replay |
+| The answer does not reuse the system's code | The script imports nothing from `processing/`. BR6's units sold come from the inventory balance (stock yesterday + received - stock today), not from the warehouse hash; BR5's 2,600 equals the count Dat's Gate 2a run found |
+| The check can fail | The same run with the watermark ten minutes early: BR3 97.36%, BR5 96.77%, exit 1 |
+| SCD2 is intact | `checks/scd2_integrity.py` on `dim_product`: all six counts 0, SCD2 OK. `dim_user`: the same six counts, all 0, in `batch_warehouse.py`'s output |
+| BR4's raw values | DuckDB, `rfm_segments` against `stg_rfm_snapshot` at 30 Nov: recency differs for 23,198 users, frequency or monetary for 590, any for 23,353; Session 17 found the same 23,198 and 590 |
+| The deck blocks' numbers | Page 03 from REPORT §1 "Nguồn số liệu của mục 1"; page 04 from §1.2; page 20 from BR_SCOPE BR3 and the code (`F.window(..., "15 minutes", "1 minute")`, key `(window_start, rank)`); page 21 from BR_SCOPE BR4 and `BR4Page.tsx` (the heatmap is r_score by f_score); page 22 from the evidence file above. Syllables counted by a script over each spoken block |
+
+### What the AI got wrong, and was corrected on
+
+- **The first float comparison rounded to four significant digits,** while the docstring promised a 1e-4 relative
+  tolerance. Three of BR6's 63,655 rows (days such as 5.6875, stored by Cassandra's 32-bit float as 5.68749) fell
+  on either side of a rounding boundary. The comparison now uses `math.isclose(rel_tol=1e-4)`, as documented.
+- **The first draft of the spoken lines ran to 583 syllables before page 22.** Pages 02-04, 20 and 21 were cut to
+  bring the seven pages to 549.
+
+### Judgement that stayed with the team
+
+Made by AI, flagged for review:
+- **The answer for BR3 and BR5 stops at the stream's final watermark,** because both write a window only once the
+  watermark closes it. A replay that stops earlier or later needs that watermark passed again.
+- **BR4 scores the heatmap fields (scores and segment), and reports the raw values beside them.** The raw values'
+  90.96% is the `dim_user` projection Khang kept on #17 (18 Oct), not a fault of BR4's query; it belongs in
+  report section 6's limitations.
+- **The cover's title** is the draft Session 29 proposed for Khang; the GV line keeps the presentation deck's
+  "PGS.TS.".
+
+Carried forward:
+- Session 30's list is unchanged.
+
+## Session 32 — 8 November 2026 (W45)
+
+**Tool:** Claude Code (Opus 5.5).
+**Scope:** Dat's review of PR #36, Khang's correctness check (Session 31). At Dat's request the AI fixed the
+review's two points on the PR branch, replayed 17 Nov again and re-ran the check on Dat's machine, for Dat to
+merge. No BR code was changed.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| `checks/correctness_8br.py` — money compared exactly as a Decimal, not as a float under the 1e-4 tolerance; the score divides by rows, not distinct keys; the `differs` lines print plain values | Run and verified |
+| `docs/evidence/correctness_8br.txt` — a reviewer re-run section below Khang's run | Captured from the run |
+| `docs/AI_USAGE.md` — this session | AI-drafted |
+
+### How it was checked
+
+| Claim | How it was measured |
+|---|---|
+| Money was compared more loosely than the docstring said | DuckDB over silver: the busiest `'all'` minute of 17 Nov 15:00-21:30 Vietnam time is 11,782.53, so 1e-4 relative let it be 1.18 off. With that row's `gmv` raised by 1.00 in Cassandra, the check at the PR head still matched BR1 4,563 of 4,563; the fixed check matched 4,562 (99.98%). The value was put back and BR1 returned to 100% |
+| A duplicated row was invisible | `score()` on one answer row against the same row stored twice: 100% before the fix, 50% after |
+| The fix changes no number in Khang's run | Khang's replay repeated on Dat's machine (78 files, 187,468 rows, final watermark 21:19:59): the check before and after the fix print the same eight rows, all 100%, and BR4's raw values at 90.96% |
+| The gold Parquet tables hold one row per key, so the row-based score changes nothing today | DuckDB: `funnel_daily` 465, `rfm_segments` 258,330, `product_affinity` 314 rows, each equal to its count of distinct keys |
+
+### What the AI got wrong, and was corrected on
+
+- **The replay script's summary printed the watermark 21:14:59,** the last one a log line showed (batch 77). The
+  final batch 78 carried no new events and closed the BR3 windows up to 21:00-21:04, so the final watermark was
+  21:19:59, as Khang recorded; the check was run with 21:19:59.
+
+### Judgement that stayed with the team
+
+- **Dat** asked for the fixes to go on Khang's branch and for the PR to be merged after the re-run.
+- Khang's run stays the record for report section 6: the correctness comparison is run by its owner. The re-run on
+  Dat's machine is a reviewer's reproduction. Whether Khang re-runs the fixed check on his machine before the
+  report quotes it is Khang's call; on this data it printed the same numbers.
+
+Carried forward:
+- Session 31's list is unchanged.
+
+## Session 33 — 8 November 2026 (W45)
+
+**Tool:** Claude Code (Opus 5.5).
+**Scope:** Dat's review of PR #39, Nguyen's T13 ground-truth check and T09 BR7 sort. At Dat's request the AI fixed
+the review's points on the PR branch, re-ran the check on Dat's machine and merged the PR. The AI did not change
+any BR code. The BR7 sort (lift first) is Nguyen's change, and the AI checked it.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| `checks/ground_truth.py` — BR8 takes a required `--replay-start` and `--replay-end` instead of counting every window since midnight; every line counts missing, extra and duplicated stored rows against the score; BR7 applies gold_br7's cut-offs and compares support; money compared exactly; MISS and INCOMPLETE when a BR cannot run; module docstring | Run and verified |
+| `docs/evidence/ground_truth_run.txt` — header for Tin's run, then a reviewer re-run: before and after the fix on the same replay, wrong spans, one mutation at a time, Cassandra unreachable | Captured from the runs |
+| `docs/AI_USAGE.md` — this session | AI-drafted |
+
+### How it was checked
+
+| Claim | How it was measured |
+|---|---|
+| The check at the PR head gives a false LOW for BR8 after `./run_demo.sh stream` | Cassandra holds the 15:00-21:30 Vietnam-time replay of PR #36's re-run (`order_velocity_alerts` 5,815 rows, 15:00-21:25). `python checks/ground_truth.py --replay-end "2019-11-17 21:30:00"` at c7e11be printed `LOW BR8 65.60% (5,649/8,611)`. On the same replay, correctness_8br.py scores BR8 100%. Silver holds 2,962 (window, user) purchase pairs before 15:00 that the stream never received |
+| The fixed check passes on correct data | Same replay: `--replay-start "2019-11-17 15:00:00" --replay-end "2019-11-17 21:30:00"` printed BR4 31,005, BR6 63,655, BR7 314 and BR8 5,815 of 5,815, then GROUND TRUTH OK. It was run before and after merging origin/main 0511e42 into the branch |
+| The fixed check fails on wrong data | A mutation harness fed the unchanged module mutated copies of the gold Parquet and of the Cassandra rows (`data/` and Cassandra only read): one value off, a missing row, an extra row, an exact or stale duplicate, a stream with a different threshold, a stream that died at 18:00. Every case moved matched/total. The one exception is a duplicated BR8 row, which the primary key makes impossible to store. Per-case figures are in the evidence file |
+| BR7 now sorts as API_CONTRACT §9 says | `serving.api.routers.br7.get_affinity(1005115)` returned 10 rows with lift descending (top row: 1005230, co_count 3, lift 4.07) in 18.7 ms; an unknown id returns `[]`. `npx tsc -b --noEmit` in `web/` exited 0 |
+| The numbers in Tin's run hold | DuckDB: `rfm_segments` has 31,005 buyers, `product_affinity` 314 rows, stockout_risk's last day 12,731 × 5 = 63,655 rows. Silver has 4,144 closed purchase pairs on 17 Nov up to 16:44:47, the count a replay from midnight gives |
+
+### What the AI got wrong, and was corrected on
+
+- **The AI's first fix kept two blind spots, and its own docstring hid them.** That docstring said every line counted a
+  duplicated stored row, but BR4's `FULL JOIN ... count(*)` still scored `rfm_segments` 100% with every buyer row
+  doubled (62,010/62,010). Its BR8 defaults also took the replay span from the table under test, so a stream that
+  died mid-replay scored 100%. Three independent reviewer agents found the BR4 gap; mutation testing found the BR8
+  one. Every such finding was upheld by two refuting agents. BR4 now counts each matched buyer once over the larger
+  row count (every row doubled gives 50%), and the span flags are required.
+- **The first fix said BR8 compares windows "closed by the watermark".** BR8 writes in update mode, so a stored row
+  is final once all its window's events were replayed. The extra 10-minute cut dropped complete windows and kept one
+  the watermark had not closed. The filter is now "the window lies inside the replay".
+- **The PR's comment gave the wrong reason for BR7's DISTINCT.** It cited the 7,312 exact duplicates in silver, but
+  only one of those is a purchase. The DISTINCT counts a repeat buy in one session once, as gold_br7 does.
+
+### Judgement that stayed with the team
+
+- **Dat** asked for the fixes to go on Nguyen's branch and for the PR to be merged after them.
+- The review's other suggestion was to drop `ground_truth.py`, because `checks/correctness_8br.py` (#36) already
+  covers these four BRs and more. Dat asked for it to be fixed, so it stays, and two checks now overlap:
+  - `ground_truth.py` checks BR4's raw values as of each user's stored snapshot.
+  - `correctness_8br.py` checks the scores and segment, and its "BR4 raw" line measures the values as of 30 Nov (90.96%).
+
+  Which one T19 and report section 6 quote is the team's call.
+- The re-run on Dat's machine is a reviewer's reproduction. T19 is Nguyen's: the owner runs the fixed check, with the
+  span of the owner's replay.
+- **Open:** the PR title promised a BR5 fix that is not in it. On main, BR5's screen still shows two Vietnamese
+  strings, which T09 asks Nguyen to translate. Nguyen should also add a line here if the T13 commits were
+  AI-assisted; this file does not say.
+
+Carried forward:
+- Session 31's list is unchanged.

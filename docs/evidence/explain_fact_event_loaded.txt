@@ -1,0 +1,13 @@
+                                                                 QUERY PLAN                                                                 
+--------------------------------------------------------------------------------------------------------------------------------------------
+ Aggregate  (cost=3616.94..3616.95 rows=1 width=8) (actual time=21.494..21.494 rows=1 loops=1)
+   Buffers: shared hit=1640
+   ->  Seq Scan on fact_event_20191129 fact_event  (cost=0.00..3287.45 rows=131796 width=0) (actual time=0.012..16.107 rows=131796 loops=1)
+         Filter: (event_date = '2019-11-29'::date)
+         Buffers: shared hit=1640
+ Planning:
+   Buffers: shared hit=372
+ Planning Time: 0.895 ms
+ Execution Time: 21.514 ms
+(9 rows)
+
