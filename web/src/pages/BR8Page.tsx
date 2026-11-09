@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import {
   AlertTriangle,
   Calendar,
@@ -41,10 +41,16 @@ export default function BR8Page() {
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
 
   const [response, setResponse]   = useState<ApiResponse<VelocityAlertRow> | null>(null);
-  const [loading, setLoading]     = useState(false);
   const [error, setError]         = useState<string | null>(null);
   const [fetchedAt, setFetchedAt] = useState<number | null>(null);
   const [now, setNow]             = useState(() => Date.now());
+
+  // The tab title matches the page title (as BR7Page does).
+  useEffect(() => {
+    const previousTitle = document.title;
+    document.title = 'Risk Alerts';
+    return () => { document.title = previousTitle; };
+  }, []);
 
   // Tick the "X s ago" label every second.
   useEffect(() => {
@@ -52,14 +58,17 @@ export default function BR8Page() {
     return () => clearInterval(id);
   }, []);
 
+  // Fetch now and every 10 s, as BR5Page does. A tick keeps the table (and the
+  // expanded alert) on screen until the new answer arrives, and a failed tick keeps
+  // the last good data under the error banner. Only a filter change clears it: the
+  // old interval is cleared and a request still in flight is aborted, so a late
+  // answer for the previous filter never lands on screen.
   useEffect(() => {
     let controller: AbortController | null = null;
     const load = () => {
       controller?.abort();
       controller = new AbortController();
       const params = new URLSearchParams({ event_date: eventDate, severity });
-      setLoading(true);
-      setError(null);
       fetch(`${API_BASE}/api/br8/alerts?${params}`, { signal: controller.signal })
         .then(async r => {
           if (!r.ok) {
@@ -68,10 +77,10 @@ export default function BR8Page() {
           }
           return r.json() as Promise<ApiResponse<VelocityAlertRow>>;
         })
-        .then(json => { setResponse(json); setFetchedAt(Date.now()); })
-        .catch(e => { if (e.name !== 'AbortError') setError(String(e)); })
-        .finally(() => setLoading(false));
+        .then(json => { setResponse(json); setError(null); setFetchedAt(Date.now()); })
+        .catch(e => { if (e.name !== 'AbortError') setError(e.message ?? String(e)); });
     };
+    setResponse(null);
     load();
     const id = setInterval(load, REFRESH_MS);
     return () => { clearInterval(id); controller?.abort(); };
@@ -129,7 +138,7 @@ export default function BR8Page() {
           </div>
           <div className="toolbar__sep" />
           <div className="toolbar__item toolbar__item--muted">
-            <RefreshCw size={12} strokeWidth={1.75} className={loading ? 'spin' : ''} />
+            <RefreshCw size={12} strokeWidth={1.75} className={response === null && !error ? 'spin' : ''} />
             <span className="toolbar__label">
               {secsAgo === null ? 'Loading…' : `Updated ${secsAgo}s ago`}
             </span>
@@ -138,12 +147,13 @@ export default function BR8Page() {
       </div>
 
       {/* ── Status Messages ─────────────────────────────────── */}
-      {loading && !response && (
+      {response === null && !error && (
         <div className="status-banner">
           <RefreshCw size={14} className="spin" />
           <span>Querying Cassandra order_velocity_alerts…</span>
         </div>
       )}
+      {/* A failed refresh keeps the last good data on screen, under this banner. */}
       {error && (
         <div className="status-banner status-banner--error">
           <AlertTriangle size={14} />
@@ -177,7 +187,7 @@ export default function BR8Page() {
       )}
 
       {/* ── Empty State ─────────────────────────────────────── */}
-      {!loading && !error && response && rows.length === 0 && (
+      {response && rows.length === 0 && (
         <div className="empty-panel">
           <ShieldAlert size={28} strokeWidth={1.5} className="empty-panel__icon" />
           <h3 className="empty-panel__title">No Alerts</h3>
@@ -190,7 +200,7 @@ export default function BR8Page() {
       )}
 
       {/* ── Alert Table ─────────────────────────────────────── */}
-      {!loading && !error && response && rows.length > 0 && (
+      {response && rows.length > 0 && (
         <div className="content-stack">
           <div className="panel">
             <div className="panel__header">
@@ -214,9 +224,11 @@ export default function BR8Page() {
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.slice(0, MAX_ROWS).map((row, i) => {
+                  {rows.slice(0, MAX_ROWS).map(row => {
                     const sev = SEVERITY_CONFIG[row.severity as keyof typeof SEVERITY_CONFIG];
-                    const rowKey = `${row.window_start}-${row.user_id}-${i}`;
+                    // Unique within a day: the table key is ((event_date), window_start, user_id).
+                    // No index in it, so the expanded alert stays put when a refresh adds rows.
+                    const rowKey = `${row.window_start}-${row.user_id}`;
                     const isExpanded = expandedKey === rowKey;
                     const rowClass = `${row.severity === 'high'
                       ? 'data-table__row--danger'
@@ -224,9 +236,8 @@ export default function BR8Page() {
                         ? 'data-table__row--warning'
                         : ''} data-table__row--clickable`;
                     return (
-                      <>
+                      <Fragment key={rowKey}>
                         <tr
-                          key={rowKey}
                           className={rowClass}
                           onClick={() => setExpandedKey(isExpanded ? null : rowKey)}
                           title="Click to view alert details"
@@ -249,7 +260,7 @@ export default function BR8Page() {
                           </td>
                         </tr>
                         {isExpanded && (
-                          <tr key={`${rowKey}-detail`} className="data-table__expand-row">
+                          <tr className="data-table__expand-row">
                             <td colSpan={6}>
                               <div className="br8-alert-detail">
                                 <div className="br8-alert-detail__header">
@@ -291,7 +302,7 @@ export default function BR8Page() {
                             </td>
                           </tr>
                         )}
-                      </>
+                      </Fragment>
                     );
                   })}
                 </tbody>
