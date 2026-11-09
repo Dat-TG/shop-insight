@@ -16,6 +16,10 @@ const SEGMENTS: RfmSegment[] = [
   'no_purchase',
 ];
 
+// The snapshots gold rfm_segments stores. processing/batch_gold.py writes exactly one,
+// LAST_SNAPSHOT = 2019-11-30; keep this list in step with it.
+const STORED_SNAPSHOTS = ['2019-11-30'];
+
 type SegmentFilter = 'all' | RfmSegment;
 
 interface Cell {
@@ -77,13 +81,20 @@ function buildHeatmap(responses: ApiResponse<RfmRow>[]): Heatmap {
 }
 
 export default function BR4Page() {
-  const [snapshotDate, setSnapshotDate] = useState('2019-11-30');
+  const [snapshotDate, setSnapshotDate] = useState(STORED_SNAPSHOTS[0]);
   const [segment, setSegment] = useState<SegmentFilter>('all');
   const [heatmap, setHeatmap] = useState<Heatmap | null>(null);
   const [selected, setSelected] = useState<Cell | null>(null);
   const [cellRows, setCellRows] = useState<ApiResponse<RfmRow> | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // The tab title matches the page title (as BR7Page does).
+  useEffect(() => {
+    const previousTitle = document.title;
+    document.title = 'RFM Segments';
+    return () => { document.title = previousTitle; };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -146,14 +157,15 @@ export default function BR4Page() {
           <div className="toolbar__item">
             <Calendar size={13} strokeWidth={1.75} className="toolbar__icon" />
             <span className="toolbar__label">Snapshot</span>
-            <input
-              type="date"
-              className="toolbar__input"
+            <select
+              className="toolbar__select"
               value={snapshotDate}
-              min="2019-11-01"
-              max="2019-11-30"
               onChange={e => setSnapshotDate(e.target.value)}
-            />
+            >
+              {STORED_SNAPSHOTS.map(day => (
+                <option key={day} value={day}>{day}</option>
+              ))}
+            </select>
           </div>
 
           <div className="toolbar__sep" />
