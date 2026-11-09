@@ -47,8 +47,10 @@ Người tham gia khảo sát (5 bạn sinh viên/kỹ sư) sẽ thực hiện l
 - **Mục tiêu:** Cảnh báo nguy cơ thiếu hàng và phát hiện tài khoản đặt đơn bất thường.
 - **Thao tác:**
   1. Mở tab **BR6 (Stockout Risk)**: Lọc Kho 1, lọc ngưỡng $< 3$ ngày. Quan sát các dòng bị bôi đỏ cảnh báo khẩn cấp.
-  2. Mở tab **BR8 (Order Velocity Alerts)**: Mở rộng xem tổng cửa sổ 5 phút để xác nhận tổng đơn trong cửa sổ. Bấm vào dòng cảnh báo để xem chi tiết breakdown theo phút.
-- **Câu hỏi xác thực:** Có bao nhiêu SKU tại Kho 1 đang ở mức nguy hiểm dưới 3 ngày?
+  2. Mở tab **BR8 (Order Velocity Alerts)**: Bấm vào một dòng cảnh báo để mở rộng, xem tổng của cửa sổ 5 phút đó: số đơn trong cửa sổ, tổng giá trị, giá trị trung bình mỗi đơn và mức độ cảnh báo.
+- **Câu hỏi xác thực:**
+  1. Có bao nhiêu SKU tại Kho 1 đang ở mức nguy hiểm dưới 3 ngày?
+  2. Với cảnh báo bạn vừa mở rộng ở BR8: cửa sổ 5 phút đó có bao nhiêu đơn, và cảnh báo ở mức độ nào?
 
 ---
 

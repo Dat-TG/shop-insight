@@ -1,177 +1,164 @@
 #!/usr/bin/env python3
+"""Draw the storage benchmark chart for report 4.4 and slide 5 from measured numbers.
+
+    python benchmark/plot_benchmark.py [--summary PATH]
+
+Reads the newest benchmark/results/summary_*.csv, the file benchmark/run_benchmark.py
+(task T12) writes, or the file given with --summary. The CSV has exactly these columns:
+
+    system,query,variant,runs,p50_ms,p95_ms
+
+and this script draws one bar per (system, query, variant) row: the bar is p50, the
+whisker above it reaches p95, the y-axis is log scale, and the footnote states how many
+timed runs each number comes from (the runs column). The chart is written to
+benchmark/results/benchmark_comparison.png. No number is hardcoded here: if no summary
+CSV exists the script prints what to run and exits 1.
+
+matplotlib is an OPTIONAL plotting dependency. It is not in requirements.txt and must
+not be added there (the pinned .venv only holds what the pipeline and API need). Install
+it in a separate virtualenv and run this script from that one:
+
+    python3.14 -m venv /path/to/plot-venv
+    /path/to/plot-venv/bin/pip install matplotlib
+    /path/to/plot-venv/bin/python benchmark/plot_benchmark.py
+
+The script only uses the Python standard library besides matplotlib.
 """
-benchmark/plot_benchmark.py
-Generate high-resolution benchmark comparison chart for ShopInsight 4 storage configurations.
-Task: W42 Task 100 (Tín) — Deliverable for Report 4.4 and Presentation Slide 5 (Nguyên).
 
-4 Configurations:
-  1. Cassandra (correct partition key vs wrong partition key)
-  2. Postgres Flat Table (without index vs with bitmap index)
-  3. Postgres Star Schema (star-join query fact_event x dim_product)
-  4. DuckDB on Parquet Star (with hive partition pruning vs without pruning)
-
-Y-axis: Logarithmic scale (1 ms -> 10,000+ ms)
-"""
-
-import os
+import argparse
 import csv
-import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.ticker as ticker
+import sys
+from pathlib import Path
 
-RESULTS_CSV = os.path.join(os.path.dirname(__file__), "results", "w41_benchmark_results.csv")
-OUTPUT_PNG = os.path.join(os.path.dirname(__file__), "results", "w41_benchmark_comparison.png")
+REPO = Path(__file__).resolve().parent.parent
+RESULTS_DIR = REPO / "benchmark" / "results"
+OUTPUT_PNG = RESULTS_DIR / "benchmark_comparison.png"
+COLUMNS = ["system", "query", "variant", "runs", "p50_ms", "p95_ms"]
 
-# Data specification mapping from CSV rows
-ITEMS = [
-    {
-        "category": "Cassandra\n(Key-Value)",
-        "label": "Cassandra\n(Right Partition Key)",
-        "sublabel": "Single partition (1 SSTable)",
-        "p50": 1.531,
-        "p95": 1.800,
-        "color": "#10b981", # emerald
-    },
-    {
-        "category": "Cassandra\n(Key-Value)",
-        "label": "Cassandra\n(Wrong Partition Key)",
-        "sublabel": "Bloom filter / index miss",
-        "p50": 1.685,
-        "p95": 2.100,
-        "color": "#34d399", # light emerald
-    },
-    {
-        "category": "Postgres Flat\n(Relational)",
-        "label": "Postgres Flat\n(No Index)",
-        "sublabel": "Parallel Append 31 parts",
-        "p50": 22.282,
-        "p95": 26.100,
-        "color": "#3b82f6", # blue
-    },
-    {
-        "category": "Postgres Flat\n(Relational)",
-        "label": "Postgres Flat\n(With Index)",
-        "sublabel": "Bitmap Index Scan (1640 hits)",
-        "p50": 21.514,
-        "p95": 24.300,
-        "color": "#60a5fa", # light blue
-    },
-    {
-        "category": "Postgres Star\n(Dimensional)",
-        "label": "Postgres Star\n(Star Join Query)",
-        "sublabel": "Nested Loop + Index Scan",
-        "p50": 31.372,
-        "p95": 35.800,
-        "color": "#8b5cf6", # purple
-    },
-    {
-        "category": "DuckDB Parquet\n(Columnar OLAP)",
-        "label": "DuckDB Star\n(Hive Pruned)",
-        "sublabel": "1 partition dir (Nov 29)",
-        "p50": 1580.0,
-        "p95": 1850.0,
-        "color": "#f59e0b", # amber
-    },
-    {
-        "category": "DuckDB Parquet\n(Columnar OLAP)",
-        "label": "DuckDB Star\n(No Pruning)",
-        "sublabel": "Full scan 31 Parquet files",
-        "p50": 10120.0,
-        "p95": 11500.0,
-        "color": "#ef4444", # red
-    },
-]
+# Categorical colours, assigned to systems in a fixed order (first appearance in the
+# CSV), never by value. Text stays in the ink colours below, never in a series colour.
+SYSTEM_COLOURS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300"]
+INK = "#1f1f1e"
+INK_MUTED = "#6b6a63"
+GRID = "#e4e3dd"
+
+
+def newest_summary():
+    """Return the newest benchmark/results/summary_*.csv, or None if there is none.
+
+    The timestamp in the name sorts the same way as time, so the last name wins.
+    """
+    found = sorted(RESULTS_DIR.glob("summary_*.csv"))
+    return found[-1] if found else None
+
+
+def read_summary(path):
+    """Read the summary CSV into a list of dicts with numeric runs, p50_ms and p95_ms."""
+    with open(path, newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        if reader.fieldnames != COLUMNS:
+            sys.exit(f"{path}: expected columns {','.join(COLUMNS)}, "
+                     f"found {','.join(reader.fieldnames or [])}")
+        rows = []
+        for row in reader:
+            rows.append({
+                "system": row["system"],
+                "query": row["query"],
+                "variant": row["variant"],
+                "runs": int(row["runs"]),
+                "p50_ms": float(row["p50_ms"]),
+                "p95_ms": float(row["p95_ms"]),
+            })
+    if not rows:
+        sys.exit(f"{path}: no data rows")
+    return rows
+
+
+def runs_footnote(rows, path):
+    """Build the footnote from the runs column, e.g. '20 timed runs per bar'."""
+    runs = sorted({row["runs"] for row in rows})
+    if len(runs) == 1:
+        count = f"{runs[0]} timed runs per bar"
+    else:
+        count = f"{runs[0]}-{runs[-1]} timed runs per bar (see the runs column)"
+    source = path.relative_to(REPO) if path.is_relative_to(REPO) else path
+    return f"Bar = p50, whisker = p95; {count}. Source: {source}"
+
+
+def format_ms(value):
+    """1.53 -> '1.5 ms', 1580 -> '1,580 ms'."""
+    return f"{value:,.1f} ms" if value < 100 else f"{value:,.0f} ms"
+
+
+def plot(rows, path, output):
+    import matplotlib
+    matplotlib.use("Agg")  # no display needed, write the PNG only
+    import matplotlib.pyplot as plt
+    from matplotlib.patches import Patch
+
+    systems = []
+    for row in rows:
+        if row["system"] not in systems:
+            systems.append(row["system"])
+    if len(systems) > len(SYSTEM_COLOURS):
+        sys.exit(f"{len(systems)} systems in {path}; the chart has colours for {len(SYSTEM_COLOURS)}")
+    colour_of = {name: SYSTEM_COLOURS[i] for i, name in enumerate(systems)}
+
+    fig, ax = plt.subplots(figsize=(max(8, 1.3 * len(rows) + 2), 6.5), dpi=200)
+    xs = range(len(rows))
+    p50 = [row["p50_ms"] for row in rows]
+    p95 = [row["p95_ms"] for row in rows]
+
+    ax.bar(xs, p50, width=0.6, color=[colour_of[r["system"]] for r in rows],
+           edgecolor="white", linewidth=2, zorder=2)
+    # Whisker from p50 up to p95, with a short cap at p95.
+    ax.vlines(xs, p50, p95, color=INK, linewidth=1.5, zorder=3)
+    ax.hlines(p95, [x - 0.12 for x in xs], [x + 0.12 for x in xs], color=INK, linewidth=1.5, zorder=3)
+
+    for x, row in zip(xs, rows):
+        ax.annotate("p50 " + format_ms(row["p50_ms"]), xy=(x, row["p95_ms"]), xytext=(0, 4),
+                    textcoords="offset points", ha="center", va="bottom", fontsize=8, color=INK)
+
+    ax.set_yscale("log")
+    ax.set_ylim(min(p50) / 3, max(p95) * 4)
+    ax.set_ylabel("Query latency, ms (log scale)", color=INK)
+    ax.set_xticks(list(xs))
+    ax.set_xticklabels([f"{r['system']}\n{r['query']}\n{r['variant']}" for r in rows],
+                       fontsize=8, color=INK)
+    ax.set_title("ShopInsight storage benchmark: p50 and p95 latency per query",
+                 fontsize=12, color=INK, loc="left")
+    ax.grid(True, which="major", axis="y", color=GRID, linewidth=0.8, zorder=0)
+    ax.set_axisbelow(True)
+    for side in ("top", "right"):
+        ax.spines[side].set_visible(False)
+    ax.tick_params(colors=INK_MUTED)
+
+    ax.legend(handles=[Patch(color=colour_of[s], label=s) for s in systems],
+              loc="upper left", frameon=False, fontsize=9)
+    fig.text(0.01, 0.01, runs_footnote(rows, path), fontsize=8, color=INK_MUTED)
+    fig.tight_layout(rect=(0, 0.04, 1, 1))
+
+    output.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output)
+    print(f"Chart written to {output} ({len(rows)} bars from {path})")
+
 
 def main():
-    fig, ax = plt.subplots(figsize=(13, 7.5), dpi=300)
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--summary", type=Path,
+                        help="summary CSV to plot (default: newest benchmark/results/summary_*.csv)")
+    args = parser.parse_args()
 
-    # Styling
-    fig.patch.set_facecolor('#ffffff')
-    ax.set_facecolor('#f8fafc')
+    path = args.summary.resolve() if args.summary else newest_summary()
+    if path is None or not path.is_file():
+        where = args.summary if args.summary else RESULTS_DIR / "summary_*.csv"
+        print(f"No benchmark summary found at {where}.\n"
+              "Run benchmark/run_benchmark.py first (task T12); it writes "
+              "benchmark/results/summary_<timestamp>.csv.")
+        sys.exit(1)
 
-    indices = np.arange(len(ITEMS))
-    bar_width = 0.36
+    plot(read_summary(path), path, OUTPUT_PNG)
 
-    p50_vals = [item["p50"] for item in ITEMS]
-    p95_vals = [item["p95"] for item in ITEMS]
-    labels = [item["label"] for item in ITEMS]
-
-    # Bars for p50 and p95
-    bars_p50 = ax.bar(indices - bar_width/2, p50_vals, width=bar_width,
-                      label="p50 (Median Latency)", color=[item["color"] for item in ITEMS],
-                      alpha=0.92, edgecolor="#1e293b", linewidth=1.1)
-
-    bars_p95 = ax.bar(indices + bar_width/2, p95_vals, width=bar_width,
-                      label="p95 (95th Percentile)", color=[item["color"] for item in ITEMS],
-                      alpha=0.55, edgecolor="#475569", linewidth=1.1, hatch="//")
-
-    # Set Logarithmic Scale
-    ax.set_yscale("log")
-    ax.set_ylim(0.5, 30000)
-
-    # Gridlines
-    ax.grid(True, which="major", axis="y", linestyle="--", linewidth=0.8, color="#cbd5e1", alpha=0.8)
-    ax.grid(True, which="minor", axis="y", linestyle=":", linewidth=0.5, color="#e2e8f0", alpha=0.6)
-    ax.set_axisbelow(True)
-
-    # Labels and Titles
-    ax.set_ylabel("Execution Latency in Milliseconds (log10 scale)", fontsize=12, fontweight="bold", color="#1e293b")
-    ax.set_title("ShopInsight — Storage Architecture Latency Comparison (W41 Benchmark)\n"
-                 "4 Configurations: Cassandra vs Postgres Flat vs Postgres Star vs DuckDB on Parquet Star",
-                 fontsize=14, fontweight="bold", pad=20, color="#0f172a")
-
-    ax.set_xticks(indices)
-    ax.set_xticklabels(labels, fontsize=9.5, fontweight="semibold", color="#1e293b")
-
-    # Annotate values on top of bars
-    for bar in bars_p50:
-        h = bar.get_height()
-        val_str = f"{h:,.1f} ms" if h < 100 else f"{int(round(h)):,} ms"
-        ax.annotate(val_str,
-                    xy=(bar.get_x() + bar.get_width() / 2, h),
-                    xytext=(0, 4),
-                    textcoords="offset points",
-                    ha='center', va='bottom',
-                    fontsize=8, fontweight='bold', color='#0f172a')
-
-    for bar in bars_p95:
-        h = bar.get_height()
-        val_str = f"{h:,.1f}" if h < 100 else f"{int(round(h)):,}"
-        ax.annotate(f"p95: {val_str}",
-                    xy=(bar.get_x() + bar.get_width() / 2, h),
-                    xytext=(0, 4),
-                    textcoords="offset points",
-                    ha='center', va='bottom',
-                    fontsize=7.5, color='#475569')
-
-    # Sub-notes for each config under the x-axis
-    for idx, item in enumerate(ITEMS):
-        ax.text(idx, 0.22, item["sublabel"], ha='center', va='top',
-                fontsize=7.5, color='#64748b', style='italic')
-
-    # Add reference horizontal lines for context
-    ax.axhline(y=2000, color='#dc2626', linestyle='-.', linewidth=1.2, alpha=0.7)
-    ax.text(0.05, 2300, 'Gate 2b SLO (< 2,000 ms UI Budget)', color='#dc2626',
-            fontsize=9, fontweight='bold', ha='left')
-
-    ax.axhline(y=10, color='#0284c7', linestyle=':', linewidth=1.0, alpha=0.6)
-    ax.text(0.05, 11.5, 'Interactive OLTP Threshold (10 ms)', color='#0284c7',
-            fontsize=8.5, fontweight='semibold', ha='left')
-
-    # Legend
-    ax.legend(loc="upper left", frameon=True, framealpha=0.95, facecolor="#ffffff",
-              edgecolor="#cbd5e1", fontsize=10)
-
-    # Footnote
-    plt.figtext(0.12, 0.02,
-                "Note: 10 runs per query; cold runs discarded. Postgres & DuckDB queried from Silver/Star schema on WSL2 (12-core, 15GB RAM).\n"
-                "Evidence sources: docs/evidence/ (cassandra_right_key_trace.txt, explain_fact_event_loaded.txt, explain_star_join.txt, duckdb_zonemap.txt)",
-                fontsize=8, color="#475569")
-
-    plt.tight_layout(rect=[0, 0.05, 1, 0.96])
-    os.makedirs(os.path.dirname(OUTPUT_PNG), exist_ok=True)
-    plt.savefig(OUTPUT_PNG, dpi=300)
-    print(f"Benchmark chart saved successfully to {OUTPUT_PNG}")
 
 if __name__ == "__main__":
     main()
