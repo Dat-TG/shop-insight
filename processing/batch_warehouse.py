@@ -2,12 +2,14 @@
 
     python processing/batch_warehouse.py
 
-Six of the nine tables are built: dim_event_type, dim_product,
-stg_rfm_snapshot, dim_user, fact_event and fact_session_funnel. The other
-build_* functions are still stubs that return None, and each of those prints
-"not built yet". Each owner replaces the BODY of their own function and keeps
-its signature. Nobody writes Parquet directly: every table goes through
-write_dim() or write_fact(), so all nine tables land the same way.
+It builds all nine tables: dim_date, dim_event_type, dim_warehouse,
+dim_product, stg_rfm_snapshot, dim_user, fact_event, fact_session_funnel and
+fact_inventory_daily. Run ingestion/gen_catalog.py and ingestion/gen_inventory.py
+first: main() stops before Spark starts when data/silver/ or
+data/catalog/products.json is missing, and build_fact_inventory_daily()
+returns None when data/inventory/ is empty. Nobody writes Parquet directly:
+every table goes through write_dim() or write_fact(), so all nine tables land
+the same way, and a build_* that returns None prints "not built yet".
 
 The build order is forced (SYSTEM_DESIGN.md 5.6), and main() runs it top to
 bottom:
@@ -21,7 +23,7 @@ bottom:
     4     dim_user (SCD2 on RFM cell)    Khang    stg_rfm_snapshot
     5     fact_event                     Dat      the events, keys already on them
     5     fact_session_funnel            Dat      the events, keys already on them
-    5     fact_inventory_daily           W40      data/inventory/ + dim_product
+    5     fact_inventory_daily           Tin      data/inventory/ + dim_product
     6     load Postgres                  Tin      the tables written above
 
 Step 3 exists to break a cycle: dim_user is Type 2 on the RFM segment, RFM is
@@ -45,19 +47,30 @@ once a JVM runs it is ignored, silently after a stop(). An executor memory
 setting does nothing in local[*], where the driver is the only executor.
 check_environment() prints the heap the JVM really got.
 
-Done when the script prints WAREHOUSE OK, with all nine tables built. Until
-then it prints WAREHOUSE PARTIAL and says how many are built. Today it prints
-(Spark 4.1.3, measured, about 60 s):
+After the nine writes, main() runs three checks, check_fact_event(),
+check_fact_session_funnel() and check_dim_user(). Each prints one line per
+count next to what it must be, and all three run even after one fails. Step 6,
+load_postgres(), then loads the star into Postgres through
+serving/load_star_postgres.py: it upserts dim_date, dim_event_type,
+dim_warehouse, dim_product and dim_user, and truncates and refills the three
+facts (stg_rfm_snapshot stays Parquet only). When Postgres is not up it prints
+a "postgres ... SKIPPED" line with the reason, and the Parquet star still stands.
 
-    dim_date                 not built yet
+The last line is WAREHOUSE OK when all nine tables are built and every check
+holds, "WAREHOUSE PARTIAL: n of 9 tables built" when a build_* returned None,
+and WAREHOUSE CHECK FAILED (exit 1) when a check is off. The run of 3 Nov 2026
+(docs/evidence/batch_timings.txt, Spark 4.1.3, 273 s with the Postgres load)
+printed:
+
+    dim_date                            92
     dim_event_type                       5
-    dim_warehouse            not built yet
+    dim_warehouse                        5
     dim_product                    210,454
     stg_rfm_snapshot             1,291,650   (5 snapshot_date directories)
     dim_user                       319,426
     fact_event                   4,754,015   (31 event_date directories)
     fact_session_funnel            970,797   (31 session_start_date directories)
-    fact_inventory_daily     not built yet
+    fact_inventory_daily         1,909,650   (30 snapshot_date directories)
 
     fact_event rows              4,754,015   (expect 4,754,015)
     ...                                      (19 more check lines, each at its expect)
@@ -83,8 +96,14 @@ then it prints WAREHOUSE PARTIAL and says how many are built. Today it prints
     stg_rfm_snapshot             1,291,650   (expect 1,291,650)
     dim_user versions              319,426   (expect 258,330 to 1,291,650)
     ...                                      (9 more check lines on dim_user, each at its expect)
-    postgres                 not loaded yet (step 6: Tin, W40)
-    WAREHOUSE PARTIAL: 6 of 9 tables built
+      dim_product               210,454 rows
+      dim_user                  319,426 rows
+      fact_event              4,754,015 rows
+      fact_session_funnel       970,797 rows
+      fact_inventory_daily    1,909,650 rows
+    postgres                 loaded
+    took                               273 s
+    WAREHOUSE OK
 """
 
 import os

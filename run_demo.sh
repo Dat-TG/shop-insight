@@ -13,7 +13,11 @@
 #   ./run_demo.sh app
 #
 # PID file: logs/.demo_pids  (stream + app background processes)
-# Logs:     logs/stream_YYYYMMDD_HHMMSS.log, logs/api_YYYYMMDD_HHMMSS.log
+# Logs:     logs/stream_YYYYMMDD_HHMMSS.log, logs/replayer_YYYYMMDD_HHMMSS.log,
+#           logs/api_YYYYMMDD_HHMMSS.log, logs/web_YYYYMMDD_HHMMSS.log
+#           Every line of the stream and replayer logs starts with the wall-clock
+#           time to the millisecond (2026-11-10 20:01:02.345 ...), so events/s
+#           can be computed from the log alone.
 
 set -euo pipefail
 
@@ -22,7 +26,6 @@ VENV="$REPO_DIR/.venv/bin/python"
 LOG_DIR="$REPO_DIR/logs"
 PID_FILE="$LOG_DIR/.demo_pids"
 
-export JAVA_HOME="${JAVA_HOME:-/Library/Java/JavaVirtualMachines/jdk-21.jdk/Contents/Home}"
 export SPARK_CONF_DIR="$REPO_DIR/conf"
 
 mkdir -p "$LOG_DIR"
@@ -37,6 +40,44 @@ die()   { echo -e "\033[1;31m[ERR ]\033[0m  $*" >&2; exit 1; }
 
 check_venv() {
     [[ -x "$VENV" ]] || die ".venv not found. Run: python -m venv .venv && .venv/bin/pip install -r requirements.txt"
+}
+
+# Spark needs JAVA_HOME to point at a JDK 21. Keep it when it is set. Otherwise
+# derive it from the java on PATH: on Ubuntu /usr/bin/java resolves to
+# /usr/lib/jvm/java-21-openjdk-amd64/bin/java, so JAVA_HOME is that minus /bin/java.
+# Otherwise, on macOS, ask /usr/libexec/java_home (macOS's /usr/bin/java is a
+# launcher stub, not a symlink, so the PATH rule would give /usr). Otherwise stop.
+check_java() {
+    if [[ -z "${JAVA_HOME:-}" ]]; then
+        if command -v java > /dev/null 2>&1; then
+            local java_bin
+            java_bin="$(readlink -f "$(command -v java)" || true)"
+            JAVA_HOME="${java_bin%/bin/java}"
+        fi
+        if [[ ( -z "${JAVA_HOME:-}" || "${JAVA_HOME:-}" == /usr ) && -x /usr/libexec/java_home ]]; then
+            JAVA_HOME="$(/usr/libexec/java_home -v 21 || true)"
+        fi
+    fi
+    [[ -n "${JAVA_HOME:-}" && -x "$JAVA_HOME/bin/java" ]] \
+        || die "No JDK found (JAVA_HOME='${JAVA_HOME:-}'). Install OpenJDK 21 (docs/SETUP_SPARK.md steps 2-3) or export JAVA_HOME=<the JDK 21 directory>."
+    export JAVA_HOME
+    info "JAVA_HOME=$JAVA_HOME"
+}
+
+# Copy stdin to stdout, each line prefixed with the wall-clock time to the
+# millisecond: "2026-11-10 20:01:02.345 <line>". Used as
+#   cmd > >(stamp_lines >> "$LOG") 2>&1 &
+# so $! is still cmd's PID: `stop` kills python, and this loop then ends on EOF.
+# $EPOCHREALTIME is seconds.microseconds (bash 5); a comma locale writes it with
+# a comma, hence [.,].
+stamp_lines() {
+    trap '' HUP  # survive the terminal closing, like the nohup'd python it reads from
+    local line now micros
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        now="$EPOCHREALTIME"
+        micros="${now#*[.,]}"
+        printf '%(%Y-%m-%d %H:%M:%S)T.%s %s\n' "${now%[.,]*}" "${micros:0:3}" "$line"
+    done
 }
 
 # ---------------------------------------------------------------------------
@@ -96,6 +137,7 @@ cmd_infra() {
 # ---------------------------------------------------------------------------
 cmd_stream() {
     check_venv
+    check_java
     cd "$REPO_DIR"
 
     # Verify containers are up
@@ -110,17 +152,19 @@ cmd_stream() {
 
     info "Starting streaming_gold.py --fresh ..."
     info "  Log: $STREAM_LOG"
-    nohup "$VENV" processing/streaming_gold.py --fresh \
-        > "$STREAM_LOG" 2>&1 &
+    # PYTHONUNBUFFERED: each line reaches stamp_lines when it is printed, so its
+    # timestamp is the time the line was written, not when a buffer filled.
+    PYTHONUNBUFFERED=1 nohup "$VENV" processing/streaming_gold.py --fresh \
+        > >(stamp_lines >> "$STREAM_LOG") 2>&1 &
     STREAM_PID=$!
     echo "stream:$STREAM_PID" >> "$PID_FILE"
     info "  PID $STREAM_PID — waiting for READY signal (up to 120 s)..."
 
-    # Wait for READY marker in log
+    # Wait for READY marker in log, after its "YYYY-MM-DD HH:MM:SS.mmm " stamp
     READY=0
     for i in $(seq 1 120); do
         sleep 1
-        if grep -q "^READY:" "$STREAM_LOG" 2>/dev/null; then
+        if grep -Eq '^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3} READY:' "$STREAM_LOG" 2>/dev/null; then
             READY=1
             break
         fi
@@ -137,8 +181,8 @@ cmd_stream() {
 
     info "Starting replayer --speed 60 --start '2019-11-17 08:00:00' ..."
     info "  Log: $REPLAYER_LOG"
-    nohup "$VENV" ingestion/replayer.py --speed 60 --start "2019-11-17 08:00:00" \
-        > "$REPLAYER_LOG" 2>&1 &
+    PYTHONUNBUFFERED=1 nohup "$VENV" ingestion/replayer.py --speed 60 --start "2019-11-17 08:00:00" \
+        > >(stamp_lines >> "$REPLAYER_LOG") 2>&1 &
     REPLAYER_PID=$!
     echo "replayer:$REPLAYER_PID" >> "$PID_FILE"
 
