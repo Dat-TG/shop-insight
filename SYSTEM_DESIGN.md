@@ -915,7 +915,7 @@ remove" is a stronger report paragraph than pretending the rows mutate.
 | Abandoned carts | BR5 | Cassandra | List sorted by cart value descending, plus a simulated "create campaign" action | Date, value threshold |
 | Inventory alerts | BR6 | Cassandra | SKU table coloured by days remaining, red under 3 days | Warehouse, day threshold |
 | Bought together | BR7 | Parquet | Product search box, then 10 related products with their lift scores | Anchor product |
-| Risk alerts | BR8 | Cassandra | Alert timeline by severity, expandable to the underlying orders | Date, severity |
+| Risk alerts | BR8 | Cassandra | Alert timeline by severity, expandable to the alert's 5-minute window totals: orders in the window, total value, average order value, severity (`order_velocity_alerts` stores no individual orders) | Date, severity |
 | Ad-hoc lookup (bonus) | BR9 | Parquet | Combined filters over the star, including a `jsonb`/struct attribute filter, with query time shown on screen | Category, brand, price, date, attributes |
 
 BR9 is the bonus ninth screen; the eight above it are the ones the grade depends
