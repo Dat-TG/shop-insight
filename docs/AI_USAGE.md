@@ -2885,3 +2885,43 @@ known limit because of the code freeze: at phone width the active tab is not scr
 - **Dat** set the four groups and their BRs in the T08 row.
 - The 900 px media query no longer turns the header into a column, because the header now wraps by itself. That was
   the AI's choice, flagged for Khang.
+
+## Session 39 — 10 November 2026 (W46)
+
+**Tool:** Claude Code (Opus 5.5), one agent writing and two reviewer agents.
+**Scope:** the code part of sprint tasks T09 and T10, done at Dat's request for Khang (BR4), Nguyen (BR5) and Tín
+(BR6, BR8): six small fixes found by reading the code. No new endpoint or feature. The owners' hands-on checks of
+their own screens are not part of this session.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| `web/src/pages/BR4Page.tsx` + `docs/BR_SCOPE.md` line 12 — the snapshot is picked from `STORED_SNAPSHOTS = ['2019-11-30']` (kept in step with `batch_gold.LAST_SNAPSHOT`) instead of a free date that gave an empty page | Built |
+| `web/src/pages/BR5Page.tsx` — the three Vietnamese strings in English | Built |
+| `serving/api/routers/br6.py` + CLAUDE.md — per warehouse, a second read `days_to_stockout >= 9999 LIMIT 5`, skipped when `max_days < 9999`, de-duplicated by `product_id`; the no-sales SKUs now reach the screen | Run live and verified |
+| `BR6Page.tsx`, `BR8Page.tsx` — the table stays on screen during a refresh (BR5's pattern); a filter change clears both the rows and the error; BR8's expanded row keyed by `window_start-user_id` in a keyed Fragment | Built; not yet clicked through in a browser |
+| `document.title` on the seven pages that had none, equal to each page's heading | Built |
+
+### How it was checked
+
+| Claim | How it was measured |
+|---|---|
+| The no-sales rows appear, and only when they should | uvicorn from the branch on a spare port. `GET /api/br6/stockout`: partitions 5, rows 525, 105 per warehouse of which 5 at 9999. `warehouse_id=1`: 105 rows, 5 at 9999. `max_days=7`: 500 rows, none at 9999. `max_days=9998.9`: none at 9999; `max_days=9999`: included. No duplicate (warehouse_id, product_id); days non-decreasing. A reviewer repeated these on its own port |
+| Build and fixtures | `npm run build` passed; `python tests/test_fixtures.py` printed "All 8 fixture bundles passed validation." |
+| Titles match headings | The reviewer read all seven: Real-time Operations, Conversion Funnel, Trending Products, RFM Segments, Abandoned Carts, Inventory Alerts, Risk Alerts |
+
+### What the AI got wrong, and was corrected on
+
+- The brief said `warehouse_id=wh1`; the API takes an int 1-5 (HTTP 422 otherwise). Tests used `warehouse_id=1`.
+- After a failed request, changing a filter kept the old error banner and hid the first-load spinner (reviewer). A
+  filter change now clears the error too, in BR6 and BR8. BR5 has the same gap and was left alone.
+- Known limit, unchanged: the merged BR6 rows sort on the raw float, so two rows whose rounded days match can show
+  out of `product_id` order.
+
+### Judgement that stayed with the team
+
+- **Dat** listed these fixes in the T09 and T10 rows and asked for them during the code freeze.
+- One list option, not an endpoint that lists snapshots, was the AI's choice to respect the freeze; flagged for Khang.
+- Still owed by people, not code: each owner clicks through their screens and posts "BRx: đạt n/n" (T09). Dat's BR1
+  and BR2 are checked during T14.
