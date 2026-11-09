@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   AlertTriangle,
   Filter as FilterIcon,
@@ -46,13 +46,28 @@ export default function BR6Page() {
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState<string | null>(null);
 
+  // The tab title matches the page title (as BR7Page does).
+  useEffect(() => {
+    const previousTitle = document.title;
+    document.title = 'Inventory Alerts';
+    return () => { document.title = previousTitle; };
+  }, []);
+
+  // A request still in flight is aborted by the next one, so a late answer for
+  // the previous filter never lands on screen.
+  const controllerRef = useRef<AbortController | null>(null);
+
+  // A refresh keeps the table on screen until the new answer arrives; a failed
+  // refresh keeps the last good data under the error banner (as BR5Page does).
   const fetchData = () => {
+    controllerRef.current?.abort();
+    const controller = new AbortController();
+    controllerRef.current = controller;
     setLoading(true);
-    setError(null);
     const params = new URLSearchParams();
     if (warehouseId !== 'all') params.set('warehouse_id', warehouseId);
     if (maxDays !== '') params.set('max_days', maxDays);
-    fetch(`${API_BASE}/api/br6/stockout?${params}`)
+    fetch(`${API_BASE}/api/br6/stockout?${params}`, { signal: controller.signal })
       .then(async r => {
         if (!r.ok) {
           const body = await r.json().catch(() => null);
@@ -60,12 +75,25 @@ export default function BR6Page() {
         }
         return r.json() as Promise<ApiResponse<StockoutRow>>;
       })
-      .then(json => setResponse(json))
-      .catch(e => setError(String(e)))
-      .finally(() => setLoading(false));
+      .then(json => {
+        setResponse(json);
+        setError(null);
+      })
+      .catch(e => {
+        if (e.name !== 'AbortError') setError(e.message ?? String(e));
+      })
+      .finally(() => {
+        if (controllerRef.current === controller) setLoading(false);
+      });
   };
 
-  useEffect(() => { fetchData(); }, [warehouseId, maxDays]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Only a filter change clears the table: the old rows answer another question.
+  useEffect(() => {
+    setResponse(null);
+    setError(null);
+    fetchData();
+    return () => controllerRef.current?.abort();
+  }, [warehouseId, maxDays]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const rows = response?.data ?? [];
   const criticalCount = rows.filter(r => r.days_to_stockout < CRITICAL_DAYS).length;
@@ -135,12 +163,13 @@ export default function BR6Page() {
       </div>
 
       {/* ── Status Messages ─────────────────────────────────── */}
-      {loading && !response && (
+      {response === null && !error && (
         <div className="status-banner">
           <RefreshCw size={14} className="spin" />
           <span>Querying Cassandra stockout_risk…</span>
         </div>
       )}
+      {/* A failed refresh keeps the last good data on screen, under this banner. */}
       {error && (
         <div className="status-banner status-banner--error">
           <AlertTriangle size={14} />
@@ -174,7 +203,7 @@ export default function BR6Page() {
       )}
 
       {/* ── Empty State ─────────────────────────────────────── */}
-      {!loading && !error && response && rows.length === 0 && (
+      {response && rows.length === 0 && (
         <div className="empty-panel">
           <Warehouse size={28} strokeWidth={1.5} className="empty-panel__icon" />
           <h3 className="empty-panel__title">No SKUs Found</h3>
@@ -186,7 +215,7 @@ export default function BR6Page() {
       )}
 
       {/* ── SKU Table ───────────────────────────────────────── */}
-      {!loading && !error && response && rows.length > 0 && (
+      {response && rows.length > 0 && (
         <div className="content-stack">
           <div className="panel">
             <div className="panel__header">

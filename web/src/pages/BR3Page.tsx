@@ -96,6 +96,13 @@ export default function BR3Page() {
   const [fetchedAt, setFetchedAt] = useState<number | null>(null);
   const [now, setNow]             = useState(() => Date.now());
 
+  // The tab title matches the page title (as BR7Page does).
+  useEffect(() => {
+    const previousTitle = document.title;
+    document.title = 'Trending Products';
+    return () => { document.title = previousTitle; };
+  }, []);
+
   // Fetch now and every 10 s, in both modes: a picked window the stream has not
   // closed yet shows up once it has. A change of window starts over: the old
   // interval is cleared and a request still in flight is aborted, so a late
