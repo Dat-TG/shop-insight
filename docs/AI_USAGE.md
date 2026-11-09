@@ -2851,3 +2851,37 @@ comment. No Spark or API logic changed.
 
 - **Dat** asked for these fixes inside T07's scope during the code freeze; the timestamped log is in T07's own
   description ("log có giờ thực").
+
+## Session 38 — 10 November 2026 (W46)
+
+**Tool:** Claude Code (Opus 5.5), one agent writing and one reviewer agent.
+**Scope:** sprint task T08, done for Khang at Dat's request: the navigation grouped by the four user groups, the
+header text, and the unused `UnderDevelopment` component removed. Web only; no page component was edited.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| `web/src/App.tsx` + navbar styles — four labelled groups: Executives (BR1); Marketing (BR2, BR4, BR5); Merchandising (BR3, BR7); Operations & Risk (BR6, BR8); header "CO5173 · Group 15" | Built and looked at |
+| `web/index.html` — title "ShopInsight · CO5173 · Group 15" | Built |
+| `web/src/components/UnderDevelopment.tsx` — deleted, with the CSS only it used | Built; grep finds no reference |
+
+### How it was checked
+
+| Claim | How it was measured |
+|---|---|
+| It builds and the fixtures still validate | `npm run build` (tsc -b + vite build) passed; `npm run lint` printed nothing; `python tests/test_fixtures.py` printed "All 8 fixture bundles passed validation." |
+| The groups render at every width | vite on a spare port, screenshots with Playwright's headless Chromium at 1440, 1366, 900 and 390 px wide; at 1440 all four groups fit on one row, where BR7 and BR8 had been cut off before |
+| Nothing else still uses the removed names | `grep -rn 'UnderDevelopment\|under-dev\|Team 15'` outside node_modules, .git and dist: no match |
+
+### What the AI got wrong, and was corrected on
+
+No defect was found in review. What could have found one: the reviewer checked the group order against the T08
+row, the active-tab state on each route, the 390 px layout, and that no `BR*Page.tsx` file changed. Left as a
+known limit because of the code freeze: at phone width the active tab is not scrolled into view.
+
+### Judgement that stayed with the team
+
+- **Dat** set the four groups and their BRs in the T08 row.
+- The 900 px media query no longer turns the header into a column, because the header now wraps by itself. That was
+  the AI's choice, flagged for Khang.
