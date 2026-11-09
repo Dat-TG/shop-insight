@@ -121,3 +121,101 @@ The fix is stricter, measured:
     check before the fix   BR1   4,563 of 4,563   100.00%   (1.00 is inside 1e-4 of 11,782.53)
     check after the fix    BR1   4,562 of 4,563    99.98%   differs: answer 11782.53, stored 11783.53
   score() on one answer row against the same row stored twice: 100.00% before, 50.00% after.
+
+== 10 November 2026: the nine-row table (T19) ==
+Note on the sections above: the BR8 rows of the 6 and 8 Nov runs used the old thresholds low 1-2 / medium 3-9 / high >= 10.
+
+Written for sprint task T19 (owner Nguyên) by Claude Code in Dat's session, from the T14 run's raw output
+(docs/evidence/t14_checks.txt, docs/evidence/ground_truth_run.txt). Nothing was re-run to write this section.
+
+where     Dat's machine (Dat-Xiaoxin: 20 logical cores, 15 GB RAM, Ubuntu 26.04.1 in WSL2), main at 02b22f1
+when      2026-11-10, run 1 01:16-01:17 +07:00, run 2 01:29 +07:00 (t14_checks.txt header)
+versions  Python 3.14.4, PySpark 4.1.3, OpenJDK 21.0.12.1, DuckDB 1.5.5, cassandra-driver 3.30.1;
+          Cassandra 4.1.12 and Postgres 16.15 in Docker
+who       commands typed by Claude Code in Dat's session on Dat's machine, at Dat's request; Dat reviews the raw output
+data      bronze, silver, warehouse, gold Parquet and stockout_risk as built on that machine (batch_timings.txt, 3 Nov)
+replay    ./run_demo.sh stream: streaming_gold.py --fresh, READY 01:06:41, then replayer.py --speed 60
+          --start "2019-11-17 08:00:00"; SIGINT right after file 78 (01:13:20; 78 files, 187,468 rows,
+          15:00-21:30 Vietnam time); stream stopped with ./run_demo.sh stop 90 s later. Final watermark
+          21:19:59 (latest event 21:29:59 minus the 10-minute delay). Logs: t14_logs/*_20261110_010633.txt.
+command   .venv/bin/python checks/correctness_8br.py --replay-start '2019-11-17 15:00:00' \
+              --replay-end '2019-11-17 21:30:00' --watermark '2019-11-17 21:19:59'
+          .venv/bin/python checks/scd2_integrity.py data/warehouse/dim_product product_id
+          .venv/bin/python checks/scd2_integrity.py data/warehouse/dim_user user_id
+BR8       labels low 1 / medium 2-3 / high >= 4 (checks/correctness_8br.py line 297, API_CONTRACT section 10,
+          PR #37), as t14_checks.txt records.
+
+-- The nine rows (threshold >= 99%; rows 1-8 compare what each screen shows) --
+ #  row   compared                                                          answer    stored   matched     match
+ 1  BR1   gmv, order_count per (day, category incl. 'all', minute)           4,563     4,563     4,563   100.00%
+ 2  BR2   sessions, events per (start date, category), incl. 'all'             465       465       465   100.00%
+ 3  BR3   product, views, carts per (window, rank), closed windows           7,580     7,580     7,580   100.00%
+ 4  BR4   r, f, m score and segment per user (heatmap and its filter)      258,330   258,330   258,330   100.00%
+ 5  BR5   cart_value, user, items, last event per (day, session)             2,600     2,600     2,600   100.00%
+ 6  BR6   days_to_stockout, stock, velocity per (warehouse, product)        63,655    63,655    63,655   100.00%
+ 7  BR7   co_count, support, lift per ordered pair                             314       314       314   100.00%
+ 8  BR8   order_count, total_value, severity per (day, 5-min window, user)   5,815     5,815     5,815   100.00%
+ 9  SCD2  dim_product + dim_user integrity, 6 checks each               12 checks         -  12 passed   100.00%
+Rows 1-8: answer = checks/correctness_8br.py's DuckDB answer, stored = rows in the gold table the screen
+reads, matched = rows whose key and every compared value are equal; score = matched / max(answer, stored).
+Row 9: checks/scd2_integrity.py on each dimension; each of the six counts is 0 on both, 0 violations
+(t14_checks.txt, run 1, "SCD2 OK" twice). The six checks, per natural key ordered by valid_from:
+  overlaps            a version's valid_to is after the next version's valid_from
+  gaps                a version's valid_to is before the next version's valid_from
+  empty_ranges        valid_from >= valid_to
+  current_flag_wrong  is_current disagrees with valid_to = 9999-12-31
+  null_fields         valid_from, valid_to or is_current is NULL
+  not_one_current     a natural key with other than exactly one current version
+All nine rows are at or above 99%, so no row needs a reason.
+
+Not one of the nine, listed because it is below 99%:
+  BR4 raw   258,330   258,330   234,977    90.96%   BELOW 99%   recency_days, frequency, monetary per user
+  These are the raw values in the BR4 cell list, not the scores and segment the heatmap counts and filters on.
+  The reason, as recorded above under "== BR4's raw values ==": "rfm_segments projects the current dim_user
+  row, and a dim_user version keeps the values of the snapshot that opened it: a version changes only when
+  rfm_cell changes. So the scores and segment (what the heatmap counts and filters on) match the 30 Nov answer
+  for every user, while the raw values in the cell list can be from an earlier snapshot." and "Kept as designed
+  (Khang's answer on #17, 18 Oct); a limitation for report section 6." Today's run gives the same 234,977
+  and the same three example users.
+
+-- Cross-check: an independent second answer (checks/ground_truth.py, T13) --
+Same machine, same replay, run 1 (t14_checks.txt; the same lines are appended to ground_truth_run.txt).
+Written separately from correctness_8br.py, in DuckDB SQL over the warehouse Parquet (BR4, BR6, BR7) and
+silver (BR8). Its BR4 line compares each buyer's raw values as of that user's current snapshot, so it shows
+the 90.96% above is the designed snapshot gap; its BR8 line compares order_count and total_value, not severity.
+  .venv/bin/python checks/ground_truth.py --replay-start '2019-11-17 15:00:00' --replay-end '2019-11-17 21:30:00'
+OK  BR4 rfm_segments  100.00%  (31,005/31,005)  gold 31,005 buyers, truth 31,005: frequency, monetary, recency as of each user's current snapshot
+OK  BR6 stockout_risk  100.00%  (63,655/63,655)  gold 63,655 rows, truth 63,655 rows
+OK  BR7 product_affinity  100.00%  (314/314)  gold 314 rows, truth 314 rows: co_count, support, lift per pair
+OK  BR8 order_velocity_alerts  100.00%  (5,815/5,815)  windows inside 2019-11-17 15:00:00 .. 2019-11-17 21:30:00, gold 5,815, truth 5,815
+GROUND TRUTH OK
+exit=0
+
+-- Run 2: the same replay again (01:21-01:29), the same correctness_8br.py command --
+It printed the same rows as run 1: BR1 4,563, BR2 465, BR3 7,580, BR4 258,330, BR5 2,600, BR6 63,655, BR7 314,
+BR8 5,815, each matched in full, 100.00%; BR4 raw 234,977 of 258,330, 90.96%; CORRECTNESS OK
+(t14_checks.txt, "== Run 2 =="). scd2_integrity.py and ground_truth.py ran once, in run 1.
+
+-- The four older gate files: run logs, superseded by the table above --
+These were captured while each BR was built. They are run logs with one-off comparisons, not % match
+scores from one check, and they ran on other dates, branches and, for BR3, another machine and replay.
+The nine-row table above is the measurement of record for correctness; the gate files stay as the
+history of each BR.
+  gate1a_br1_run.txt   "evidence captured 2026-09-30 on Dat's machine (branch w40-br1-slice)". A one-off script
+                       (not committed) compared gmv_by_minute with silver: "15:00-16:40  100 minutes: 'all' = sum
+                       of the 14 category rows in 100/100; 'all' = silver in 100/100. GMV 443,809.62 and 1,397
+                       orders on both sides." and "20:20-21:10   50 minutes, spanning the Ctrl-C and restart
+                       below: 50/50 and 50/50." Also a restart without --fresh and the API's QueryMeta.
+  gate2a_br2_run.txt   "evidence captured 2026-10-07 on Dat's machine (branch w41-br2-slice)". batch_gold.py's own
+                       check: "sessions with another stage" ... "0 of 970,797 disagree." A one-off DuckDB script
+                       (not committed) against the star: "star EXCEPT gold: 0 rows. gold EXCEPT star: 0 rows." and
+                       "cr_view_to_cart and cr_cart_to_purchase equal carts/views and purchases/carts on all 465
+                       rows". The only one of the four that checks a whole gold table for equality.
+  gate1b_br3_run.txt   "evidence captured 2026-10-01 on Khang's machine (branch w41-khang-br3)". A longer replay
+                       ("81 files, 196,024 rows, 15:00-21:45 Vietnam time"), so its counts differ from today's:
+                       "The 380 windows from 15:00 on hold only replayed events. 7,600 of 7,600 rows are identical
+                       to silver recomputed with DuckDB" (one-off script, not committed).
+  gate2a_br5_run.txt   "evidence captured 2026-10-12 on Dat's machine (branch w41-nguyen, 2e38359), while reviewing
+                       PR #26". The same 78-file replay as today. DuckDB on silver, the same rule: "stream rows
+                       (17 Nov) 2,600", "silver rows, same rule 2,600", "identical value, items, user, time 2,600",
+                       "only in stream 0", "only in silver 0".

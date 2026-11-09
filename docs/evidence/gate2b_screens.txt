@@ -1,0 +1,27 @@
+# gate2b_screens - Gate 2b: every screen under 2 s, one line per screen (sprint task T17, written for Tín)
+# date     2026-11-10, timed 01:14-01:15 +07:00 (BR4 per-R-score calls finished 01:30 +07:00)
+# machine  Dat's machine (Dat-Xiaoxin: 20 logical cores, 15 GB RAM, Ubuntu 26.04.1 in WSL2); commit 02b22f1 (main)
+# method   per endpoint 3 warm-up calls, then 20 timed calls one after another; meta = QueryMeta.ms the API reports
+#          (its own query time), curl = curl time_total (full HTTP round trip incl. JSON); p50/p95 by nearest rank, ms.
+#          partitions = QueryMeta.partitions. Source: gate2b_curl_raw.txt (summary and raw rows); nothing re-measured.
+# state    right after the T14 replay (78 files, 187,468 rows, 17 Nov 15:00-21:30 Vietnam time); API and web from
+#          ./run_demo.sh app, nothing else running.
+# BR4      the screen loads its heatmap with five calls in parallel, one per R score (BR4Page.tsx, Promise.all over
+#          r_score=1..5, 6,201 rows each). The line gives the worst of the five per column: meta p50 30.2 (r=4),
+#          meta p95 40.0 (r=1), curl p50 43.7 (r=4), curl p95 53.4 (r=1). Partitions: those raw rows do not record
+#          it; the screen footer in gate2b_br4.png reads "1 partition" (the footer shows the max of the five metas).
+#          The unfiltered endpoint (?snapshot_date=2019-11-30&segment=all, all 258,330 users, which the screen does
+#          not call) measured meta p50 365.1 / p95 408.5 and curl p50 974.1 / p95 1052.0 / max 1067.7: also under
+#          2 s, the round trip mostly JSON transfer.
+# BR3      380 partitions: the endpoint lists the partition keys to find the newest window (one per window written
+#          since --fresh), plus the one window it reads (serving/api/routers/br3.py docstring).
+#
+# BR  store                  partitions  meta_p50  meta_p95  curl_p50  curl_p95  under_2s  screenshot
+BR1   Cassandra                       1       2.6       3.1       5.2       6.1  yes       gate2b_br1.png
+BR2   Parquet via DuckDB             30      17.9      21.4      19.8      23.2  yes       gate2b_br2.png
+BR3   Cassandra                     380       5.9       7.2       7.9       9.5  yes       gate2b_br3.png
+BR4   Parquet via DuckDB              1      30.2      40.0      43.7      53.4  yes       gate2b_br4.png
+BR5   Cassandra                       1       9.6      11.9      23.3      61.3  yes       gate2b_br5.png
+BR6   Cassandra                       5      14.9      17.9      18.0      22.2  yes       gate2b_br6.png
+BR7   Parquet via DuckDB              2       9.6      11.7      22.8      28.3  yes       gate2b_br7.png
+BR8   Cassandra                       1      19.8      32.2      47.4      63.9  yes       gate2b_br8.png
