@@ -117,6 +117,13 @@ export default function BR2Page() {
   const [byCategory, setByCategory]     = useState<CategoryTable | null>(null);
   const [categoryError, setCategoryError] = useState<string | null>(null);
 
+  // The tab title matches the page title (as BR7Page does).
+  useEffect(() => {
+    const previousTitle = document.title;
+    document.title = 'Conversion Funnel';
+    return () => { document.title = previousTitle; };
+  }, []);
+
   // The funnel for the selected category. A filter change aborts a request still
   // in flight, so a late answer for the previous filter never lands on screen.
   useEffect(() => {
