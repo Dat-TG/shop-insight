@@ -269,6 +269,8 @@ def main():
     parser.add_argument("--out-dir", default=str(REPO / "benchmark" / "results"),
                         help="where the four output files go (default REPO/benchmark/results)")
     args = parser.parse_args()
+    if args.runs < 1 or args.warmup < 0:
+        parser.error("--runs must be >= 1 and --warmup >= 0")
     systems = [s for s in SYSTEMS if s in (args.only or SYSTEMS)]
 
     ts = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
