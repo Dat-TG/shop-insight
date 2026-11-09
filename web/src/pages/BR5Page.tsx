@@ -32,6 +32,13 @@ export default function BR5Page() {
   const [now, setNow]             = useState(() => Date.now());
   const [notice, setNotice]       = useState<string | null>(null);
 
+  // The tab title matches the page title (as BR7Page does).
+  useEffect(() => {
+    const previousTitle = document.title;
+    document.title = 'Abandoned Carts';
+    return () => { document.title = previousTitle; };
+  }, []);
+
   // Fetch now and every 10 s. A filter change starts over: the old interval is
   // cleared and a request still in flight is aborted, so a late answer for the
   // previous filter never lands on screen.
@@ -82,8 +89,8 @@ export default function BR5Page() {
   const createCampaign = () => {
     // Simulated: nothing is sent anywhere.
     setNotice(
-      `Đã tạo chiến dịch nhắc lại cho ${rows.length.toLocaleString('en-US')} giỏ hàng, ` +
-      `tổng giá trị ${money.format(totalValue)}. Đây chỉ là mô phỏng, không có tin nhắn nào được gửi.`
+      `Reminder campaign created for ${rows.length.toLocaleString('en-US')} carts, ` +
+      `total value ${money.format(totalValue)}. This is a simulation: no message was sent.`
     );
   };
 
@@ -212,7 +219,7 @@ export default function BR5Page() {
               </div>
               <button type="button" className="toolbar__item" onClick={createCampaign}>
                 <Megaphone size={13} strokeWidth={1.75} className="toolbar__icon" />
-                <span>Tạo chiến dịch nhắc lại</span>
+                <span>Create reminder campaign</span>
               </button>
             </div>
 
