@@ -90,6 +90,7 @@ export default function BR6Page() {
   // Only a filter change clears the table: the old rows answer another question.
   useEffect(() => {
     setResponse(null);
+    setError(null);
     fetchData();
     return () => controllerRef.current?.abort();
   }, [warehouseId, maxDays]); // eslint-disable-line react-hooks/exhaustive-deps

@@ -81,6 +81,7 @@ export default function BR8Page() {
         .catch(e => { if (e.name !== 'AbortError') setError(e.message ?? String(e)); });
     };
     setResponse(null);
+    setError(null);
     load();
     const id = setInterval(load, REFRESH_MS);
     return () => { clearInterval(id); controller?.abort(); };
