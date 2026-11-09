@@ -2695,3 +2695,40 @@ any BR code. The BR7 sort (lift first) is Nguyen's change, and the AI checked it
 
 Carried forward:
 - Session 31's list is unchanged.
+
+## Session 34 — 10 November 2026 (W46)
+
+**Tool:** Claude Code (Opus 5.5), one agent writing and an independent reviewer agent.
+**Scope:** sprint task T03, done for Tín at Dat's request: finish PR #30 on Tín's branch `w41-benchmark-4-4` so that
+main holds no benchmark or survey number without a real measurement behind it. No application code was changed.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| `benchmark/results/w41_benchmark_queries.md` — every p50/p95, every "10 lần đo" heading and the 10-run harness (which called the 10th run "p95") removed; each result block now points at `benchmark/run_benchmark.py` (T12). Versions match `requirements.txt`. The Cassandra "wrong key" config is the same question on `gmv_by_minute` with `ALLOW FILTERING`, not `bloom_demo`. Says plainly that no flat table exists | AI-drafted, reviewed by a second agent |
+| `docs/EVALUATION_SURVEY.md` — the BR8 task expands one alert to its 5-minute window totals, as `BR8Page.tsx` shows; one check question added for that step | AI-drafted, reviewed |
+| `benchmark/plot_benchmark.py` — the seven hardcoded numbers are gone; it reads the newest `summary_*.csv` (`system,query,variant,runs,p50_ms,p95_ms`) and builds the footnote from the `runs` column. matplotlib stays an optional, unpinned dependency | Run and verified on a fake CSV in a throwaway venv; nothing committed from that run |
+| `benchmark/verify_duckdb_star.py` — `--warehouse-dir`, expected counts measured now, no emoji | Run and verified |
+| `benchmark/results/w41_benchmark_environment.md` — the guessed CPU is replaced by "the env file of the run" | AI-drafted |
+
+### How it was checked
+
+| Claim | How it was measured |
+|---|---|
+| The star tables hold dim_date 92, dim_event_type 5, dim_warehouse 5, dim_product 210,454, dim_user 319,426, fact_event 4,754,015, fact_session_funnel 970,797, fact_inventory_daily 1,909,650 rows | `.venv/bin/python benchmark/verify_duckdb_star.py --warehouse-dir data/warehouse` printed `DUCKDB STAR OK` |
+| No unmeasured timing is left on the branch | `git grep -nE 'p50 ≈|p95 ≈|10 lần|10 runs'` and a wider grep (times[9], 0.10, bloom_demo, Ryzen, 127,693, 244,025) found nothing |
+| The plot script reads only the CSV | Run in a scratch venv with matplotlib against a fake 8-row summary; it exits 1 with a clear message when the CSV is missing or has other columns |
+
+### What the AI got wrong, and was corrected on
+
+- The script's old expected count for `dim_event_type` was 4. The build has 5 rows (DuckDB count), so the check had
+  been failing silently on the real data. The new count is measured.
+- The reviewer noted that `LIMIT 60` on the wrong-key query can stop after the first matching partition, which
+  understates a full scan. T12 times the query without the LIMIT.
+
+### Judgement that stayed with the team
+
+- **Dat** asked for T03 to be done for Tín on Tín's own branch and merged when the review passed.
+- The plot script is kept because the T03 row says to keep it. Whether to commit a chart is Dat's call once T14's
+  real CSV exists.
