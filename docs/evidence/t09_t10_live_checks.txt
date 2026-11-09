@@ -1,0 +1,37 @@
+T09 (Dat's BR1 and BR2 against BR_SCOPE's "Xong khi") and T10 (BR8's High filter after a replay from 08:00)
+checked on the running system during T14
+
+date      2026-11-10 01:15-01:23 +07:00, main at 02b22f1, Dat's machine (Ubuntu 26.04.1 in WSL2)
+who       commands typed by Claude Code in Dat's session, at Dat's request; Dat reviews this raw output
+system    ./run_demo.sh infra -> stream -> app, as in t14_checks.txt; UI http://localhost:5173 (vite),
+          API http://localhost:8000; the browser is Playwright 1.63's headless Chromium 1243
+
+== BR1: 3 of 3 ==
+1. "Khi replayer chạy, biểu đồ tự cập nhật không cần tải lại trang": PASS.
+   Second replay (./run_demo.sh stream at 01:21:11, replayer file 1 at 01:21:35). One page load of /br1, then the
+   page text read four times without reloading:
+     18:21:47Z (01:21:47 +07)  footer 4.634 ms / Cassandra / 1 partition / 15 rows
+     18:22:06Z (01:22:06 +07)  2019-11-17 · 14:25–15:24 Vietnam time  GMV 114.3K  footer ... / 25 rows
+     18:22:18Z (01:22:18 +07)  2019-11-17 · 14:35–15:34 Vietnam time  GMV 165K    footer ... / 35 rows
+     18:22:30Z (01:22:30 +07)  2019-11-17 · 14:45–15:44 Vietnam time  GMV 212.7K  footer ... / 45 rows
+   The chart's 60-minute range and the GMV card move every 10-12 s with no reload.
+2. "Đổi ngành hàng thì biểu đồ đổi theo": PASS. In the UI, choosing electronics in the category select changed
+   the GMV card from 309K to 207K (previous hour 330.7K -> 230.4K). API: category_l1=all first minute 21:29
+   gmv 9,133.51 / 21 orders; category_l1=electronics first minute 21:29 gmv 4,951.89 / 10 orders.
+3. "Có chuỗi unknown": PASS. GET /api/br1/realtime?event_date=2019-11-17&category_l1=unknown returns 120 rows.
+
+== BR2: 2 of 2 ==
+1. "Số lượng giảm dần qua 3 bước": PASS. GET /api/br2/funnel (1-30 Nov, all): sessions view 966,143 >
+   cart 131,498 > purchase 54,676 (events 4,451,411 > 213,486 > 64,883).
+2. "Đổi khoảng ngày hoặc ngành hàng thì số liệu đổi theo": PASS.
+   15-17 Nov, all: sessions 194,442 / 54,030 / 14,062. 1-30 Nov, electronics: 418,282 / 66,436 / 29,689.
+   In the UI, choosing electronics changed the funnel from 966,143 / 131,498 / 54,676 to 418,282 / 66,436 / 29,689.
+
+== BR8 (T10): High filter after a replay from 17 Nov 08:00 UTC ==
+"Chạy --fresh rồi replayer từ 17/11 08:00 thì lọc High ra ít nhất 1 cảnh báo trong 5 phút": PASS.
+   Second replay: replayer file 1 written at 01:21:35.153. Polling
+   GET /api/br8/alerts?event_date=2019-11-17&severity=high every 5 s:
+     01:22:36 0 · 01:22:41 0 · 01:22:46 0 · 01:22:51 0 · 01:22:56 1 alert, severity {high}, window 16:15 Vietnam time
+   First High alert 81 s after the replayer started. After the full replay (run 1, 15:00-21:30) the filter returns
+   3 alerts, all high, windows from 16:15; the screen's cards read 3 high, 337 medium, 5,475 low, 5,815 in all
+   (gate2b_br8.png). correctness_8br.py scores BR8 5,815 of 5,815 with the low 1 / medium 2-3 / high >= 4 labels.

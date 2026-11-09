@@ -1,0 +1,104 @@
+T14 step 3 - correctness, ground truth, SCD2 and fact_event spot checks (sprint task T14)
+
+date      2026-11-10 01:16-01:17 +07:00 (run 1) and 01:29 +07:00 (run 2), main at 02b22f1
+machine   Dat's machine (Dat-Xiaoxin: 20 logical cores, 15 GB RAM, Ubuntu 26.04.1 in WSL2)
+versions  Python 3.14.4, PySpark 4.1.3, OpenJDK 21.0.12.1, DuckDB 1.5.5, cassandra-driver 3.30.1;
+          Cassandra 4.1.12 and Postgres 16.15 in Docker
+who       commands typed by Claude Code in Dat's session on Dat's machine, at Dat's request; Dat reviews this raw output
+data      bronze, silver, warehouse and gold Parquet and stockout_risk as built on this machine (batch_timings.txt,
+          3 Nov); the four streaming tables hold the replay below.
+replay    ./run_demo.sh stream: streaming_gold.py --fresh, READY 01:06:41, then replayer.py --speed 60
+          --start "2019-11-17 08:00:00"; SIGINT right after file 78 (01:13:20; 78 files, 187,468 rows,
+          15:00-21:30 Vietnam time); stream stopped with ./run_demo.sh stop 90 s later. Its last batch replaced the
+          BR3 windows 21:00-21:04, so the final watermark is 21:19:59 (latest event 21:29:59 minus the 10-minute
+          delay), as in the 6 and 8 Nov runs in correctness_8br.txt. Logs: t14_logs/*_20261110_010633.txt.
+note      correctness_8br.py on main labels BR8 with the 10 Nov thresholds: low 1, medium 2-3, high >= 4
+          (checks/correctness_8br.py line 297, API_CONTRACT section 10, PR #37).
+
+== Run 1: correctness_8br.py and ground_truth.py (shell trace with set -x) ==
+++ date '+%F %T %z'
+2026-11-10 01:16:26 +0700
+++ git rev-parse --short HEAD
+02b22f1
+++ .venv/bin/python checks/correctness_8br.py --replay-start '2019-11-17 15:00:00' --replay-end '2019-11-17 21:30:00' --watermark '2019-11-17 21:19:59'
+replay 2019-11-17 15:00:00 .. 2019-11-17 21:30:00 (Vietnam time), final watermark 2019-11-17 21:19:59
+BR          answer    stored   matched     match   compared
+BR1          4,563     4,563     4,563   100.00%   gmv and order_count per (day, category incl. 'all', minute)
+BR2            465       465       465   100.00%   sessions and events per (start date, category), incl. 'all'
+BR3          7,580     7,580     7,580   100.00%   product, views, carts per (window, rank), windows closed by the watermark
+BR4        258,330   258,330   258,330   100.00%   r, f, m score and segment per user (the heatmap and its filter)
+BR5          2,600     2,600     2,600   100.00%   cart_value, user, items, last event per (day, session)
+BR6         63,655    63,655    63,655   100.00%   days_to_stockout, stock, velocity per (warehouse, product) on 30 Nov
+BR7            314       314       314   100.00%   co_count, support, lift per ordered pair
+BR8          5,815     5,815     5,815   100.00%   order_count, total_value, severity per (day, 5-minute window, user)
+          BR4 raw values (shown in the cell list, not in the heatmap):
+BR4 raw    258,330   258,330   234,977    90.96%   BELOW 99%   recency_days, frequency, monetary per user
+          differs: key (276604124)  answer (18, 1, 7.18)  stored (9, 1, 7.18)
+          differs: key (310402868)  answer (19, 1, 77.22)  stored (10, 1, 77.22)
+          differs: key (356520186)  answer (29, 1, 33.45)  stored (6, 1, 33.45)
+CORRECTNESS OK
+++ echo exit=0
+exit=0
+++ .venv/bin/python checks/ground_truth.py --replay-start '2019-11-17 15:00:00' --replay-end '2019-11-17 21:30:00'
+OK  BR4 rfm_segments  100.00%  (31,005/31,005)  gold 31,005 buyers, truth 31,005: frequency, monetary, recency as of each user's current snapshot
+OK  BR6 stockout_risk  100.00%  (63,655/63,655)  gold 63,655 rows, truth 63,655 rows
+OK  BR7 product_affinity  100.00%  (314/314)  gold 314 rows, truth 314 rows: co_count, support, lift per pair
+OK  BR8 order_velocity_alerts  100.00%  (5,815/5,815)  windows inside 2019-11-17 15:00:00 .. 2019-11-17 21:30:00, gold 5,815, truth 5,815
+GROUND TRUTH OK
+++ echo exit=0
+exit=0
+
+== Run 1: scd2_integrity.py on both SCD2 dimensions, fact_event_spot.py (Spark log lines removed) ==
+++ date '+%F %T %z'
+2026-11-10 01:16:46 +0700
+++ .venv/bin/python checks/scd2_integrity.py data/warehouse/dim_product product_id
+overlaps                         0
+not_one_current                  0
+gaps                             0
+empty_ranges                     0
+current_flag_wrong               0
+null_fields                      0
+SCD2 OK
+++ echo exit=0
+exit=0
+++ .venv/bin/python checks/scd2_integrity.py data/warehouse/dim_user user_id
+overlaps                         0
+not_one_current                  0
+gaps                             0
+empty_ranges                     0
+current_flag_wrong               0
+null_fields                      0
+SCD2 OK
+++ echo exit=0
+exit=0
+++ .venv/bin/python checks/fact_event_spot.py
+Python 3.14.4 | Spark 4.1.3 | Java 21.0.12.1
+Driver heap: 6.0 GiB (expect 6.0; about 1.0 means conf/spark-defaults.conf was not read)
+Time zone:   UTC (expect UTC)
+product_id  event_time           type     prices    silver      fact   version   day end  version dates             a  b  c
+   1005115  2019-11-01 07:03:11  view          4    949.47    949.47    942.68    942.68  2019-11-01 .. 2019-11-02  Y  Y  Y
+   1004237  2019-11-01 07:00:27  view          4   1091.33   1091.33   1080.72   1080.72  2019-11-01 .. 2019-11-02  Y  Y  Y
+  15100178  2019-11-14 13:40:36  view          2   1125.13   1125.13     82.63     82.63  2019-11-14 .. 2019-11-17  Y  Y  Y
+   1005115  2019-11-29 00:00:05  view          1    916.37    916.37    916.37    916.37  2019-11-26 .. 2019-11-30  Y  Y  Y
+   1004856  2019-12-01 00:00:08  view          1    124.11    124.11    124.11    124.11  2019-11-30 .. 9999-12-31  Y  Y  Y
+FACT_EVENT SPOT OK
+++ echo exit=0
+exit=0
+
+== Run 2: the same replay again (01:21-01:29), correctness_8br.py with the same arguments ==
+replay 2019-11-17 15:00:00 .. 2019-11-17 21:30:00 (Vietnam time), final watermark 2019-11-17 21:19:59
+BR          answer    stored   matched     match   compared
+BR1          4,563     4,563     4,563   100.00%   gmv and order_count per (day, category incl. 'all', minute)
+BR2            465       465       465   100.00%   sessions and events per (start date, category), incl. 'all'
+BR3          7,580     7,580     7,580   100.00%   product, views, carts per (window, rank), windows closed by the watermark
+BR4        258,330   258,330   258,330   100.00%   r, f, m score and segment per user (the heatmap and its filter)
+BR5          2,600     2,600     2,600   100.00%   cart_value, user, items, last event per (day, session)
+BR6         63,655    63,655    63,655   100.00%   days_to_stockout, stock, velocity per (warehouse, product) on 30 Nov
+BR7            314       314       314   100.00%   co_count, support, lift per ordered pair
+BR8          5,815     5,815     5,815   100.00%   order_count, total_value, severity per (day, 5-minute window, user)
+          BR4 raw values (shown in the cell list, not in the heatmap):
+BR4 raw    258,330   258,330   234,977    90.96%   BELOW 99%   recency_days, frequency, monetary per user
+          differs: key (276604124)  answer (18, 1, 7.18)  stored (9, 1, 7.18)
+          differs: key (310402868)  answer (19, 1, 77.22)  stored (10, 1, 77.22)
+          differs: key (356520186)  answer (29, 1, 33.45)  stored (6, 1, 33.45)
+CORRECTNESS OK
