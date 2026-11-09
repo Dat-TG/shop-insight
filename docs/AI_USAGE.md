@@ -2775,3 +2775,42 @@ code was changed. The official 3 + 20 run is T14's and is logged with it.
   machine with nothing else on the CPU (T14).
 - The choice of queries follows the T12 row; the extra Cassandra trace in the plans file goes beyond it, flagged for
   Dat's review.
+
+## Session 36 — 10 November 2026 (W46)
+
+**Tool:** Claude Code (Opus 5.5), one agent writing, one reviewer agent and one data-fact-checker agent.
+**Scope:** sprint task T04, done for Khang at Dat's request: the report skeleton for sections 4.4-6, the BR8 wording
+in three documents, BR7 in the section 4.1 diagram, and a measured Big Data subsection. Documents only.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| `docs/REPORT.md` — empty headings 4.4, 4.5, 5, 6.1-6.4 and Tài liệu tham khảo, each with the task and writer; §2.8 BR8 expands an alert to its 5-minute window totals; the §4.1 diagram and the line after it credit BR7 to `gold_br7.py`; new §3.5 "Đặc trưng Big Data" with its rows in §3's source table | AI-drafted, reviewed, numbers re-measured by a second agent |
+| `docs/BR_SCOPE.md` line 16, `SYSTEM_DESIGN.md` §9 — BR8 opens an alert to its window totals, not to a list of orders | AI-drafted, checked against `web/src/pages/BR8Page.tsx` |
+| `CLAUDE.md` — the open BR8 decision is recorded as closed | AI-drafted |
+
+### How it was checked
+
+| Claim | How it was measured |
+|---|---|
+| Raw file: 67,501,979 rows, 9,006,762,395 bytes (9.0 GB, 8.39 GiB; `du -h` prints GiB) | DuckDB `count(*)` over `read_csv('data/raw/2019-Nov.csv')`; `ls -l` |
+| 32.44% of raw events lack `category_code` (21,898,171); 32.32% in bronze; 32.27% `unknown` in silver | DuckDB `count(*) FILTER (WHERE category_code IS NULL)` on raw and bronze; `category_l1 = 'unknown'` on silver |
+| Bronze 4,767,012 rows (7.06% of raw), silver 4,754,015 | DuckDB over the Parquet directories |
+| The demo replay sends about 481 events per wall-clock second | 187,468 rows in 78 files (`docs/evidence/correctness_8br.txt`, cross-checked with DuckDB over `data/stream_landing/*.json`), one file every 5 s (`ingestion/replayer.py`) |
+| Nested JSON exists only in the catalogue | `DESCRIBE read_json('data/catalog/products.json')`: `attributes` is a STRUCT holding a STRUCT, a STRUCT and a VARCHAR[]; the replayer's lines are flat and leave out null fields |
+
+### What the AI got wrong, and was corrected on
+
+- The sprint sheet says "32.4%" with no population and "JSON lồng nhau" for the data in general. The 32.4% holds
+  only for the full raw file, and nesting exists only in the generated catalogue. The report states each figure with
+  its population and says where the JSON is nested. Dat's brief carried the sheet's wording.
+- `.claude/skills/br-slice/SKILL.md` line 111 still says BR8 expands "to the underlying orders". It was outside the
+  task's file list and is left as a follow-up.
+
+### Judgement that stayed with the team
+
+- **Dat** decided on 10 Nov, by asking for this task, that BR8's screen stays as built (window totals) and the
+  documents follow it. That closes the decision CLAUDE.md had open.
+- The Big Data text is a numbered §3.5 rather than an unheaded paragraph. That was the AI's choice, flagged for
+  Khang, who owns the report.
