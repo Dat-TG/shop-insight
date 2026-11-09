@@ -2732,3 +2732,46 @@ main holds no benchmark or survey number without a real measurement behind it. N
 - **Dat** asked for T03 to be done for Tín on Tín's own branch and merged when the review passed.
 - The plot script is kept because the T03 row says to keep it. Whether to commit a chart is Dat's call once T14's
   real CSV exists.
+
+## Session 35 — 10 November 2026 (W46)
+
+**Tool:** Claude Code (Opus 5.5), one agent writing and two independent reviewer agents.
+**Scope:** sprint task T12 (Dat's): the query benchmark harness. New files only under `benchmark/`; no application
+code was changed. The official 3 + 20 run is T14's and is logged with it.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| `benchmark/queries.sql` — 21 named blocks: Postgres star (one-day count with and without partition pruning; one hour of `event_time` by Seq Scan, BRIN and a temporary B-tree; `attributes @>` with and without GIN; revenue by category over 1, 7 and 31 days), DuckDB on the Parquet star (hive pruning vs `date_key`, min/max on `event_time`, the struct filter on `attributes`, 1/7/31 days), Cassandra right vs wrong partition key on `gmv_by_minute` and `stockout_risk`. Each block carries `expect` lines that the runner checks against the plan or trace | Run (test sizes) and verified |
+| `benchmark/run_benchmark.py` — plain functions; 3 untimed warm-up runs then 20 timed runs per variant, nearest-rank p50/p95; writes `raw_<ts>.csv`, `summary_<ts>.csv` (`system,query,variant,runs,p50_ms,p95_ms`, extra columns after), `env_<ts>.txt` and `plans_<ts>.txt`; drops the temporary B-tree in `finally` | Run (test sizes) and verified |
+| `benchmark/README.md` — how to run, what each variant shows, the output format | AI-drafted |
+
+### How it was checked
+
+| Claim | How it was measured |
+|---|---|
+| Every forced variant really gets its plan | `run_benchmark.py --runs 2 --warmup 1 --out-dir <scratch>`: all 21 blocks printed `plan check: OK`. A reviewer reran `--runs 1 --warmup 1` and read every plan: pruning_on reads only `fact_event_20191129`, pruning_off opens all 32 partitions, brin is a Bitmap Index Scan on the per-day BRIN, btree an Index Scan with no Bitmap node, gin a Bitmap Index Scan on `ix_dim_product_attrs`, DuckDB hive_pruning `Scanning Files: 1/31` |
+| Postgres and DuckDB answer the same question | The reviewer compared results: one hour 7,087 rows / 2,002,997.66 in both; `space_grey` 21,489 in both; one day 131,796 in both; the 7-day top 3 categories equal to the cent |
+| The temporary index never survives | A timed `SELECT 1/0` inside the btree variant raised, and `pg_indexes` then held no `bench_fe_time_btree` |
+| Nearest-rank percentile is right | Compared with `ceil(p*n/100)` for n = 1..2000 at p = 50, 95, 99 |
+
+### What the AI got wrong, and was corrected on
+
+- The task brief said `WHERE warehouse_id = 'wh1'`. `stockout_risk.warehouse_id` is an int (`serving/cassandra_schema.cql`),
+  so the query uses `warehouse_id = 1`.
+- The first test run failed its own BRIN check: the empty `fact_event_default` partition gets a Seq Scan. The
+  `expect` line now forbids a Seq Scan on the day partitions only.
+- `--runs 0` crashed with an IndexError (reviewer). It is now rejected by the argument parser.
+- Limits found in review that the report must state rather than hide: pruning_off probes 31 partitions through an
+  index and returns 0 rows from them, so its gap is not the whole value of pruning; `space_grey` matches about 10%
+  of products, so GIN's gain is modest; `gmv_by_minute` holds one replayed day, so its wrong-key scan is small and
+  the clear wrong-key contrast is `stockout_risk`; the btree setup's `ANALYZE fact_event` refreshes statistics for
+  good.
+
+### Judgement that stayed with the team
+
+- **Dat** set the protocol in the sprint sheet (3 warm-up + 20 timed runs) and asked for the benchmark to run on his
+  machine with nothing else on the CPU (T14).
+- The choice of queries follows the T12 row; the extra Cassandra trace in the plans file goes beyond it, flagged for
+  Dat's review.
