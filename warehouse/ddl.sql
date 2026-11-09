@@ -86,7 +86,8 @@ CREATE TABLE dim_warehouse (
 -- =====================================================================
 -- dim_product. SCD TYPE 2 on price. REES46 reprices constantly, so this
 -- dimension has natural version history — no synthetic changes needed.
--- Measured: 127,693 products -> 244,025 versions.
+-- Measured 10 Nov 2026: 128,972 products -> 210,454 versions, the same in
+-- the Parquet star (DuckDB) and in this table (count(DISTINCT product_id)).
 -- =====================================================================
 CREATE TABLE dim_product (
   product_sk    bigint        PRIMARY KEY,   -- surrogate, assigned in Spark

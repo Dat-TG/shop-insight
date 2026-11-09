@@ -202,6 +202,7 @@ an artefact someone can look at on their own time.
 Next task: Gate 2b (W42, code freeze): every screen measured under 2 s through its
 QueryMeta footer. Gate 2a (all 8 BRs demonstrable) is met in code since #23. Its evidence
 is `docs/evidence/gate2a_br2_run.txt` and `docs/evidence/gate2a_br5_run.txt`, and Tin still
-owes `gate2a_br6_run.txt` and `gate2a_br8_run.txt`. One team decision is open:
-`docs/BR_SCOPE.md` says BR8's demo opens an alert to its list of orders, but the screen
-expands an alert to its window totals, and `order_velocity_alerts` stores no orders.
+owes `gate2a_br6_run.txt` and `gate2a_br8_run.txt`. One team decision is closed: BR8's
+screen expands an alert to its 5-minute window totals (`order_velocity_alerts` stores no
+orders), recorded in `docs/BR_SCOPE.md`, `docs/REPORT.md` section 2.8 and `SYSTEM_DESIGN.md`
+section 9 (sprint task T04, 10 Nov).

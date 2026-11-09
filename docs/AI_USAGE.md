@@ -2695,3 +2695,159 @@ any BR code. The BR7 sort (lift first) is Nguyen's change, and the AI checked it
 
 Carried forward:
 - Session 31's list is unchanged.
+
+## Session 34 — 10 November 2026 (W46)
+
+**Tool:** Claude Code (Opus 5.5), one agent writing and an independent reviewer agent.
+**Scope:** sprint task T03, done for Tín at Dat's request: finish PR #30 on Tín's branch `w41-benchmark-4-4` so that
+main holds no benchmark or survey number without a real measurement behind it. No application code was changed.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| `benchmark/results/w41_benchmark_queries.md` — every p50/p95, every "10 lần đo" heading and the 10-run harness (which called the 10th run "p95") removed; each result block now points at `benchmark/run_benchmark.py` (T12). Versions match `requirements.txt`. The Cassandra "wrong key" config is the same question on `gmv_by_minute` with `ALLOW FILTERING`, not `bloom_demo`. Says plainly that no flat table exists | AI-drafted, reviewed by a second agent |
+| `docs/EVALUATION_SURVEY.md` — the BR8 task expands one alert to its 5-minute window totals, as `BR8Page.tsx` shows; one check question added for that step | AI-drafted, reviewed |
+| `benchmark/plot_benchmark.py` — the seven hardcoded numbers are gone; it reads the newest `summary_*.csv` (`system,query,variant,runs,p50_ms,p95_ms`) and builds the footnote from the `runs` column. matplotlib stays an optional, unpinned dependency | Run and verified on a fake CSV in a throwaway venv; nothing committed from that run |
+| `benchmark/verify_duckdb_star.py` — `--warehouse-dir`, expected counts measured now, no emoji | Run and verified |
+| `benchmark/results/w41_benchmark_environment.md` — the guessed CPU is replaced by "the env file of the run" | AI-drafted |
+
+### How it was checked
+
+| Claim | How it was measured |
+|---|---|
+| The star tables hold dim_date 92, dim_event_type 5, dim_warehouse 5, dim_product 210,454, dim_user 319,426, fact_event 4,754,015, fact_session_funnel 970,797, fact_inventory_daily 1,909,650 rows | `.venv/bin/python benchmark/verify_duckdb_star.py --warehouse-dir data/warehouse` printed `DUCKDB STAR OK` |
+| No unmeasured timing is left on the branch | `git grep -nE 'p50 ≈|p95 ≈|10 lần|10 runs'` and a wider grep (times[9], 0.10, bloom_demo, Ryzen, 127,693, 244,025) found nothing |
+| The plot script reads only the CSV | Run in a scratch venv with matplotlib against a fake 8-row summary; it exits 1 with a clear message when the CSV is missing or has other columns |
+
+### What the AI got wrong, and was corrected on
+
+- The script's old expected count for `dim_event_type` was 4. The build has 5 rows (DuckDB count), so the check had
+  been failing silently on the real data. The new count is measured.
+- The reviewer noted that `LIMIT 60` on the wrong-key query can stop after the first matching partition, which
+  understates a full scan. T12 times the query without the LIMIT.
+
+### Judgement that stayed with the team
+
+- **Dat** asked for T03 to be done for Tín on Tín's own branch and merged when the review passed.
+- The plot script is kept because the T03 row says to keep it. Whether to commit a chart is Dat's call once T14's
+  real CSV exists.
+
+## Session 35 — 10 November 2026 (W46)
+
+**Tool:** Claude Code (Opus 5.5), one agent writing and two independent reviewer agents.
+**Scope:** sprint task T12 (Dat's): the query benchmark harness. New files only under `benchmark/`; no application
+code was changed. The official 3 + 20 run is T14's and is logged with it.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| `benchmark/queries.sql` — 21 named blocks: Postgres star (one-day count with and without partition pruning; one hour of `event_time` by Seq Scan, BRIN and a temporary B-tree; `attributes @>` with and without GIN; revenue by category over 1, 7 and 31 days), DuckDB on the Parquet star (hive pruning vs `date_key`, min/max on `event_time`, the struct filter on `attributes`, 1/7/31 days), Cassandra right vs wrong partition key on `gmv_by_minute` and `stockout_risk`. Each block carries `expect` lines that the runner checks against the plan or trace | Run (test sizes) and verified |
+| `benchmark/run_benchmark.py` — plain functions; 3 untimed warm-up runs then 20 timed runs per variant, nearest-rank p50/p95; writes `raw_<ts>.csv`, `summary_<ts>.csv` (`system,query,variant,runs,p50_ms,p95_ms`, extra columns after), `env_<ts>.txt` and `plans_<ts>.txt`; drops the temporary B-tree in `finally` | Run (test sizes) and verified |
+| `benchmark/README.md` — how to run, what each variant shows, the output format | AI-drafted |
+
+### How it was checked
+
+| Claim | How it was measured |
+|---|---|
+| Every forced variant really gets its plan | `run_benchmark.py --runs 2 --warmup 1 --out-dir <scratch>`: all 21 blocks printed `plan check: OK`. A reviewer reran `--runs 1 --warmup 1` and read every plan: pruning_on reads only `fact_event_20191129`, pruning_off opens all 32 partitions, brin is a Bitmap Index Scan on the per-day BRIN, btree an Index Scan with no Bitmap node, gin a Bitmap Index Scan on `ix_dim_product_attrs`, DuckDB hive_pruning `Scanning Files: 1/31` |
+| Postgres and DuckDB answer the same question | The reviewer compared results: one hour 7,087 rows / 2,002,997.66 in both; `space_grey` 21,489 in both; one day 131,796 in both; the 7-day top 3 categories equal to the cent |
+| The temporary index never survives | A timed `SELECT 1/0` inside the btree variant raised, and `pg_indexes` then held no `bench_fe_time_btree` |
+| Nearest-rank percentile is right | Compared with `ceil(p*n/100)` for n = 1..2000 at p = 50, 95, 99 |
+
+### What the AI got wrong, and was corrected on
+
+- The task brief said `WHERE warehouse_id = 'wh1'`. `stockout_risk.warehouse_id` is an int (`serving/cassandra_schema.cql`),
+  so the query uses `warehouse_id = 1`.
+- The first test run failed its own BRIN check: the empty `fact_event_default` partition gets a Seq Scan. The
+  `expect` line now forbids a Seq Scan on the day partitions only.
+- `--runs 0` crashed with an IndexError (reviewer). It is now rejected by the argument parser.
+- Limits found in review that the report must state rather than hide: pruning_off probes 31 partitions through an
+  index and returns 0 rows from them, so its gap is not the whole value of pruning; `space_grey` matches about 10%
+  of products, so GIN's gain is modest; `gmv_by_minute` holds one replayed day, so its wrong-key scan is small and
+  the clear wrong-key contrast is `stockout_risk`; the btree setup's `ANALYZE fact_event` refreshes statistics for
+  good.
+
+### Judgement that stayed with the team
+
+- **Dat** set the protocol in the sprint sheet (3 warm-up + 20 timed runs) and asked for the benchmark to run on his
+  machine with nothing else on the CPU (T14).
+- The choice of queries follows the T12 row; the extra Cassandra trace in the plans file goes beyond it, flagged for
+  Dat's review.
+
+## Session 36 — 10 November 2026 (W46)
+
+**Tool:** Claude Code (Opus 5.5), one agent writing, one reviewer agent and one data-fact-checker agent.
+**Scope:** sprint task T04, done for Khang at Dat's request: the report skeleton for sections 4.4-6, the BR8 wording
+in three documents, BR7 in the section 4.1 diagram, and a measured Big Data subsection. Documents only.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| `docs/REPORT.md` — empty headings 4.4, 4.5, 5, 6.1-6.4 and Tài liệu tham khảo, each with the task and writer; §2.8 BR8 expands an alert to its 5-minute window totals; the §4.1 diagram and the line after it credit BR7 to `gold_br7.py`; new §3.5 "Đặc trưng Big Data" with its rows in §3's source table | AI-drafted, reviewed, numbers re-measured by a second agent |
+| `docs/BR_SCOPE.md` line 16, `SYSTEM_DESIGN.md` §9 — BR8 opens an alert to its window totals, not to a list of orders | AI-drafted, checked against `web/src/pages/BR8Page.tsx` |
+| `CLAUDE.md` — the open BR8 decision is recorded as closed | AI-drafted |
+
+### How it was checked
+
+| Claim | How it was measured |
+|---|---|
+| Raw file: 67,501,979 rows, 9,006,762,395 bytes (9.0 GB, 8.39 GiB; `du -h` prints GiB) | DuckDB `count(*)` over `read_csv('data/raw/2019-Nov.csv')`; `ls -l` |
+| 32.44% of raw events lack `category_code` (21,898,171); 32.32% in bronze; 32.27% `unknown` in silver | DuckDB `count(*) FILTER (WHERE category_code IS NULL)` on raw and bronze; `category_l1 = 'unknown'` on silver |
+| Bronze 4,767,012 rows (7.06% of raw), silver 4,754,015 | DuckDB over the Parquet directories |
+| The demo replay sends about 481 events per wall-clock second | 187,468 rows in 78 files (`docs/evidence/correctness_8br.txt`, cross-checked with DuckDB over `data/stream_landing/*.json`), one file every 5 s (`ingestion/replayer.py`) |
+| Nested JSON exists only in the catalogue | `DESCRIBE read_json('data/catalog/products.json')`: `attributes` is a STRUCT holding a STRUCT, a STRUCT and a VARCHAR[]; the replayer's lines are flat and leave out null fields |
+
+### What the AI got wrong, and was corrected on
+
+- The sprint sheet says "32.4%" with no population and "JSON lồng nhau" for the data in general. The 32.4% holds
+  only for the full raw file, and nesting exists only in the generated catalogue. The report states each figure with
+  its population and says where the JSON is nested. Dat's brief carried the sheet's wording.
+- `.claude/skills/br-slice/SKILL.md` line 111 still says BR8 expands "to the underlying orders". It was outside the
+  task's file list and is left as a follow-up.
+
+### Judgement that stayed with the team
+
+- **Dat** decided on 10 Nov, by asking for this task, that BR8's screen stays as built (window totals) and the
+  documents follow it. That closes the decision CLAUDE.md had open.
+- The Big Data text is a numbered §3.5 rather than an unheaded paragraph. That was the AI's choice, flagged for
+  Khang, who owns the report.
+
+## Session 37 — 10 November 2026 (W46)
+
+**Tool:** Claude Code (Opus 5.5), one agent writing and one reviewer agent.
+**Scope:** sprint task T07's leftovers, done for Tín at Dat's request: `run_demo.sh` could not start Spark on a
+machine without `JAVA_HOME`, and its stream logs had no wall-clock time; plus a stale docstring and a stale DDL
+comment. No Spark or API logic changed.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| `run_demo.sh` — `JAVA_HOME` kept if set, else derived from `java` on PATH, else macOS `java_home -v 21`, else a clear error; every line of `logs/stream_*.log` and `logs/replayer_*.log` stamped with local wall-clock time to the millisecond, through process substitution so `$!` stays the python PID; READY detection follows the stamp | Tested in isolation; the real `stream` run is T14's |
+| `processing/batch_warehouse.py` — the module docstring describes today's nine tables, checks, step 6 and `WAREHOUSE OK` instead of "WAREHOUSE PARTIAL: 6 of 9" | AI-drafted, reviewed against the code |
+| `warehouse/ddl.sql` and `SYSTEM_DESIGN.md` §5.4 — "128,972 products -> 210,454 versions", measured 10 Nov | Measured |
+
+### How it was checked
+
+| Claim | How it was measured |
+|---|---|
+| This machine has no `JAVA_HOME`, and the derived one is JDK 21 | `readlink -f /usr/bin/java` gives `/usr/lib/jvm/java-21-openjdk-amd64/bin/java`, whose `-version` is 21.0.12.1 |
+| The stamper keeps the right PID and READY still works | A fake python printing to stdout and stderr: `$!` was the python PID, READY was seen after 2 s, `stop` killed python and nothing was left running; a fake that exits early hits the die branch |
+| dim_product has 128,972 products in 210,454 versions | `count(*), count(DISTINCT product_id)` in DuckDB on `data/warehouse/dim_product` and in Postgres `dim_product`: both (210454, 128972) |
+| `infra` still works | `./run_demo.sh infra` printed `INFRA OK`, `APPLY_SCHEMA OK` |
+
+### What the AI got wrong, and was corrected on
+
+- The first commit changed the count only in `ddl.sql`. `ddl.sql`'s header says its body is SYSTEM_DESIGN §5.4-5.5
+  verbatim, so the reviewer flagged the drift; §5.4 now carries the same comment. README line 167 and
+  SYSTEM_DESIGN line 92 still have the old count; T21 (Tín) owns them.
+- Reviewer notes left as known limits: the stamper needs bash 5 (Ubuntu 26.04 has 5.3; stock macOS bash 3.2 would
+  fail), and the stamp is local time while the replayer prints event times in UTC.
+
+### Judgement that stayed with the team
+
+- **Dat** asked for these fixes inside T07's scope during the code freeze; the timestamped log is in T07's own
+  description ("log có giờ thực").
