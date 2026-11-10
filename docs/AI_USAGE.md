@@ -2973,3 +2973,44 @@ runs the measurements; the PR is held for that review. No application code was c
 - AI-made choices flagged for Dat: run 1 is quoted for streaming, because run 2 shared the CPU with the app and a
   browser; BR4's unfiltered endpoint is reported next to what the screen really calls; the 15-row cut in the images.
 - Not measured: an overload test of the stream (the `proc/s` column is headroom per batch, not a ceiling).
+
+## Session 41 — 10 November 2026 (W46)
+
+**Tool:** Claude Code (Opus 5.5): one agent writing, two reviewer agents, one fixer, and the main session.
+**Scope:** sprint tasks T19 (done for Nguyên) and T17 (done for Tín), written from T14's raw output. Nothing was
+re-measured. Documents only. First, a record: **Dat reviewed PR #45's raw output on 10 Nov and approved it** ("Các số
+liệu khá tốt. Duyệt"), and it was merged after that, as Session 40 said it would be.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| `docs/evidence/correctness_8br.txt` — appended "10 November 2026: the nine-row table (T19)": BR1-BR8 from today's correctness_8br.py run, SCD2 as row 9 (6 checks × 2 dimensions), the BR4 raw-values line with its recorded reason, the ground_truth.py cross-check, excerpts of the four older gate files, the run-2 repeat. Earlier sections untouched apart from a one-line note that their BR8 rows used the old thresholds | AI-drafted from run output, reviewed |
+| `docs/evidence/gate2b_screens.txt` — 8 lines: store, partitions, QueryMeta and curl p50/p95, under 2 s, screenshot | AI-drafted from `gate2b_curl_raw.txt` |
+| `docs/evidence/perf_table.md` — the performance table in five columns for report section 6.2 | AI-drafted |
+| `docs/evidence/README.md` — one line per evidence file: date, machine, data, runs, what it proves | AI-drafted |
+
+### How it was checked
+
+| Claim | How it was checked |
+|---|---|
+| The nine rows equal the run's output | Main session compared every row with `t14_checks.txt` run 1, and the six SCD2 check names with `checks/scd2_integrity.py` lines 23-42 |
+| gate2b_screens's eight lines equal the timing output | Main session compared them with the summary and the BR4 per-R-score block in `gate2b_curl_raw.txt`; BR4 shows the worst of the five calls per column |
+| Thresholds are not invented | Reviewer searched CLAUDE.md, PLAN.md, SYSTEM_DESIGN.md, EVALUATION_SURVEY.md; rows without a documented threshold say so |
+| PR merges cleanly onto main after #45 | `git merge-tree` and GitHub MERGEABLE/CLEAN |
+
+### What the AI got wrong, and was corrected on
+
+- The first `perf_table.md` said Cassandra's right-key and wrong-key variants "ask the same question". They are two
+  different queries (`benchmark/queries.sql`); a reviewer caught it and the row was rewritten.
+- `gate2b_screens.txt` said "nothing else running" for the whole block, but BR4's per-R-score calls ran later, after
+  the second replay. The header now says when, and that the stream had been killed at 01:29:35 (the time comes from
+  the stop command's output; the stream log's last batch is 01:28:10).
+- Both data-fact-checker reviews of this PR crashed without a result (the reviewer ended without returning its
+  verdict). The main session's own comparison above stands in for them, flagged for Nguyên and Tín to re-read.
+
+### Judgement that stayed with the team
+
+- **Dat** asked for T17 and T19 to be done on Nguyên's and Tín's behalf.
+- AI-made and flagged: the nine-row table counts SCD2 as checks passed out of checks (12/12), since SCD2 has no
+  answer-vs-stored rows; whether report section 6.1 quotes this table or the older 8-row ones is Khang's call.
