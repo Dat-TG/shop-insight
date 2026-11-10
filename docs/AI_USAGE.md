@@ -3102,3 +3102,42 @@ next bullet list says why.
 - **Open for Dat:**
   - Read the six scripts aloud once. 577 is 3 syllables under the 580 cap.
   - Pages 16-17 open the demo; the demo actions themselves belong in Nguyên's T16 script.
+
+## Session 44 — 10 November 2026 (W46)
+
+**Tool:** Claude Code (Opus 5.5), main session.
+**Scope:** sprint task T25, draft part (Dat's): fill the Claude Slides deck "Group15_ShopInsight_Project"
+(AJRotBMth9wRSAG6JwNJWM) from `docs/project_deck.md`, put the 8 screens on the BR pages, and put a draft PDF on the
+group's Drive. No repo file changed except this log.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| Deck version 18: pages 01-04 and 20-22 (Khang) and 08-11, 16-17 (Dat), copied from their blocks in `project_deck.md`: title, points, the evidence line, the spoken script as speaker notes; the 8 BR pages carry a screenshot | AI-built from the file, rendered and looked at; Khang's and Dat's own review pending |
+| Pages 05-07, 18-19 (Nguyên) and 12-15, 23-26 (Tín) | Left as the empty frames, because their blocks are empty |
+| `Nhom15_ShopInsight_Slide_nhap_2026-11-10.pdf` in the course Drive folder, 26 pages | A local render of the deck's slide files with Chromium at 1920×1080, not the Slides app's own export |
+
+### How it was checked
+
+| Claim | How it was checked |
+|---|---|
+| No slide's content runs past the 920 px footer line | The render script measured every slide's lowest element. Page 08 first reached 994 px and the BR pages 930 px; after the fix the worst is 890 px |
+| The text on the slides is the text in `project_deck.md` | Built by a script from the blocks, not retyped. The first build cut multi-line "Số liệu" lines after the first line; the script now reads the whole paragraph |
+| The pages look right | Pages 01, 08, 09, 10, 16 rendered and looked at |
+
+### What the AI got wrong, and was corrected on
+
+- The slide screenshots are not the evidence screenshots. The evidence images (`gate2b_br*.png`) are up to 1,523 px
+  tall, which is unreadable on a slide. So the slide copies were retaken on 10 Nov at 21:00 with 6 table rows and the
+  same app and data. Their footers show the first-load times after a restart: for example BR4 shows 189 ms, where the
+  evidence image shows 72.78 ms. Each slide says "số đo chính thức: docs/evidence/gate2b_screens.txt".
+- The PDF is a local render. The Slides app may lay lists and fonts out slightly differently. The final PDF (T25 on
+  11 Nov) should come from the app's own Export.
+
+### Judgement that stayed with the team
+
+- **Dat** asked for the draft deck and the PDF on Drive in this session.
+- The PostgreSQL box on page 08's figure still has no T12 numbers; the figure would have to be redrawn. Left for
+  Dat to decide.
+- Nguyên's and Tín's pages stay empty until they write their blocks (T20).
