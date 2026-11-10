@@ -441,7 +441,208 @@ Vì vậy phép so sánh giữa hai lần chấm phải an toàn với NULL ngay
 
 ### 4.4 Mô hình dữ liệu ba mức (khái niệm, logic, vật lý)
 
-*Chờ viết: T15, Đắt.*
+Kho dữ liệu của ShopInsight được mô tả ở ba mức. Mức khái niệm nói nghiệp vụ có những thực thể nào và chúng liên hệ với nhau ra sao, chưa nói tới bảng. Mức logic biến các thực thể đó thành một star schema gồm bảng chiều (dimension) và bảng sự kiện (fact), rồi đặt nó cạnh năm bảng gold của Cassandra, vốn được thiết kế theo một nguyên tắc ngược lại. Mức vật lý là cách cùng một mô hình logic nằm trên đĩa: thư mục Parquet, partition và index của PostgreSQL, khoá phân vùng của Cassandra, kèm số đo cho thấy mỗi lựa chọn giúp được gì và không giúp được gì. Số dòng của các bảng trong mục này được đếm lại ngày 10/11/2026 trên máy của Đắt; nguồn của từng số, kể cả các số lấy từ tài liệu cũ hơn, ghi ở bảng nguồn cuối mục 4.
+
+**Mức khái niệm.** Nghiệp vụ có mười một thực thể:
+
+```mermaid
+erDiagram
+    USER["Khách hàng"]
+    SESSION["Phiên truy cập"]
+    EVENT["Sự kiện"]
+    PRODUCT["Sản phẩm"]
+    DAY["Ngày (có ngày lễ)"]
+    RFM["Lần chấm RFM"]
+    CATEGORY["Ngành hàng (3 cấp)"]
+    BRAND["Thương hiệu"]
+    PRICE["Giá trong ngày"]
+    STOCK["Tồn kho cuối ngày"]
+    WAREHOUSE["Kho"]
+    USER ||--o{ SESSION : "mở"
+    SESSION ||--|{ EVENT : "gồm"
+    EVENT }o--|| PRODUCT : "nói về"
+    EVENT }o--|| DAY : "xảy ra vào"
+    USER ||--|{ RFM : "được chấm"
+    PRODUCT }o--|| CATEGORY : "thuộc"
+    PRODUCT }o--|| BRAND : "mang"
+    PRODUCT ||--|{ PRICE : "đổi giá"
+    PRODUCT ||--o{ STOCK : "có"
+    WAREHOUSE ||--|{ STOCK : "giữ"
+    STOCK }o--|| DAY : "chụp vào"
+```
+<!-- PDF (T28): figures/report_4_4_erd.png is this block rendered with Mermaid 11.17.2. -->
+
+*Hình 4.4a. Mô hình khái niệm.*
+
+Khách hàng mở nhiều phiên truy cập, mỗi phiên gồm ít nhất một sự kiện, và mỗi sự kiện nói về đúng một sản phẩm và xảy ra vào một ngày. Loại thao tác (xem, thêm giỏ, mua) là thuộc tính của sự kiện. Sản phẩm thuộc một ngành hàng ba cấp, ví dụ `electronics.smartphone`, và mang một thương hiệu. Tồn kho cuối ngày là quan hệ của ba thực thể: một sản phẩm, tại một kho, vào một ngày. Hai thực thể đổi theo thời gian, và đó là chỗ khó nhất của mô hình: giá của sản phẩm đổi nhiều lần trong tháng, còn phân khúc của khách đổi sau mỗi lần chấm RFM hằng tuần. Một sự kiện ngày 10/11 phải mang giá và phân khúc của ngày 10/11, không phải giá trị hiện tại.
+
+**Mức logic: star schema.** Mỗi thực thể khái niệm trở thành một bảng, hoặc được gộp vào một bảng khác:
+
+| Thực thể khái niệm | Ở mức logic |
+|---|---|
+| Sự kiện | `fact_event`, mỗi sự kiện một dòng |
+| Phiên truy cập | Không có bảng dimension riêng. `user_session` nằm ngay trên `fact_event` (degenerate dimension) và là grain của `fact_session_funnel` |
+| Khách hàng, Lần chấm RFM | `dim_user`, SCD Type 2 theo ô RFM, dựng từ bảng trung gian `stg_rfm_snapshot` |
+| Sản phẩm, Ngành hàng, Thương hiệu, Giá trong ngày | Gộp vào một bảng `dim_product`, SCD Type 2 theo giá |
+| Ngày | `dim_date` |
+| Kho | `dim_warehouse` |
+| Tồn kho cuối ngày | `fact_inventory_daily` |
+| Loại thao tác (thuộc tính của Sự kiện) | `dim_event_type`, giữ thứ tự các bước phễu và định nghĩa thế nào là một đơn |
+
+Ngành hàng và thương hiệu không thành bảng riêng mà được gộp (denormalise) vào `dim_product`, nên mô hình là star chứ không phải snowflake: một câu hỏi theo ngành hàng chỉ cần một phép nối từ fact sang `dim_product`. `dim_date`, `dim_product` và `dim_user` được nhiều fact dùng chung với cùng một nghĩa: `dim_product` được cả `fact_event` lẫn `fact_inventory_daily` trỏ tới, `dim_user` được `fact_event` lẫn `fact_session_funnel` trỏ tới. Cả năm dimension được dựng một lần và dùng lại với một nghĩa duy nhất, nên `SYSTEM_DESIGN.md` gọi chúng là conformed dimension, dù `dim_event_type` hiện chỉ có `fact_event` dùng và `dim_warehouse` chỉ có `fact_inventory_daily` dùng. Vì vậy một câu hỏi ghép hai fact so được hai con số trên cùng một sản phẩm hay một khách.
+
+```mermaid
+flowchart TB
+    DU["<b>dim_user</b><br/>SCD Type 2 theo ô RFM<br/>319,426 phiên bản"]
+    DET["<b>dim_event_type</b><br/>thứ tự bước phễu<br/>5 dòng"]
+    FE[["<b>fact_event</b><br/>transaction<br/>1 dòng = 1 sự kiện<br/>4,754,015 dòng"]]
+    FSF[["<b>fact_session_funnel</b><br/>accumulating snapshot<br/>1 dòng = 1 phiên<br/>970,797 dòng"]]
+    DP["<b>dim_product</b><br/>SCD Type 2 theo giá<br/>210,454 phiên bản"]
+    DD["<b>dim_date</b><br/>cờ ngày lễ<br/>92 dòng"]
+    FID[["<b>fact_inventory_daily</b><br/>periodic snapshot<br/>1 dòng = 1 SKU, 1 kho,<br/>1 ngày<br/>1,909,650 dòng"]]
+    DW["<b>dim_warehouse</b><br/>5 dòng"]
+
+    DU ---|user_sk| FE
+    DET ---|event_type_key| FE
+    DU ---|user_sk| FSF
+    FE -.-|user_session| FSF
+    FE ---|product_sk| DP
+    FE ---|date_key| DD
+    DP ---|product_sk| FID
+    DD ---|date_key| FID
+    FID ---|warehouse_key| DW
+```
+<!-- PDF (T28): figures/report_4_4_star.png is this block rendered with Mermaid 11.17.2. -->
+
+*Hình 4.4b. Star schema: ba fact (khung đôi), năm dimension, và khoá nối ghi trên cạnh. Đường chấm là `user_session`, khoá đi từ một phiên sang các sự kiện của phiên đó; phiên không có bảng dimension riêng.*
+
+Ba fact ứng với ba kiểu bảng fact của Kimball. Grain, tức một dòng biểu diễn điều gì, được chốt trước mọi cột khác:
+
+| | `fact_event` | `fact_session_funnel` | `fact_inventory_daily` |
+|---|---|---|---|
+| Kiểu fact | Transaction | Accumulating snapshot | Periodic snapshot |
+| Grain: một dòng là | một sự kiện đã làm sạch | một phiên truy cập | một sản phẩm tại một kho trong một ngày |
+| Số dòng | 4,754,015 | 970,797 | 1,909,650 = 12,731 × 5 × 30 |
+| Thư mục Parquet | 31 thư mục `event_date` | 31 thư mục `session_start_date` | 30 thư mục `snapshot_date` |
+| Measure | `price` | mốc thời gian của từng bước, độ trễ giữa các bước, số sự kiện, giá trị giỏ và giá trị mua | `stock_on_hand` (semi-additive), `units_sold_that_day` (additive), `velocity_7d` và `days_to_stockout` (non-additive) |
+| Dimension | `dim_date`, `dim_event_type`, `dim_user`, `dim_product`; `user_session` là degenerate dimension | `dim_user` | `dim_date`, `dim_warehouse`, `dim_product` |
+| Được đọc bởi | BR2 (tách phễu theo ngành hàng), BR7, và đáp án đối chứng của `checks/ground_truth.py` | BR2 | BR6 |
+
+- `fact_event` khớp một-một với silver: 4,754,015 dòng, đúng bằng số sự kiện của silver. Measure `price` là giá của chính sự kiện. Phiên bản của `dim_product` giữ giá cuối ngày, nên 677,255 sự kiện (14.2%) có giá khác giá của phiên bản mà chúng trỏ tới; đó là hai giá trị khác nhau theo định nghĩa, không phải lỗi.
+- `fact_session_funnel` có đúng một dòng cho mỗi giá trị `user_session` phân biệt (970,797). Ba cột mốc `first_view_at`, `first_cart_at`, `purchase_at` để NULL cho tới khi phiên đi tới bước đó, và `funnel_stage` là bước xa nhất. Hai ràng buộc `ck_fsf_stage` và `ck_fsf_lags` giữ cho bước xa nhất và các độ trễ khớp với các mốc; lần dựng ngày 3/11 có 0 dòng vi phạm. Theo bước xa nhất, 838,795 phiên dừng ở bước xem, 77,098 ở bước thêm giỏ và 54,904 phiên mua.
+- `fact_inventory_daily` là bảng dày: mỗi sản phẩm, mỗi kho, mỗi ngày đều có một dòng, kể cả khi không có gì thay đổi. Nhóm chỉ lấy 12,731 sản phẩm từng được mua trong tập mẫu (mục 3.4). Lấy cả 128,972 sản phẩm thì bảng có 128,972 × 5 × 30 = 19,345,800 dòng, vượt giới hạn 5 triệu dòng, chỉ để phục vụ một BR, mà sản phẩm chưa từng bán không bao giờ hiện trên màn hình cảnh báo. `stock_on_hand` là semi-additive: cộng qua các kho trong một ngày thì ra tồn kho, cộng qua nhiều ngày thì vô nghĩa. Vì vậy `batch_gold.py` chỉ đọc ngày cuối của bảng khi tính BR6, không cộng một khoảng ngày.
+
+**Hai dimension SCD Type 2 và `stg_rfm_snapshot`.** `dim_product` có 210,454 phiên bản của 128,972 sản phẩm. Giá là thuộc tính Type 2 (đổi giá thì mở phiên bản mới), còn ngành hàng, thương hiệu và catalogue là Type 1. Mỗi sản phẩm có tối đa một phiên bản mỗi ngày. `dim_user` có 319,426 phiên bản của 258,330 khách, mỗi khách đúng một phiên bản hiện hành. Khoá thay thế (`product_sk`, `user_sk`) trỏ tới phiên bản có hiệu lực vào ngày của sự kiện và được gắn lên dòng sự kiện ngay khi dựng, nên phép nối giữa fact và dimension là phép nối bằng trên một cột, không phải phép nối theo khoảng `valid_from`, `valid_to`. Lần kiểm ngày 10/11 cho kết quả 0 ở cả sáu phép kiểm toàn vẹn SCD2 trên hai dimension, và cả năm sự kiện kiểm tay của `checks/fact_event_spot.py` đều trỏ đúng phiên bản.
+
+`stg_rfm_snapshot` có 1,291,650 dòng, tức 258,330 khách × 5 lần chấm (7, 14, 21, 28 và 30/11). Bảng này tồn tại để cắt một vòng phụ thuộc. `dim_user` lưu lịch sử theo phân khúc RFM, nhưng RFM lại là kết quả của BR4, và bảng gold được dựng từ star schema: dimension cần RFM, RFM cần gold, gold cần dimension. Nhóm coi RFM đúng với bản chất của nó, một thuộc tính của khách. `batch_warehouse.py` tính điểm RFM của mọi khách ở mỗi lần chấm thẳng từ silver, trên mã khách tự nhiên, trước khi dựng bất kỳ fact nào, rồi `dim_user` mở phiên bản mới mỗi khi ô RFM đổi giữa hai lần chấm (mục 4.3). Bảng gold của BR4 chỉ còn lấy các phiên bản hiện hành của `dim_user`. Không fact nào trỏ tới `stg_rfm_snapshot`, nên nó mang tiền tố `stg_` và không thuộc star schema.
+
+**Đặt cạnh mô hình phục vụ của Cassandra.** Năm bảng gold ở Cassandra (mục 4.2) không theo star schema:
+
+| Bảng | BR | Partition key | Clustering key | Ghi bởi |
+|---|---|---|---|---|
+| `gmv_by_minute` | BR1 | `(event_date, category_l1)` | `window_start` giảm dần | `streaming_gold.py` |
+| `trending_products` | BR3 | `(window_start)` | `rank` | `streaming_gold.py` |
+| `abandoned_carts` | BR5 | `(event_date)` | `user_session` | `streaming_gold.py` |
+| `order_velocity_alerts` | BR8 | `(event_date)` | `window_start` giảm dần, `user_id` | `streaming_gold.py` |
+| `stockout_risk` | BR6 | `(warehouse_id)` | `days_to_stockout`, `product_id` | `batch_gold.py`, từ ngày cuối của `fact_inventory_daily` |
+
+| | Star schema (Parquet, PostgreSQL) | Bảng gold ở Cassandra |
+|---|---|---|
+| Thiết kế xuất phát từ | grain của quy trình nghiệp vụ | câu hỏi mà màn hình đặt ra |
+| Một bảng trả lời | nhiều câu hỏi, bằng cách nối với các dimension cần thiết | đúng một câu hỏi |
+| Thêm một câu hỏi | thêm một câu truy vấn | thêm một bảng và một đường ghi |
+| Phép nối | có, đó là cách dùng star schema | không có |
+| Bộ lọc | bất kỳ cột nào | phải đi qua partition key |
+
+Mô hình phục vụ là query-first và denormalise vì hai lý do của Cassandra: không có phép nối, và lọc ngoài partition key thì phải quét cả bảng. Mỗi dòng vì thế mang sẵn mọi thứ màn hình in ra. `trending_products` lưu `brand` và `category_l1` ngay cạnh `product_id` thay vì một khoá thay thế để nối sang `dim_product`, và mỗi câu hỏi có một bảng riêng mà khoá chính là bộ lọc của câu hỏi đó. Chỉ `stockout_risk` được sinh từ star schema; bốn bảng của nhánh thời gian thực đọc sự kiện ở dạng silver (mục 4.1). Một điểm hai mô hình gặp nhau: `warehouse_id` là partition key của `stockout_risk` ở Cassandra và cũng là khoá chia partition của `fact_inventory_daily` ở PostgreSQL, vì cả hai phục vụ cùng một đường truy cập của BR6 là theo từng kho. Bản Parquet của cùng bảng lại chia thư mục theo `snapshot_date`, vì người đọc nó là `batch_gold.py`, và job này chỉ cần ngày cuối. Khoá đúng phụ thuộc vào ai đọc bảng, không phụ thuộc vào bảng.
+
+**Mức vật lý.** Cùng một mô hình logic được hiện thực hai lần, Parquet là nơi lưu chính và PostgreSQL là bản thứ hai. Tám bảng của star schema có số dòng bằng nhau ở hai nơi. Cassandra chỉ giữ năm bảng gold.
+
+```mermaid
+flowchart TB
+    L["<b>Mô hình logic</b><br/>star schema<br/>5 dimension, 3 fact"]
+
+    subgraph PQ["Parquet, data/warehouse/ (nơi lưu chính)"]
+        direction LR
+        P1["<b>fact_event/</b><br/>event_date=… × 31<br/>mỗi thư mục 1 tệp, 1 row group<br/>min/max có ở price, product_sk<br/>event_time (INT96) không có"]
+        P2["<b>fact_session_funnel/</b><br/>session_start_date=… × 31"]
+        P3["<b>fact_inventory_daily/</b><br/>snapshot_date=… × 30"]
+        P4["<b>dim_*/</b><br/>mỗi bảng 1 tệp<br/>attributes là STRUCT"]
+        P1 ~~~ P2
+        P3 ~~~ P4
+    end
+
+    subgraph PG["PostgreSQL 16 (bản thứ hai, cùng mô hình)"]
+        direction LR
+        G1["<b>fact_event</b><br/>RANGE (event_date)<br/>31 ngày + DEFAULT<br/>B-tree (event_date, event_type_key, event_time)<br/>BRIN (event_time)<br/>B-tree một phần (user_sk, event_time)"]
+        G2["<b>fact_session_funnel</b><br/>RANGE (session_start_date)<br/>31 ngày + DEFAULT"]
+        G3["<b>fact_inventory_daily</b><br/>LIST (warehouse_id)<br/>5 kho"]
+        G4["<b>dim_product</b><br/>GIN (attributes<br/>jsonb_path_ops)"]
+        G1 ~~~ G2
+        G3 ~~~ G4
+    end
+
+    subgraph CS["Cassandra 4.1: khoá phân vùng của 5 bảng gold"]
+        direction LR
+        C1["<b>gmv_by_minute</b><br/>(event_date, category_l1)"]
+        C2["<b>trending_products</b><br/>(window_start)"]
+        C3["<b>abandoned_carts</b><br/>(event_date)"]
+        C4["<b>order_velocity_alerts</b><br/>(event_date)"]
+        C5["<b>stockout_risk</b><br/>(warehouse_id)<br/>từ fact_inventory_daily"]
+        C1 ~~~ C2 ~~~ C3
+        C4 ~~~ C5
+    end
+
+    L --> PQ
+    PQ -->|load_star_postgres.py| PG
+    PG ~~~ CS
+```
+<!-- PDF (T28): figures/report_4_4_physical.png is this block rendered with Mermaid 11.17.2. -->
+
+*Hình 4.4c. Bố cục vật lý: thư mục Parquet, partition và index của PostgreSQL, partition key của Cassandra.*
+
+*Parquet.* Mỗi fact được ghi thành một thư mục con cho mỗi giá trị của cột chia (`event_date=2019-11-29/`), mỗi thư mục một tệp, các dòng trong tệp được sắp theo một cột (`event_time` với `fact_event`, `session_start_at` với `fact_session_funnel`, `product_id` với `fact_inventory_daily`). Mỗi dimension là một tệp. Có hai cơ chế để bỏ qua dữ liệu. Cơ chế thứ nhất là bỏ cả thư mục: bộ lọc trên cột chia cho phép bỏ qua thư mục mà không mở tệp nào. Cơ chế thứ hai là min/max của từng row group, lưu trong footer của tệp, cho phép bỏ một row group khi khoảng giá trị của nó không giao với bộ lọc. Đọc footer của 31 tệp `fact_event` cho thấy cơ chế thứ hai gần như không dùng được ở đây:
+- Mỗi tệp chỉ có đúng 1 row group, từ 25,859 tới 482,049 dòng, tức cả một ngày. Min/max của row group vì thế trùng với min/max của cả ngày, mà thư mục ngày đã bỏ qua được rồi.
+- `event_time` được Spark ghi theo kiểu INT96 cũ, và kiểu này không có min/max: 0 trên 31 column chunk có thống kê, trong khi `price` và `product_sk` có ở cả 31. Lọc một giờ theo `event_time` vì thế phải đọc cả 31 tệp. E1 cho thấy điều tương tự với Spark trên silver ngày 20/10: lọc một giờ đọc 93/93 tệp và trả về đủ 4,754,015 dòng cho bước lọc. Cách sửa đã biết là ghi `TIMESTAMP_MICROS`, nhưng nhóm chưa áp dụng, vì không màn hình nào lọc fact theo giờ.
+- Với `price` thì có min/max nhưng vẫn không bỏ được gì. Theo footer của 93 row group silver (E5, ngày 26/10), max giá của mọi row group nằm trong khoảng 1,644.59 tới 2,574.07, nên bộ lọc giá trên 1,000 không bỏ được row group nào dù chỉ 4.97% số dòng khớp.
+
+Cơ chế thứ nhất thì có tác dụng rõ. Với Spark trên silver (E1), lọc một ngày và một loại sự kiện chỉ đọc 1/93 tệp (14.8 KiB) thay vì 93 tệp (133.9 MiB). Với phép nối mà bộ lọc nằm ở bảng ngày, dynamic partition pruning chỉ đọc 9/93 tệp. Trên cùng mẫu 7%, câu doanh thu theo ngành hàng chạy trên tệp CSV mất 177.0 ms, còn trên Parquet chia thư mục chỉ mất 9.0 ms, đọc 31/93 tệp (E4, DuckDB, trung vị 5 lần chạy). Mức chênh khoảng 20 lần này không phải của riêng việc bỏ thư mục: nó gộp định dạng cột của Parquet, việc chỉ đọc các cột cần dùng, và việc bỏ 62/93 tệp, mà E4 không tách riêng từng phần. Phần của riêng việc bỏ thư mục được benchmark ngày 10/11 đo: đếm sự kiện một ngày bằng DuckDB mất 1.565 ms khi lọc trên cột chia thư mục, so với 3.342 ms khi lọc trên cột thường `date_key` của cùng các tệp Parquet, tức khoảng 2 lần (bảng dưới). Cột `attributes` lồng nhau được Spark ghi thành STRUCT, nên DuckDB chỉ đọc lá `attributes.color` mà không cần index.
+
+*PostgreSQL.* `warehouse/ddl.sql` chép nguyên văn DDL của mục 5.4 và 5.5 trong `SYSTEM_DESIGN.md`, trừ hai chỗ ghi ở đầu tệp (năm dòng của `dim_event_type` do script nạp ghi, và các lệnh tạo partition được viết ra đủ). `fact_event` và `fact_session_funnel` được chia theo khoảng (`PARTITION BY RANGE`), mỗi ngày một partition, cộng một partition DEFAULT. `fact_inventory_daily` được chia theo danh sách `warehouse_id` (`PARTITION BY LIST`), năm partition và không có DEFAULT, để một dòng của kho thứ sáu báo lỗi ngay thay vì lẳng lặng nằm đó. Trên `fact_event` có ba index: B-tree ghép `(event_date, event_type_key, event_time)`, BRIN trên `event_time` với `pages_per_range = 32`, và B-tree một phần `(user_sk, event_time)` chỉ cho các lượt mua. `dim_product.attributes` là `jsonb` với index GIN dùng `jsonb_path_ops`, loại chỉ hỗ trợ phép chứa `@>` nhưng nhỏ hơn loại mặc định.
+
+*Số đo.* Bảng dưới lấy từ lần benchmark ngày 10/11/2026 trên máy của Đắt: mỗi biến thể chạy 3 lần khởi động rồi 20 lần đo, thời gian tính phía client gồm cả lấy hết kết quả. Ngày được hỏi là 29/11. Với mỗi biến thể, script kiểm plan của truy vấn để chắc biến thể đó chạy đúng đường truy cập được ép.
+
+| Câu hỏi | Biến thể | p50 (ms) | p95 (ms) | Plan hoặc trace cho thấy |
+|---|---|---|---|---|
+| Đếm sự kiện một ngày, PostgreSQL | partition pruning bật | 6.911 | 7.648 | chỉ `fact_event_20191129`, 1,628 buffer |
+| | partition pruning tắt | 8.760 | 9.156 | mọi partition, 1,747 buffer |
+| Đếm sự kiện một ngày, DuckDB | lọc trên cột chia thư mục | 1.565 | 2.779 | 1/31 tệp |
+| | lọc trên `date_key`, cột thường | 3.342 | 5.277 | 31 tệp |
+| Một giờ theo `event_time`, PostgreSQL | seq scan | 88.218 | 90.534 | 58,709 buffer |
+| | BRIN | 4.125 | 4.937 | 723 buffer |
+| | B-tree | 1.512 | 1.598 | 171 buffer |
+| Một giờ theo `event_time`, DuckDB | không index; INT96 không có min/max | 5.891 | 6.365 | 31 tệp |
+| Sản phẩm màu `space_grey`, PostgreSQL | GIN | 10.311 | 11.974 | Bitmap Index Scan, 7,711 heap block |
+| | không dùng GIN | 32.835 | 34.393 | Seq Scan |
+| Sản phẩm màu `space_grey`, DuckDB | quét STRUCT | 3.154 | 3.686 | quét `dim_product` |
+| Doanh thu theo ngành, PostgreSQL | 1 / 7 / 31 ngày | 6.718 / 21.460 / 74.983 | 7.382 / 23.046 / 76.967 | chỉ các partition trong khoảng |
+| Doanh thu theo ngành, DuckDB | 1 / 7 / 31 ngày | 7.288 / 9.380 / 24.564 | 8.204 / 9.717 / 31.829 | 1/31, 7/31, 31/31 tệp |
+| `gmv_by_minute`, Cassandra | đủ partition key | 1.769 | 2.091 | single-partition, đọc 390 dòng |
+| | thiếu `event_date`, `ALLOW FILTERING` | 1.939 | 6.202 | seq scan |
+| `stockout_risk`, Cassandra | đủ partition key | 1.113 | 1.365 | single-partition, đọc 100 dòng |
+| | lọc theo `product_id`, `ALLOW FILTERING` | 81.089 | 83.525 | seq scan, đọc 63,655 dòng để trả 5 dòng |
+
+Bốn điều phải đọc kèm bảng này, để không đọc ra nhiều hơn những gì đã đo:
+- Khoảng cách giữa bật và tắt partition pruning ở PostgreSQL nhỏ (6.911 so với 8.760 ms), và không phải toàn bộ giá trị của việc chia partition. Khi tắt pruning, planner vẫn mở 31 partition còn lại: 30 partition ngày được dò bằng B-tree `(event_date, …)`, khoảng 4 buffer mỗi partition, còn partition DEFAULT rỗng được quét tuần tự, và không lấy được dòng nào từ chúng. Có index đó nên phần thừa mới rẻ như vậy; số đo này không cho biết một bảng không chia partition sẽ chậm bao nhiêu.
+- GIN chỉ nhanh hơn khoảng 3 lần vì `space_grey` khớp 21,489 trên 210,454 phiên bản sản phẩm, khoảng 10%. Các dòng khớp rải khắp bảng nên GIN vẫn phải đọc 7,711 heap block. Phép đo cũ của Nguyên (`gin_vs_seqscan.txt`, ngày 10/10, một lần chạy, màu `crimson_red` khớp 21,078 dòng) cho cùng kết luận: 48.9 so với 59.6 ms, 7,646 heap block so với 11,608 buffer của seq scan. GIN có lợi rõ hơn khi bộ lọc hiếm hơn, nhưng nhóm chưa đo trường hợp đó. Ở Parquet, phép so tương đương chỉ là quét một cột lồng nhau, và nó nhanh hơn cả hai.
+- Bảng `gmv_by_minute` chỉ chứa một ngày phát lại (4,563 dòng lúc đo), nên lần quét khi thiếu khoá vẫn nhỏ (trace ghi đọc 404 dòng) và p50 gần như không khác. Phép so rõ ràng là `stockout_risk`, bảng có 63,655 dòng: đủ khoá đọc 100 dòng trong một partition, thiếu khoá phải đọc cả bảng, chậm hơn khoảng 73 lần.
+- Biến thể B-tree trên `event_time` dùng một index tạm, tạo riêng cho benchmark rồi xoá ngay sau đó; `warehouse/ddl.sql` không có index này. Trong số index có thật trên cột này, BRIN đọc 723 buffer so với 58,709 của seq scan. Con số 723 không chỉ là giờ được hỏi: BRIN vẫn trả vài heap block lossy ở các partition ngày khác (ví dụ 29 block ở `fact_event_20191101`), rồi bỏ chúng khi kiểm lại từng dòng. BRIN chỉ lưu min/max của mỗi 32 trang, nên nó chỉ hiệu quả khi thứ tự vật lý của các dòng bám theo `event_time`; ở đây các dòng được sắp theo `event_time` trước khi ghi.
+
+Câu doanh thu theo ngành nối `fact_event` với `dim_product` qua `product_sk`. Với một ngày, PostgreSQL chọn nested loop: 2,252 lượt mua, mỗi lượt dò `dim_product_pkey` một lần, tổng 9,009 buffer, tức khoảng 4 trang mỗi lần dò. Tệp `explain_star_join.txt` của Nguyên (ngày 10/10) cũng có đúng 2,252 lần dò và 9,009 buffer, nhưng được đo trên một PostgreSQL chỉ nạp 3 ngày 28 tới 30/11 (`explain_fact_event_nofilter.txt` cho thấy các partition khác rỗng). Vì vậy chỉ con số "khoảng 4 trang mỗi lần dò" là còn đúng trên dữ liệu đầy đủ, còn thời gian 31.4 ms của tệp đó không so được với 6.718 ms hôm nay. Từ 1 lên 31 ngày, thời gian của PostgreSQL tăng khoảng 11 lần, của DuckDB khoảng 3.4 lần; cả hai vẫn dưới 0.1 giây.
+
+**Giới hạn: `fact_session_funnel` được tính lại và ghi đè.** Theo Kimball, accumulating snapshot là bảng mà mỗi dòng được cập nhật tại chỗ mỗi khi phiên đi qua thêm một mốc. Parquet không có UPDATE, còn Iceberg hay Delta, hai định dạng bảng cho phép cập nhật dòng trên Parquet, nằm ngoài các công nghệ nhóm được dùng. Vì vậy mỗi lần chạy, `batch_warehouse.py` tính lại toàn bộ 970,797 phiên từ 4,754,015 sự kiện rồi ghi đè cả bảng: ở Parquet bằng chế độ ghi `overwrite`, ở PostgreSQL bằng `TRUNCATE` rồi nạp lại. Cái giá có hai phần:
+- Bảng không có lịch sử. Mỗi phiên chỉ còn trạng thái cuối. Một phiên thêm giỏ hôm trước và mua hôm sau chỉ còn là một phiên đã mua, nên không truy vấn nào trả lời được câu "ngày 15/11 có bao nhiêu phiên đang dừng ở bước giỏ hàng" theo đúng những gì hệ thống biết vào ngày đó. Con số 77,098 phiên bỏ giỏ là trên trạng thái cuối. Màn hình BR5 không bị ảnh hưởng vì giỏ bỏ quên được tính trên luồng (mục 4.3); cái mất là khả năng phân tích phễu theo thời gian.
+- Chi phí tăng theo tổng dữ liệu chứ không theo dữ liệu mới. Thêm một ngày sự kiện vẫn phải đọc lại cả tháng để dựng lại bảng. Ở quy mô hiện tại điều này chấp nhận được: cả `batch_warehouse.py`, gồm chín bảng và bước nạp PostgreSQL, chạy hết 273 giây. Nhóm không đo riêng thời gian của bảng này.
 
 ### 4.5 Phương án thay thế và so sánh
 
@@ -469,6 +670,37 @@ Số của BR3 đo trên cùng máy với mục 1, số của BR1 và BR5 đo tr
 | Heap 1.0 GiB trong khi `getConf()` báo `6g` sau `spark.stop()` | `docs/SETUP_SPARK.md` mục 6, đo trên PySpark 4.1.3; `python processing/kata.py` in heap thật của JVM |
 | 31 thư mục ngày thay vì 30 khi thiếu múi giờ UTC | `conf/spark-defaults.conf`, `docs/SETUP_SPARK.md` mục 6 |
 | `rfm_cell` NULL 97.3% (7/11) và 88.0% (30/11); 319,426 và 295,452 phiên bản; 23,974 lần đổi bị mất; 5,529 khách; sáu phép kiểm ra 0 | `docs/evidence/dim_user_null_compare.txt` (cùng máy với mục 1, ngày 18/10/2026) |
+
+Các số của mục 4.4 đo trên máy của Đắt (20 nhân, 15 GB RAM, Ubuntu trong WSL2; DuckDB 1.5.5; PostgreSQL 16.15 và Cassandra 4.1.12 trong Docker). Các lệnh `python -c` chạy từ thư mục gốc của repo, chỉ đọc `data/warehouse/` do `batch_warehouse.py` dựng ngày 3/11, và được chạy lại ngày 10/11/2026. Benchmark ngày 10/11/2026 chạy bằng `.venv/bin/python benchmark/run_benchmark.py` (3 lần khởi động và 20 lần đo mỗi biến thể; p50 và p95 theo nearest-rank, xem `benchmark/README.md`); môi trường của lần chạy ghi ở `benchmark/results/env_20261110_010557.txt`.
+
+| Số liệu | Lệnh |
+|---|---|
+| `fact_event`: 4,754,015 dòng, 31 thư mục ngày | `python -c "import duckdb; print(duckdb.sql(\"SELECT count(*), count(DISTINCT event_date) FROM read_parquet('data/warehouse/fact_event/*/*.parquet', hive_partitioning = true)\").fetchall())"` |
+| `fact_session_funnel`: 970,797 dòng, bằng số `user_session` phân biệt, 31 thư mục | `python -c "import duckdb; print(duckdb.sql(\"SELECT count(*), count(DISTINCT user_session), count(DISTINCT session_start_date) FROM read_parquet('data/warehouse/fact_session_funnel/*/*.parquet', hive_partitioning = true)\").fetchall())"` |
+| `fact_inventory_daily`: 1,909,650 dòng; 12,731 sản phẩm, 5 kho, 30 ngày; 12,731 × 5 × 30 = 1,909,650 | `python -c "import duckdb; print(duckdb.sql(\"SELECT count(*), count(DISTINCT product_id), count(DISTINCT warehouse_id), count(DISTINCT snapshot_date), 12731 * 5 * 30 FROM read_parquet('data/warehouse/fact_inventory_daily/*/*.parquet', hive_partitioning = true)\").fetchall())"` |
+| `dim_product`: 210,454 phiên bản, 128,972 sản phẩm, 128,972 phiên bản hiện hành | `python -c "import duckdb; print(duckdb.sql(\"SELECT count(*), count(DISTINCT product_id), count(*) FILTER (WHERE is_current) FROM read_parquet('data/warehouse/dim_product/*.parquet')\").fetchall())"` |
+| `dim_user`: 319,426 phiên bản, 258,330 khách, 258,330 phiên bản hiện hành | `python -c "import duckdb; print(duckdb.sql(\"SELECT count(*), count(DISTINCT user_id), count(*) FILTER (WHERE is_current) FROM read_parquet('data/warehouse/dim_user/*.parquet')\").fetchall())"` |
+| `stg_rfm_snapshot`: 1,291,650 dòng, 258,330 khách, 5 lần chấm 7, 14, 21, 28 và 30/11 | `python -c "import duckdb; print(duckdb.sql(\"SELECT count(*), count(DISTINCT user_id), list(DISTINCT snapshot_date ORDER BY snapshot_date) FROM read_parquet('data/warehouse/stg_rfm_snapshot/*/*.parquet', hive_partitioning = true)\").fetchall())"` |
+| `dim_date` 92 dòng, `dim_event_type` 5, `dim_warehouse` 5 | `python -c "import duckdb; print(duckdb.sql(\"SELECT (SELECT count(*) FROM 'data/warehouse/dim_date/*.parquet'), (SELECT count(*) FROM 'data/warehouse/dim_event_type/*.parquet'), (SELECT count(*) FROM 'data/warehouse/dim_warehouse/*.parquet')\").fetchall())"` |
+| 128,972 × 5 × 30 = 19,345,800 dòng nếu lấy mọi sản phẩm | Phép nhân trên số sản phẩm của dòng `dim_product` |
+| Tám bảng star có số dòng bằng nhau ở PostgreSQL và Parquet | `docs/evidence/pg_vs_parquet_counts.txt` (ngày 10/11/2026) |
+| 677,255 sự kiện (14.2%) có giá khác giá phiên bản; `ck_fsf_stage`, `ck_fsf_lags` 0 vi phạm; bước xa nhất 838,795 / 77,098 / 54,904; 77,098 phiên bỏ giỏ; `batch_warehouse.py` 273 giây | `docs/evidence/batch_timings.txt` (ngày 3/11/2026), mục 1 và phần stdout của `processing/batch_warehouse.py` ở mục 2 |
+| Sáu phép kiểm SCD2 ra 0 trên `dim_product` và `dim_user`; 5/5 sự kiện kiểm tay trỏ đúng phiên bản | `docs/evidence/t14_checks.txt`, mục "Run 1: scd2_integrity.py on both SCD2 dimensions, fact_event_spot.py" |
+| `fact_event`: 1 row group mỗi tệp, 25,859 tới 482,049 dòng; `event_time` kiểu INT96 có min/max ở 0/31 column chunk, `price` và `product_sk` ở 31/31 | `python -c "import duckdb; print(duckdb.sql(\"SELECT path_in_schema, type, count(*) AS chunks, count(stats_min_value) AS with_min, max(row_group_id) + 1 AS row_groups_per_file, min(row_group_num_rows), max(row_group_num_rows) FROM parquet_metadata('data/warehouse/fact_event/*/*.parquet') WHERE path_in_schema IN ('event_time', 'price', 'product_sk') GROUP BY 1, 2 ORDER BY 1\").fetchall())"`. Cùng kết quả cho `event_time` ở `docs/evidence/presentation_parquet_run.txt` mục 6 (ngày 20/10) |
+| E1: lọc một giờ đọc 93/93 tệp, 4,754,015 dòng; một ngày và một loại sự kiện 1/93 tệp (14.8 KiB) so với 93 tệp (133.9 MiB); dynamic partition pruning 9/93 tệp | `docs/evidence/presentation_parquet_run.txt` mục 2 tới 5 (Spark 4.1.3 trên silver, ngày 20/10/2026, một lần chạy) |
+| E5: max giá mỗi row group 1,644.59 tới 2,574.07; giá trên 1,000 bỏ được 0/93 row group, 4.97% số dòng khớp | `docs/evidence/presentation_price_zonemap.txt` mục 1 và 2 (footer của silver, ngày 26/10/2026) |
+| E4: CSV 177.0 ms, Parquet 9.0 ms, 31/93 tệp; khoảng 20 lần (177.0 / 9.0) | `docs/evidence/presentation_csv_vs_parquet.txt` (cùng mẫu 7%, DuckDB 1.5.5, trung vị 5 lần chạy, ngày 21/10/2026) |
+| Mọi p50 và p95 trong bảng số đo | `benchmark/results/summary_20261110_010557.csv`, cột `p50_ms` và `p95_ms`; từng lần đo ở `raw_20261110_010557.csv` |
+| Buffer, số tệp, số dòng đọc trong cột "Plan hoặc trace cho thấy"; khoảng 4 buffer mỗi partition khi tắt pruning, 30 Index Only Scan và một Seq Scan trên `fact_event_default` rỗng; 29 heap block lossy ở `fact_event_20191101` trong plan BRIN; `gmv_by_minute` thiếu khoá đọc 404 dòng; 7,711 heap block; 2,252 lần dò và 9,009 buffer | `benchmark/results/plans_20261110_010557.txt`, khối mang tên biến thể (ví dụ `postgres.count_one_day.pruning_off`, `postgres.revenue_by_category.days_1`) |
+| `space_grey` khớp 21,489 / 210,454 phiên bản | `python -c "import duckdb; print(duckdb.sql(\"SELECT count(*) FILTER (WHERE attributes.color = 'space_grey'), count(*) FROM read_parquet('data/warehouse/dim_product/*.parquet')\").fetchall())"`; plan `postgres.attributes_containment.gin` cũng ra 21,489 dòng |
+| `gmv_by_minute` 4,563 dòng, `stockout_risk` 63,655 dòng lúc đo | `benchmark/results/env_20261110_010557.txt`, dòng `cassandra rows` |
+| Chậm hơn khoảng 73, 3 và 11 lần; 3.4 lần; bỏ thư mục ở DuckDB nhanh khoảng 2 lần | Chia các p50 trong `summary_20261110_010557.csv`: 81.089 / 1.113, 32.835 / 10.311, 74.983 / 6.718, 24.564 / 7.288, 3.342 / 1.565 |
+| GIN cũ: 48.9 và 59.6 ms, 21,078 dòng, 7,646 heap block, 11,608 buffer | `docs/evidence/gin_vs_seqscan.txt` (Nguyên, ngày 10/10/2026, một lần chạy) |
+| Star join cũ: 2,252 lần dò, 9,009 buffer, 31.4 ms, PostgreSQL chỉ có 3 ngày | `docs/evidence/explain_star_join.txt`; `docs/evidence/explain_fact_event_nofilter.txt` cho thấy chỉ `fact_event_20191128`, `_20191129` và `_20191130` có dòng (Nguyên, ngày 10/10/2026) |
+| Partition, index, `pages_per_range = 32`, GIN `jsonb_path_ops` | `warehouse/ddl.sql` |
+| Một thư mục mỗi giá trị, một tệp mỗi thư mục, cột sắp trong tệp; dimension một tệp; `TRUNCATE` rồi nạp lại ở PostgreSQL | `write_fact`, `write_dim`, `main` và `load_postgres` trong `processing/batch_warehouse.py` |
+| Khoá của năm bảng Cassandra | `serving/cassandra_schema.cql` |
+| BR6 chỉ đọc ngày cuối của `fact_inventory_daily`; BR4 lấy phiên bản hiện hành của `dim_user` | `processing/batch_gold.py` |
 
 ## 5. Ứng dụng: API và tám màn hình
 
