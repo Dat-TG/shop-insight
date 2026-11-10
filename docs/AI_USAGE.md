@@ -3014,3 +3014,91 @@ liệu khá tốt. Duyệt"), and it was merged after that, as Session 40 said i
 - **Dat** asked for T17 and T19 to be done on Nguyên's and Tín's behalf.
 - AI-made and flagged: the nine-row table counts SCD2 as checks passed out of checks (12/12), since SCD2 has no
   answer-vs-stored rows; whether report section 6.1 quotes this table or the older 8-row ones is Khang's call.
+
+## Session 42 — 10 November 2026 (W46)
+
+**Tool:** Claude Code (Opus 5.5), with one writer agent, a data-fact-checker, a reviewer for the model and the figures, and one fixer.
+**Scope:** sprint task T15 (Dat's): report section 4.4, the three-level data model. Only documents and figures changed. A
+first attempt on 10 Nov at 01:35 was lost before REPORT.md was saved, because the machine slept and then restarted;
+this is the second attempt.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| `docs/REPORT.md` §4.4, conceptual level: an ERD of 11 entities and the table each lives in | AI-drafted, fact-checked by a second agent |
+| `docs/REPORT.md` §4.4, logical level: the star figure; the three Kimball fact types with grain, rows and partitions; the two SCD Type 2 dimensions and `stg_rfm_snapshot`; the five Cassandra tables beside the star | AI-drafted, fact-checked by a second agent |
+| `docs/REPORT.md` §4.4, physical level: the layout figure; today's benchmark with its caveats; E1, E4, E5, gin_vs_seqscan and explain_star_join, each with its conditions | AI-drafted, fact-checked by a second agent |
+| `docs/REPORT.md` §4.4, the `fact_session_funnel` limitation, and a sources table under "Nguồn số liệu của mục 4" | AI-drafted, fact-checked by a second agent |
+| `docs/figures/report_4_4_{erd,star,physical}.png`: light renders of the three Mermaid blocks, for the PDF export | Rendered in light and dark with mermaid-cli 11 (Mermaid 11.17.2, GitHub's settings); each render looked at |
+
+### How it was checked
+
+| Claim | How it was measured |
+|---|---|
+| fact_event has 4,754,015 rows, fact_session_funnel 970,797, fact_inventory_daily 1,909,650 = 12,731 × 5 × 30 | Read-only DuckDB counts on `data/warehouse`, rerun independently by the reviewer; Postgres equality from `pg_vs_parquet_counts.txt` |
+| dim_product has 210,454 versions of 128,972 products; dim_user 319,426 versions of 258,330 users; stg_rfm_snapshot 1,291,650 = 258,330 × 5 | Read-only DuckDB counts on `data/warehouse`, rerun independently by the reviewer |
+| Every benchmark figure in the 4.4 table | The reviewer compared all 21 p50/p95 pairs with `summary_20261110_010557.csv` (runs = 20), and the buffer and file counts with `plans_20261110_010557.txt` |
+| event_time has no usable min/max in fact_event's Parquet | DuckDB `parquet_metadata`: each file is one row group, and event_time is INT96 with statistics in 0 of 31 chunks |
+| Cassandra keys and DDL as printed | The reviewer compared them with `serving/cassandra_schema.cql` and `warehouse/ddl.sql` |
+
+### What the AI got wrong, and was corrected on
+
+- The draft offered E4 (CSV 177.0 ms against partitioned Parquet 9.0 ms) as evidence of directory skipping. E4 mixes
+  three effects: the columnar format, reading only the needed columns, and skipping files. A reviewer caught it. The
+  text now says so and isolates directory skipping with today's benchmark: DuckDB 1.565 against 3.342 ms, about 2x.
+- The draft called all five dimensions conformed while defining the word as "used by several facts". Only dim_date,
+  dim_product and dim_user are. Reworded.
+- A benchmark-table label said DuckDB's event_time filter had min/max, two paragraphs after the text said INT96 has none.
+- The pruning_off caveat said every other partition is probed by B-tree. The plan shows 30 index probes plus a seq
+  scan of the empty DEFAULT partition.
+- The brief told the AI to cite `docs/PRESENTATION_SLIDES.md:269` for the 3-days-loaded condition of
+  explain_star_join. That file is not tracked in git, so the condition is cited from `explain_fact_event_nofilter.txt`.
+
+### Judgement that stayed with the team
+
+- **Dat** set the section's content in the T15 row: three figures, the fact table with its counts, and the evidence.
+- Flagged, not changed (code freeze): event_time is stored as INT96, so its row groups carry no statistics.
+- An edge from fact_inventory_daily to stockout_risk in the physical figure was left out. The review marked it optional.
+
+## Session 43 — 10 November 2026 (W46)
+
+**Tool:** Claude Code (Opus 5.5): one writer agent, a data-fact-checker, one reviewer for spoken quality, and one fixer.
+**Scope:** sprint task T20, Dat's part: his six blocks in `docs/project_deck.md` (pages 08-11 and 16-17). Documents
+only. Session 42 (T15) also lands in this PR, because PR #47 was merged before its log commit reached the branch; the
+next bullet list says why.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| `docs/project_deck.md` pages 08 (architecture), 09 (conceptual and logical model), 10 (physical model), 11 (Spark), 16 (BR1), 17 (BR2): one title, at most 4 points, the spoken script, the evidence line and the syllable count for each page | AI-drafted, reviewed; not yet read aloud by Dat |
+
+### How it was checked
+
+| Claim | How it was measured |
+|---|---|
+| Only Dat's six blocks changed | `git diff -U0 origin/w46-dat-t15`: every hunk is inside pages 08-11 and 16-17, and no `## Trang` header changed |
+| 577 syllables, about 192 s at 3.0/s (08: 111, 09: 114, 10: 113, 11: 103, 16: 68, 17: 68) | A syllable counter that reproduces all seven of Khang's stated counts exactly; the reviewer recounted with a counter of its own |
+| Every spoken number has a file behind it | Each block's `Số liệu:` line names the source: `batch_timings.txt`, `streaming_perf.txt`, `summary_20261110_010557.csv`, `gate2b_curl_raw.txt` |
+
+### What the AI got wrong, and was corrected on
+
+- Page 09's title said "năm dimension dùng chung" (five shared dimensions). REPORT §4.4 says only three are used by more
+  than one fact. A reviewer caught it, and the title no longer says "shared".
+- Smaller fixes from review:
+  - the SCD2 wording on page 09;
+  - "B-tree ghép" on page 10, matching `warehouse/ddl.sql`;
+  - "gần chín mươi mili giây" spoken out;
+  - a claim on page 11's title that nothing backed was dropped;
+  - GMV glossed once on page 16.
+- **How Session 42 ended up here:** a merge command for PR #47 ran after its `git switch` had failed. The switch failed
+  because an agent worktree still held the branch, and `set -e` did not stop the chain. The local main was reset to
+  `origin/main` right away. Nothing wrong reached the remote, but PR #47 merged without its log commit.
+
+### Judgement that stayed with the team
+
+- **Dat** set the budget (about 540 syllables at 3.0/s) and the rule to say the English term the slide prints.
+- **Open for Dat:**
+  - Read the six scripts aloud once. 577 is 3 syllables under the 580 cap.
+  - Pages 16-17 open the demo; the demo actions themselves belong in Nguyên's T16 script.
