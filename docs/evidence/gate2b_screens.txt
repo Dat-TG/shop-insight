@@ -5,7 +5,10 @@
 #          (its own query time), curl = curl time_total (full HTTP round trip incl. JSON); p50/p95 by nearest rank, ms.
 #          partitions = QueryMeta.partitions. Source: gate2b_curl_raw.txt (summary and raw rows); nothing re-measured.
 # state    right after the T14 replay (78 files, 187,468 rows, 17 Nov 15:00-21:30 Vietnam time); API and web from
-#          ./run_demo.sh app, nothing else running.
+#          ./run_demo.sh app, nothing else running. The BR4 per-R-score block ran later (finished 01:30), after the
+#          second replay of the live checks; that replay's stream was killed at 01:29:35, about 90 s after the
+#          replayer stopped at 01:28:00 (the stream log's last batch is 01:28:10, t14_logs/stream_20261110_012111.txt),
+#          so again only the API and web were running.
 # BR4      the screen loads its heatmap with five calls fired in parallel, one per R score (BR4Page.tsx, Promise.all
 #          over r_score=1..5, 6,201 rows each). They were timed one at a time, not at the same time, each with 3 warm-up
 #          and 20 timed calls. The line gives the worst of the five per column: meta p50 30.2 (r=4), meta p95 40.0
