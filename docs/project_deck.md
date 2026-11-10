@@ -179,27 +179,27 @@ Nguồn gợi ý: REPORT.md §3.2, §3.3, §3.4.
 Nguồn gợi ý: REPORT.md §4.1; hình docs/figures/shopinsight_architecture.html, đã có trên slide. Ô PostgreSQL
 ghi số đo T12 ở T25.
 
-**Tiêu đề:** Hai nhánh xử lý, hai nơi lưu: Parquet cho 3 màn hình báo cáo, Cassandra cho 5 màn hình tra theo khoá
+**Tiêu đề:** Hai nhánh xử lý, hai nơi phục vụ màn hình: Parquet cho 3 màn hình báo cáo, Cassandra cho 5 màn hình tra theo khoá
 
 **Ý chính (tối đa 4):**
 - Nhánh theo lô: Spark lấy mẫu 7% khách, làm sạch, dựng kho dữ liệu, ghi Parquet chia thư mục theo ngày
-- Nhánh thời gian thực: phát lại log thành tệp JSON, Spark Structured Streaming tính ngay khi sự kiện tới
+- Nhánh thời gian thực: phát lại nhật ký thành tệp JSON, Spark Structured Streaming tính ngay khi sự kiện tới
 - DuckDB đọc Parquet cho BR2, BR4, BR7; Cassandra phục vụ BR1, BR3, BR5, BR8 từ luồng và BR6 từ lô
 - PostgreSQL: bản dựng thứ hai của cùng kho dữ liệu, chỉ để so sánh, không phục vụ màn hình
 
 Số liệu: hình docs/figures/shopinsight_architecture.html; ô PostgreSQL lấy số từ
-`benchmark/results/summary_20261110_010557.csv` (T25 ghi kèm giới hạn ở REPORT.md §4.4, "Bốn điều phải đọc kèm
-bảng này"); hai bản kho dữ liệu có số dòng bằng nhau ở docs/evidence/pg_vs_parquet_counts.txt. Lời thoại: "bảy
-phần trăm" là quy tắc lấy mẫu ở REPORT.md §3.1 và §4.1.
+`benchmark/results/summary_20261110_010557.csv` (T25 ghi kèm giới hạn ở REPORT.md §4.4, "Bốn điều phải đọc kèm bảng
+này"); hai bản kho dữ liệu có số dòng bằng nhau ở docs/evidence/pg_vs_parquet_counts.txt. Lời thoại: "bảy phần trăm"
+là quy tắc lấy mẫu ở REPORT.md §3.1 và §4.1.
 
 **Lời thoại:**
-Đây là kiến trúc tổng thể, gồm hai nhánh. Nhánh theo lô: Spark lấy mẫu bảy phần trăm khách, làm sạch, dựng kho dữ
-liệu, rồi lưu Parquet chia thư mục theo ngày, để DuckDB đọc cho ba màn hình báo cáo. Nhánh thời gian thực: nhật ký
-được phát lại thành từng tệp JSON, Spark Structured Streaming tính ngay khi sự kiện tới rồi ghi vào Cassandra.
-Cassandra phục vụ năm màn hình tra theo khoá, một trong số đó tính theo lô. PostgreSQL chỉ là bản thứ hai của kho
-dữ liệu, để so sánh.
+Kiến trúc gồm hai nhánh. Nhánh theo lô: Spark lấy mẫu bảy phần trăm khách, làm sạch, dựng kho dữ liệu, rồi lưu
+Parquet, định dạng lưu theo cột, chia thư mục theo ngày, để DuckDB đọc cho ba màn hình báo cáo. Nhánh thời gian
+thực: nhật ký được phát lại thành từng tệp JSON, Spark Structured Streaming tính ngay khi sự kiện tới rồi ghi vào
+Cassandra. Cassandra phục vụ năm màn hình tra theo khoá, một trong số đó tính theo lô. PostgreSQL chỉ là bản thứ hai
+của kho dữ liệu, để so sánh.
 
-**Số âm tiết:** 110
+**Số âm tiết:** 111
 
 ---
 
@@ -207,7 +207,7 @@ dữ liệu, để so sánh.
 
 Nguồn gợi ý: REPORT.md §4.4 (T15), SYSTEM_DESIGN §5.
 
-**Tiêu đề:** Mười một thực thể nghiệp vụ thành một star schema: ba fact theo ba kiểu của Kimball, năm dimension dùng chung
+**Tiêu đề:** Mười một thực thể nghiệp vụ thành một star schema: ba fact theo ba kiểu của Kimball, năm dimension
 
 **Ý chính (tối đa 4):**
 - Mức khái niệm: 11 thực thể; chỗ khó là giá sản phẩm và phân khúc khách đổi theo thời gian
@@ -216,16 +216,17 @@ Nguồn gợi ý: REPORT.md §4.4 (T15), SYSTEM_DESIGN §5.
 - Ngành hàng, thương hiệu gộp vào `dim_product`: star, không phải snowflake; Cassandra thì ngược lại, mỗi câu hỏi một bảng
 
 Số liệu: REPORT.md §4.4 (Hình 4.4a, Hình 4.4b, bảng ba fact, bảng đặt cạnh Cassandra); số dòng của chín bảng ở
-docs/evidence/batch_timings.txt mục 2 và pg_vs_parquet_counts.txt; SCD2 sạch ở docs/evidence/t14_checks.txt
-("Run 1: scd2_integrity.py ..."). Lời thoại: "mười một thực thể" là Hình 4.4a.
+docs/evidence/batch_timings.txt mục 2 và pg_vs_parquet_counts.txt; SCD2 sạch ở docs/evidence/t14_checks.txt ("Run 1:
+scd2_integrity.py ..."). Lời thoại: "mười một thực thể" là Hình 4.4a.
 
 **Lời thoại:**
 Ở mức khái niệm có mười một thực thể. Chỗ khó là giá sản phẩm và phân khúc khách đổi theo thời gian. Ở mức logic là
 một star schema: bảng fact ở giữa ghi việc đã xảy ra, các bảng dimension quanh nó mô tả ai, cái gì, khi nào. Ba fact
 ứng với ba kiểu của Kimball: từng sự kiện, từng phiên qua phễu, và tồn kho mỗi ngày. Sản phẩm và khách hàng là SCD
-Type 2, tức mỗi lần đổi giá hay đổi phân khúc thì thêm một phiên bản, nên sự kiện mang đúng giá của ngày đó.
+Type 2, tức giá hay điểm RFM đổi thì thêm một phiên bản theo ngày, nên mỗi sự kiện trỏ tới đúng phiên bản của ngày
+đó.
 
-**Số âm tiết:** 110
+**Số âm tiết:** 114
 
 ---
 
@@ -233,29 +234,29 @@ Type 2, tức mỗi lần đổi giá hay đổi phân khúc thì thêm một ph
 
 Nguồn gợi ý: REPORT.md §4.4 (T15); evidence E1, E4, E5, explain_star_join.txt, gin_vs_seqscan.txt.
 
-**Tiêu đề:** Ở mức vật lý, bỏ qua cả thư mục ngày có tác dụng rõ, còn min/max của row group thì chưa
+**Tiêu đề:** Ở mức vật lý, bỏ qua cả thư mục ngày có tác dụng, còn min/max của row group thì chưa
 
 **Ý chính (tối đa 4):**
 - Parquet (nơi lưu chính): mỗi fact chia partition theo ngày, lọc một ngày chỉ mở thư mục của ngày đó
 - Row group chưa giúp: mỗi tệp chỉ một row group, `event_time` ghi kiểu INT96 nên không có min/max
-- PostgreSQL (bản thứ hai): partition theo ngày hoặc theo kho; B-tree, BRIN trên `event_time`, GIN trên `attributes`
+- PostgreSQL (bản thứ hai): partition theo ngày hoặc theo kho; B-tree ghép (`event_date`, …), BRIN trên `event_time`, GIN trên `attributes`
 - Số đo đi kèm giới hạn: GIN lợi ít vì bộ lọc khớp nhiều dòng; tắt pruning vẫn rẻ vì index dò nhanh các partition còn lại
 
 Số liệu: `benchmark/results/summary_20261110_010557.csv` và `plans_20261110_010557.txt` (lần đo 10/11, 3 lần khởi
 động + 20 lần đo); bảng số đo và "Bốn điều phải đọc kèm bảng này" ở REPORT.md §4.4. Nếu T25 đặt số GIN, pruning
 bật/tắt, B-tree hay `gmv_by_minute` thiếu khoá lên slide thì ghi kèm giới hạn đó (B-tree là index tạm tạo riêng cho
 benchmark). Không dùng thời gian của explain_star_join.txt (PostgreSQL lúc đó chỉ nạp 3 ngày) hay tên tệp trong
-duckdb_zonemap.txt (tệp không còn). Lời thoại: "khoảng bốn mili giây" và "gần chín mươi" là p50 của
+duckdb_zonemap.txt (tệp không còn). Lời thoại: "khoảng bốn mili giây" và "gần chín mươi mili giây" là p50 của
 `postgres,event_time_one_hour,brin` (4.125 ms) và `seq_scan` (88.218 ms) trong summary.
 
 **Lời thoại:**
-Ở mức vật lý, Parquet là nơi lưu chính. Mỗi fact chia partition theo ngày, tức mỗi ngày một thư mục, nên lọc một
-ngày chỉ mở một thư mục. Row group, tức một khối dòng trong tệp, có ghi min max từng cột để bỏ qua khối không cần
-đọc, nhưng ở đây chưa giúp được: mỗi tệp chỉ có một row group, và cột thời gian không có min max. Bản PostgreSQL có
-thêm index. BRIN, loại index chỉ nhớ min max của từng nhóm trang, lấy một giờ sự kiện mất khoảng bốn mili giây, quét
-cả bảng mất gần chín mươi.
+Parquet là nơi lưu chính. Mỗi fact chia partition theo ngày, tức mỗi ngày một thư mục, nên lọc một ngày chỉ mở một
+thư mục. Row group, tức một khối dòng trong tệp, có ghi min max từng cột để bỏ qua khối không cần đọc, nhưng ở đây
+chưa giúp được: mỗi tệp chỉ có một row group, và cột thời gian không có min max. Bản PostgreSQL có thêm index. BRIN,
+loại index chỉ nhớ min max của từng nhóm trang, lấy một giờ sự kiện mất khoảng bốn mili giây, quét cả bảng mất gần
+chín mươi mili giây.
 
-**Số âm tiết:** 114
+**Số âm tiết:** 113
 
 ---
 
@@ -263,7 +264,7 @@ cả bảng mất gần chín mươi.
 
 Nguồn gợi ý: REPORT.md §4.3; docs/evidence/batch_timings.txt (T02).
 
-**Tiêu đề:** Một Spark cho cả hai nhánh: cùng API DataFrame, cùng một hàm làm sạch
+**Tiêu đề:** Một Spark cho cả hai nhánh, cùng một hàm làm sạch
 
 **Ý chính (tối đa 4):**
 - `local[*]`: một tiến trình trên một máy, dùng mọi nhân CPU; bảy job theo lô chạy nối tiếp từ CSV tới gold
@@ -271,18 +272,19 @@ Nguồn gợi ý: REPORT.md §4.3; docs/evidence/batch_timings.txt (T02).
 - Hai nhánh gọi chung `clean()` của `batch_silver.py`: bảy quy tắc làm sạch giống hệt nhau
 - Ghi Cassandra trong `foreachBatch` bằng `cassandra-driver`, không dùng Spark Cassandra Connector
 
-Số liệu: docs/evidence/batch_timings.txt mục 1 (thời gian từng job, ngày 3/11); docs/evidence/streaming_perf.txt
-Run 1 (thời gian mỗi micro-batch: p50, p95, max). Lời thoại: "khoảng bảy phút" là tổng 426.5 giây của
-batch_timings.txt; "chưa tới một giây" là p50 `triggerExecution` của bốn job ở Run 1 (587 tới 852 ms). Micro-batch
-đầu tiên chậm hơn vì khởi động JVM (max 3,524 ms ở Run 1).
+Số liệu: docs/evidence/batch_timings.txt mục 1 (thời gian từng job, ngày 3/11); docs/evidence/streaming_perf.txt Run
+1 và Run 2 (thời gian mỗi micro-batch: p50, p95, max). Lời thoại: "khoảng bảy phút" là tổng 426.5 giây của
+batch_timings.txt; "chưa tới một giây" là p50 `triggerExecution` của bốn job: 587 tới 852 ms ở Run 1 (chưa chạy API
+và giao diện), 562 tới 795 ms ở Run 2 (API, web và trình duyệt cùng chạy, đúng điều kiện demo). Micro-batch đầu tiên
+chậm hơn vì khởi động JVM và truy vấn (max 3,524 ms ở Run 1).
 
 **Lời thoại:**
 Cả hai nhánh chạy trên Spark ở chế độ local, một tiến trình dùng mọi nhân CPU. Bảy job theo lô chạy hết khoảng bảy
 phút. Nhánh thời gian thực dùng Structured Streaming: cứ năm giây, Spark gom tệp mới thành một micro-batch, tức một
-lô nhỏ. Watermark mười phút, tức mốc lùi mười phút sau sự kiện mới nhất, cho Spark biết cửa sổ nào đã đóng để xoá
+lô nhỏ. Watermark mười phút, tức mốc trễ mười phút so với sự kiện mới nhất, cho Spark biết cửa sổ nào đã đóng để xoá
 trạng thái. Hai nhánh gọi chung một hàm làm sạch. Khi demo, một micro-batch thường xong chưa tới một giây.
 
-**Số âm tiết:** 102
+**Số âm tiết:** 103
 
 ---
 
@@ -358,15 +360,16 @@ Nguồn gợi ý: docs/BR_SCOPE.md BR1; ảnh docs/evidence/gate2b_br1.png (T14)
 - Cassandra `gmv_by_minute`, partition key `(event_date, category_l1)`: phút mới nhất nằm đầu partition
 - Màn hình tự làm mới mỗi 10 giây; footer ghi 1 partition
 
-Số liệu: docs/evidence/gate2b_curl_raw.txt (dòng BR1); docs/evidence/t09_t10_live_checks.txt (BR1 3/3); footer
-trên ảnh gate2b_br1.png. Lời thoại: "chưa tới mười mili giây" là curl max 6.5 ms của BR1 trong gate2b_curl_raw.txt.
+Số liệu: docs/evidence/gate2b_curl_raw.txt (dòng BR1); docs/evidence/t09_t10_live_checks.txt (BR1 3/3); footer trên
+ảnh gate2b_br1.png. Lời thoại: "chưa tới mười mili giây" là curl max 6.5 ms của BR1 trong gate2b_curl_raw.txt: thời
+gian gọi API, không phải thời gian vẽ màn hình (nếu T25 đặt số này lên slide thì ghi là API).
 
 **Lời thoại:**
-Với ban điều hành, câu hỏi là: doanh thu từng phút ra sao, ngành hàng nào đang dẫn? Spark cộng doanh thu từng phút
-ngay trên luồng. Trong Cassandra, ngày và ngành hàng là partition key, phút mới nhất nằm đầu, nên mỗi lần làm mới
+Với ban điều hành, câu hỏi là: GMV, tức tổng giá trị đơn hàng, từng phút ra sao, ngành hàng nào đang dẫn? Spark tính
+nó ngay trên luồng. Trong Cassandra, ngày và ngành hàng là partition key, phút mới nhất nằm đầu, nên mỗi lần làm mới
 màn hình chỉ đọc một partition, chưa tới mười mili giây.
 
-**Số âm tiết:** 64
+**Số âm tiết:** 68
 
 ---
 
@@ -382,17 +385,17 @@ Nguồn gợi ý: docs/BR_SCOPE.md BR2; ảnh docs/evidence/gate2b_br2.png (T14)
 - `batch_gold.py` tổng hợp sẵn `funnel_daily` theo ngày và ngành hàng; Parquet chia thư mục theo ngày, DuckDB đọc
 - Lọc khoảng ngày và ngành hàng; footer ghi số partition ngày đã đọc
 
-Số liệu: docs/evidence/gate2b_curl_raw.txt (dòng BR2); docs/evidence/t09_t10_live_checks.txt (BR2 2/2, số phiên ở
-ba bước); footer trên ảnh gate2b_br2.png. Lời thoại: "khoảng sáu phần trăm" là 54,676 / 966,143 phiên mua so với
-phiên xem, cả tháng, trong t09_t10_live_checks.txt; "ba mươi partition" và "khoảng hai mươi mili giây" là dòng BR2
-của gate2b_curl_raw.txt (30 partition, curl p50 19.8 ms).
+Số liệu: docs/evidence/gate2b_curl_raw.txt (dòng BR2); docs/evidence/t09_t10_live_checks.txt (BR2 2/2, số phiên ở ba
+bước); footer trên ảnh gate2b_br2.png. Lời thoại: "khoảng sáu phần trăm" là 54,676 / 966,143 phiên mua so với phiên
+xem, cả tháng, trong t09_t10_live_checks.txt; "ba mươi partition" và "khoảng hai mươi mili giây" là dòng BR2 của
+gate2b_curl_raw.txt (30 partition, curl p50 19.8 ms).
 
 **Lời thoại:**
-Với marketing, câu hỏi là: khách rời đi ở bước nào, xem, thêm giỏ hay mua? Phễu được tổng hợp sẵn từ fact phiên,
-theo từng ngày và từng ngành hàng. Cả tháng, số phiên mua chỉ bằng khoảng sáu phần trăm số phiên xem. Màn hình đọc
-ba mươi partition ngày bằng DuckDB, mất khoảng hai mươi mili giây.
+Với marketing, câu hỏi là: khách rời đi ở bước nào, xem, thêm giỏ hay mua? Phễu được tổng hợp sẵn từ fact session
+funnel, theo ngày và ngành hàng. Cả tháng, số phiên mua chỉ bằng khoảng sáu phần trăm số phiên xem. Màn hình đọc ba
+mươi partition ngày bằng DuckDB, mất khoảng hai mươi mili giây.
 
-**Số âm tiết:** 67
+**Số âm tiết:** 68
 
 ---
 
