@@ -6,15 +6,32 @@
 #          partitions = QueryMeta.partitions. Source: gate2b_curl_raw.txt (summary and raw rows); nothing re-measured.
 # state    right after the T14 replay (78 files, 187,468 rows, 17 Nov 15:00-21:30 Vietnam time); API and web from
 #          ./run_demo.sh app, nothing else running.
-# BR4      the screen loads its heatmap with five calls in parallel, one per R score (BR4Page.tsx, Promise.all over
-#          r_score=1..5, 6,201 rows each). The line gives the worst of the five per column: meta p50 30.2 (r=4),
-#          meta p95 40.0 (r=1), curl p50 43.7 (r=4), curl p95 53.4 (r=1). Partitions: those raw rows do not record
-#          it; the screen footer in gate2b_br4.png reads "1 partition" (the footer shows the max of the five metas).
+# BR4      the screen loads its heatmap with five calls fired in parallel, one per R score (BR4Page.tsx, Promise.all
+#          over r_score=1..5, 6,201 rows each). They were timed one at a time, not at the same time, each with 3 warm-up
+#          and 20 timed calls. The line gives the worst of the five per column: meta p50 30.2 (r=4), meta p95 40.0
+#          (r=1), curl p50 43.7 (r=4), curl p95 53.4 (r=1). Partitions: those raw rows do not record it; the footer in
+#          gate2b_br4.png reads "1 partition". That footer, the max of the five metas from one real parallel load,
+#          reads 72.78 ms, above the 40.0 ms meta p95 of the sequential runs; still far under 2 s.
 #          The unfiltered endpoint (?snapshot_date=2019-11-30&segment=all, all 258,330 users, which the screen does
 #          not call) measured meta p50 365.1 / p95 408.5 and curl p50 974.1 / p95 1052.0 / max 1067.7: also under
 #          2 s, the round trip mostly JSON transfer.
-# BR3      380 partitions: the endpoint lists the partition keys to find the newest window (one per window written
-#          since --fresh), plus the one window it reads (serving/api/routers/br3.py docstring).
+# other    calls the screens make beyond the one timed call per line (BR4 above). Not timed with curl; the screenshot
+# calls    footer gives one untimed observation where the screen shows one:
+#          - BR2: 1 + 15 calls. The funnel card is the timed call (1-30 Nov, all). The "Conversion by Category" table
+#            fires 15 more /api/br2/funnel calls in parallel ('all' + 14 categories, BR2Page.tsx Promise.all); its
+#            footer in gate2b_br2.png reads 321.79 ms, 30 partitions, 45 rows (max ms and max partitions of the 15,
+#            rows summed). Under 2 s.
+#          - BR3: 2 calls, one after the other: the newest window, then the window a minute earlier for the rank
+#            arrows (BR3Page.tsx fetchTrending; the second needs the first one's window_start). The footer adds up
+#            both: gate2b_br3.png reads 9.1 ms, 381 partitions, 40 rows. The line's 380 is the single timed call
+#            (newest window, no window_start); the second call names its window and reads 1 partition, so 381.
+#          - BR7: /api/br7/anchors once on load (the "Try" ids), then /api/br7/affinity per search. Only affinity is
+#            timed (product_id=1005115) and only affinity has a footer (gate2b_br7.png: 10.8 ms, 2 partitions,
+#            10 rows); the anchors call has no measurement in this session.
+#          BR1, BR5, BR6 and BR8 make one call per load or refresh, the one timed here.
+# footers  a screenshot footer is a single page load, often the first (cold) one, so it can read higher than the
+#          warm p50/p95 below: gate2b_br2.png 354.57 ms against meta p95 21.4, gate2b_br8.png 45.81 ms against meta
+#          p95 32.2. The p50/p95 come from the warm curl runs; the footers are one observation each, all under 2 s.
 #
 # BR  store                  partitions  meta_p50  meta_p95  curl_p50  curl_p95  under_2s  screenshot
 BR1   Cassandra                       1       2.6       3.1       5.2       6.1  yes       gate2b_br1.png

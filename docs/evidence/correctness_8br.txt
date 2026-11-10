@@ -210,7 +210,8 @@ history of each BR.
                        check: "sessions with another stage" ... "0 of 970,797 disagree." A one-off DuckDB script
                        (not committed) against the star: "star EXCEPT gold: 0 rows. gold EXCEPT star: 0 rows." and
                        "cr_view_to_cart and cr_cart_to_purchase equal carts/views and purchases/carts on all 465
-                       rows". The only one of the four that checks a whole gold table for equality.
+                       rows". With gate2a_br5 below, one of two gate files that compare a whole gold table in
+                       both directions (BR2 funnel_daily, 465 rows; BR5 abandoned_carts for 17 Nov, 2,600 rows).
   gate1b_br3_run.txt   "evidence captured 2026-10-01 on Khang's machine (branch w41-khang-br3)". A longer replay
                        ("81 files, 196,024 rows, 15:00-21:45 Vietnam time"), so its counts differ from today's:
                        "The 380 windows from 15:00 on hold only replayed events. 7,600 of 7,600 rows are identical
@@ -218,4 +219,5 @@ history of each BR.
   gate2a_br5_run.txt   "evidence captured 2026-10-12 on Dat's machine (branch w41-nguyen, 2e38359), while reviewing
                        PR #26". The same 78-file replay as today. DuckDB on silver, the same rule: "stream rows
                        (17 Nov) 2,600", "silver rows, same rule 2,600", "identical value, items, user, time 2,600",
-                       "only in stream 0", "only in silver 0".
+                       "only in stream 0", "only in silver 0". The run started from --fresh, so this is every
+                       abandoned_carts row of the replay day, compared in both directions, with equal sums.
