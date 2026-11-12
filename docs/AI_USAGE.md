@@ -3141,3 +3141,57 @@ group's Drive. No repo file changed except this log.
 - The PostgreSQL box on page 08's figure still has no T12 numbers; the figure would have to be redrawn. Left for
   Dat to decide.
 - Nguyên's and Tín's pages stay empty until they write their blocks (T20).
+
+## Session 45 — 12 November 2026 (W46)
+
+**Tool:** Claude Code (Opus 5.5).
+**Scope:** sprint tasks T23 (report section 5), T24 (section 6) and the reference list of T28, all Khang's. A first
+draft was written on 8 Nov on Khang's machine, before the W46 PRs merged; on 12 Nov it was rebuilt on `main` at
+`8736a90`, with every number in 5 and 6 taken from the 10 Nov measurements of record. No application code changed.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| `docs/REPORT.md` section 5: how to run the system (`run_demo.sh` and the batch build order), a footer table of the eight screens, one paragraph per screen with its `gate2b_br*.png` image | AI-drafted; every number read from the screenshots |
+| `docs/REPORT.md` section 6: 6.1 the nine-row correctness table and the checks that show it can fail, 6.2 the eight screens' meta and curl p50/p95, batch build and stream throughput, 6.3 question-to-screen table and the survey plan, 6.4 limits, future work, conclusion; "Nguồn số liệu của mục 5 và 6" | AI-drafted; numbers quoted from `docs/evidence/`, nothing re-measured for the text |
+| `docs/REPORT.md` reference list [1]–[12], the citation marks for it in 1.1, 2.4, 2.7, 3.1, 4.1, 4.2 and 4.3, and four short additions beside them: support and lift in 2.7, DuckDB running inside the API process in 4.1, query-first modelling in NoSQL in 4.2, Structured Streaming's table that keeps growing in 4.3 | AI-drafted |
+| `docs/AI_USAGE.md` — this session | AI-drafted |
+
+### How it was checked
+
+| Claim | How it was checked |
+|---|---|
+| Section 5's screen numbers (309K, 966,143 sessions, 21:04-21:19, 31,005 buyers, 2,600 carts, 525 rows, lift 4.07, 3 / 337 / 5,475 alerts, ...) and the footer table | Each of the eight `gate2b_br*.png` was opened and read |
+| BR6's 525 rows and its cards | `_LIMIT_PER_WAREHOUSE = 100` and `_NO_SALES_PER_WAREHOUSE = 5` in `serving/api/routers/br6.py`; the cards count `rows` in `BR6Page.tsx` |
+| 6.1 | Quoted from the T19 section of `correctness_8br.txt`, with the 6 Nov run (Khang's machine) and the 8 Nov review re-run for the checks that can fail |
+| 6.2 | Quoted from `gate2b_screens.txt`, `perf_table.md`, `batch_timings.txt` and run 1 of `streaming_perf.txt` |
+| The survey plan in 6.3 | `docs/EVALUATION_SURVEY.md` |
+| Sections 1 to 4.3 change only by the citation marks and the four additions above | Word-level diff against `main`: insertions only, nothing removed. The four additions were read against the code in the PR #50 review; 2.7's support is `co_count / n_sessions` in `processing/gold_br7.py` |
+| References [1]–[12] | Each is cited at least once (`grep`) |
+
+### What the AI got wrong, and was corrected on
+
+- **The 8 Nov draft also wrote 3.5, 4.4 and 4.5.** By 12 Nov, 3.5 and 4.4 were on `main` (Dat, T15) and 4.5 is
+  T22 (Nguyên). Those three drafts were dropped; the PR touches only Khang's sections.
+- **The 8 Nov draft measured screens and engines on Khang's machine.** The team's measurements of record are the
+  10 Nov ones on Dat's machine (`docs/evidence/README.md`), so 5 and 6 now quote those, and the draft's evidence
+  files (`report_api_latency.txt`, `report_engine_compare.txt`, `report_screen_br*.png`) are not committed.
+- **The 8 Nov draft named 1004249 as BR7's top pair.** The screen ranks by lift, so 1005230 (lift 4.07, 3 sessions)
+  comes first; 1004249 is the pair bought together most often (26 sessions, lift 1.72). Both are now stated.
+- **The 8 Nov draft numbered every table and figure.** Section 4.4 already uses its own figure numbers (Hình
+  4.4a-c), so the numbering was dropped from this PR rather than renumber Dat's section.
+- **The 12 Nov draft put the batch build before `./run_demo.sh infra` in 5.1.** `load_star_postgres.py` needs
+  Postgres and `batch_gold.py` writes BR6 to Cassandra, so on a fresh machine that order stops at the Postgres load.
+  Caught in Dat's review of PR #50 and fixed on the branch: `infra` first, as in the README and `run_demo.sh`. The same
+  commit says the 50 s of 1.3 is the full file while the screens read the 7% sample (6.2 and the conclusion), and marks
+  the 6.3 counts for BR5 and BR8 as the replayed 15:00-21:30.
+
+### Judgement that stayed with the team
+
+Made by AI, flagged for review:
+- **6.3 has a marked gap for the survey (T18).** No result is written before the survey runs.
+- **The conclusion quotes BR8's 63.9 ms curl p95 as the slowest screen.** It is the slowest of the eight timed
+  calls; footers of single cold loads read higher (BR2 354.57 ms), and 6.2 says so.
+- **6.4 lists BR6's cards counting only the rows on screen as a limit.** If the screen is changed before
+  submission, that line and the BR6 paragraph in 5.2 change with it.

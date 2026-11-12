@@ -8,7 +8,7 @@ Nhóm 15 · Data Engineering (CO5173) · HCMUT, học kỳ 1 năm học 2026–2
 
 Đồ án đặt trong bối cảnh một sàn thương mại điện tử đa ngành, bán từ điện thoại, máy tính, đồ gia dụng tới nội thất và phụ tùng ô tô. Mỗi thao tác của khách trên sàn được ghi lại thành một sự kiện gồm thời điểm, loại thao tác, sản phẩm, ngành hàng, thương hiệu, giá, mã khách và mã phiên truy cập. Có ba loại thao tác: xem sản phẩm, thêm vào giỏ và mua.
 
-Nguồn dữ liệu là bộ "eCommerce behavior data from multi category store" do REES46 công bố trên Kaggle, dùng tệp tháng 11 năm 2019. Tệp này có 67,501,979 sự kiện, dung lượng 9.0 GB ở dạng CSV. Lượng mua trong tháng không đều. Tính theo ngày UTC, đỉnh lớn nhất rơi vào 16–17/11: riêng ngày 17/11 có 185,195 lượt mua, gấp khoảng 5.8 lần ngày Black Friday 29/11, vốn chỉ đứng thứ ba với 32,107 lượt. Vì vậy dữ liệu có cả giai đoạn bình thường lẫn giai đoạn tăng đột biến.
+Nguồn dữ liệu là bộ "eCommerce behavior data from multi category store" do REES46 công bố trên Kaggle [1], dùng tệp tháng 11 năm 2019. Tệp này có 67,501,979 sự kiện, dung lượng 9.0 GB ở dạng CSV. Lượng mua trong tháng không đều. Tính theo ngày UTC, đỉnh lớn nhất rơi vào 16–17/11: riêng ngày 17/11 có 185,195 lượt mua, gấp khoảng 5.8 lần ngày Black Friday 29/11, vốn chỉ đứng thứ ba với 32,107 lượt. Vì vậy dữ liệu có cả giai đoạn bình thường lẫn giai đoạn tăng đột biến.
 
 Nhật ký sự kiện là nguồn duy nhất cho biết khách đang làm gì trên sàn, nhưng nó chỉ là một danh sách thao tác xếp theo thời gian. Không câu hỏi kinh doanh nào đọc được trực tiếp từ đó. Muốn biết doanh thu đang tăng hay giảm, khách rời đi ở bước nào hay sản phẩm nào sắp hết hàng, đều phải lọc, làm sạch, gom nhóm và tính toán trên hàng chục triệu dòng.
 
@@ -93,7 +93,7 @@ Bảng xếp hạng phải được tính lại mỗi phút trên một cửa s�
 
 ### 2.4 BR4: Phân khúc khách hàng theo RFM
 
-Mỗi khách đã mua ít nhất một lần tính tới ngày chấm được chấm ba điểm từ 1 tới 5: độ gần đây của lần mua cuối (R), số lần mua (F) và tổng chi tiêu (M). Hai điểm R và F quyết định phân khúc của khách: champion, loyal, promising, needs_attention, at_risk hoặc hibernating. Khách chưa mua lần nào tính tới ngày chấm không có điểm (để trống, không phải 0) và thuộc phân khúc no_purchase. Nhóm marketing dùng phân khúc để chọn nhóm khách nên đầu tư quảng cáo, ví dụ giữ chân nhóm at_risk trước khi họ rời đi. Màn hình là heatmap 5x5 theo R và F, mỗi ô ghi số khách, bấm vào một ô thì hiện danh sách khách của ô đó.
+Mỗi khách đã mua ít nhất một lần tính tới ngày chấm được chấm ba điểm RFM [9] từ 1 tới 5: độ gần đây của lần mua cuối (R), số lần mua (F) và tổng chi tiêu (M). Hai điểm R và F quyết định phân khúc của khách: champion, loyal, promising, needs_attention, at_risk hoặc hibernating. Khách chưa mua lần nào tính tới ngày chấm không có điểm (để trống, không phải 0) và thuộc phân khúc no_purchase. Nhóm marketing dùng phân khúc để chọn nhóm khách nên đầu tư quảng cáo, ví dụ giữ chân nhóm at_risk trước khi họ rời đi. Màn hình là heatmap 5x5 theo R và F, mỗi ô ghi số khách, bấm vào một ô thì hiện danh sách khách của ô đó.
 
 Điểm RFM là thứ hạng tương đối giữa các khách, nên phải gom toàn bộ lịch sử mua của mọi khách rồi xếp hạng cùng lúc. Tập dữ liệu làm việc có 258,330 khách, trong đó 31,005 khách đã mua tính tới ngày 30/11. Phân khúc của một khách còn thay đổi theo thời gian, nên hệ thống chấm lại mỗi tuần và lưu lịch sử phân khúc, để mỗi sự kiện được gắn phân khúc của lần chấm hằng tuần ứng với ngày sự kiện xảy ra (mục 4.1). Nhật ký thô không có khái niệm này.
 
@@ -111,7 +111,7 @@ Nhật ký sự kiện không có thông tin tồn kho. Nhóm phải sinh riêng
 
 ### 2.7 BR7: Sản phẩm thường được mua kèm
 
-Nhóm hàng hoá nhập một mã sản phẩm và nhận về 10 sản phẩm thường được mua trong cùng một phiên với nó, xếp theo chỉ số lift. Lift so số lần hai sản phẩm được mua cùng nhau với số lần kỳ vọng nếu chúng được mua độc lập. Câu trả lời dùng để gợi ý bán kèm và sắp xếp hàng. Màn hình là ô tìm sản phẩm và danh sách kết quả.
+Nhóm hàng hoá nhập một mã sản phẩm và nhận về 10 sản phẩm thường được mua trong cùng một phiên với nó, xếp theo chỉ số lift. Đây là bài toán luật kết hợp trên giỏ hàng [10]: support là tỉ lệ phiên có cả hai sản phẩm, còn lift [11] so số lần hai sản phẩm được mua cùng nhau với số lần kỳ vọng nếu chúng được mua độc lập. Câu trả lời dùng để gợi ý bán kèm và sắp xếp hàng. Màn hình là ô tìm sản phẩm và danh sách kết quả.
 
 Muốn có lift, phải ghép từng cặp sản phẩm trong mọi phiên có mua, đếm số lần mỗi cặp cùng xuất hiện, rồi chia cho tần suất riêng của từng sản phẩm. Số cặp tăng theo bình phương số sản phẩm trong phiên, nên bảng cặp phải được tính trước trên toàn tập dữ liệu thay vì tính khi người dùng tìm kiếm.
 
@@ -143,7 +143,7 @@ Hệ thống dùng bốn nguồn dữ liệu. Một nguồn tải về từ Kagg
 
 ### 3.1 Nhật ký sự kiện
 
-Nguồn chính là tệp `2019-Nov.csv` của bộ "eCommerce behavior data from multi category store" do REES46 công bố trên Kaggle. Tệp có 67,501,979 sự kiện của 3,696,117 khách trong tháng 11/2019, mỗi sự kiện có 9 cột:
+Nguồn chính là tệp `2019-Nov.csv` của bộ "eCommerce behavior data from multi category store" do REES46 công bố trên Kaggle [1]. Tệp có 67,501,979 sự kiện của 3,696,117 khách trong tháng 11/2019, mỗi sự kiện có 9 cột:
 
 | Cột | Ý nghĩa |
 |---|---|
@@ -285,7 +285,7 @@ ShopInsight gồm năm tầng: thu nhận, xử lý, lưu trữ, phục vụ và
 
 **Tầng xử lý.** Ở nhánh theo lô:
 - `batch_silver.py` áp bảy quy tắc làm sạch để ra tầng silver. Tầng này chia thư mục theo ngày rồi theo loại sự kiện, nên truy vấn chỉ cần một loại sự kiện sẽ bỏ qua được cả thư mục của các loại khác.
-- `batch_warehouse.py` dựng kho dữ liệu theo mô hình chiều: năm bảng chiều dùng chung và ba bảng sự kiện, mỗi bảng ứng với một kiểu bảng sự kiện của Kimball.
+- `batch_warehouse.py` dựng kho dữ liệu theo mô hình chiều: năm bảng chiều dùng chung và ba bảng sự kiện, mỗi bảng ứng với một kiểu bảng sự kiện của Kimball [2].
   - Bảng giao dịch ghi từng sự kiện.
   - Bảng ảnh chụp tích luỹ ghi từng phiên đi qua các bước của phễu, mỗi bước một mốc thời gian được điền khi phiên đi tới bước đó. Parquet không cho sửa một dòng đã ghi, nên mỗi lần chạy, bảng này được dựng lại toàn bộ rồi ghi đè, không cập nhật tăng dần.
   - Bảng ảnh chụp định kỳ ghi tồn kho của từng sản phẩm tại từng kho mỗi ngày.
@@ -295,11 +295,11 @@ ShopInsight gồm năm tầng: thu nhận, xử lý, lưu trữ, phục vụ và
 Ở nhánh thời gian thực, `streaming_gold.py` dùng Spark Structured Streaming đọc thư mục chờ theo từng lô nhỏ. Nó áp đúng bảy quy tắc làm sạch của silver bằng cách gọi lại cùng một hàm, rồi tính bốn phép tổng hợp theo cửa sổ thời gian và ghi thẳng kết quả vào Cassandra. Job này không ghi vào tầng silver: silver chỉ có đúng một nơi ghi là `batch_silver.py`, để dữ liệu không bị nhân đôi khi phát lại.
 
 **Tầng lưu trữ.** Mỗi kho lưu trữ được chọn theo kiểu truy cập:
-- Parquet là nơi lưu chính cho silver, kho dữ liệu và các bảng gold phân tích. Dữ liệu chia thư mục theo ngày, nên truy vấn theo khoảng ngày chỉ đọc các thư mục liên quan.
-- PostgreSQL chứa một bản thứ hai của cùng mô hình logic của kho dữ liệu, dùng chỉ mục B-tree, BRIN và GIN. Bản này không phục vụ màn hình nào. Nó tồn tại để so sánh công bằng hai cách hiện thực vật lý của cùng một mô hình ở phần đánh giá.
+- Parquet [6] là nơi lưu chính cho silver, kho dữ liệu và các bảng gold phân tích. Dữ liệu chia thư mục theo ngày, nên truy vấn theo khoảng ngày chỉ đọc các thư mục liên quan.
+- PostgreSQL chứa một bản thứ hai của cùng mô hình logic của kho dữ liệu, dùng chỉ mục B-tree, BRIN và GIN [8]. Bản này không phục vụ màn hình nào. Nó tồn tại để so sánh công bằng hai cách hiện thực vật lý của cùng một mô hình ở phần đánh giá.
 - Cassandra giữ các bảng gold cần đọc nhanh. Mỗi bảng được thiết kế ngược từ câu hỏi của màn hình, và mọi truy vấn đi qua khoá phân vùng.
 
-**Tầng phục vụ.** FastAPI cung cấp mỗi BR một endpoint, trả về cùng một khuôn gồm dữ liệu và thông tin truy vấn: thời gian, kho lưu trữ đã đọc, số phân vùng và số dòng. Các BR theo lô có kết quả ở Parquet được đọc bằng DuckDB. Các BR có kết quả ở Cassandra được đọc bằng một truy vấn theo đúng khoá phân vùng.
+**Tầng phục vụ.** FastAPI cung cấp mỗi BR một endpoint, trả về cùng một khuôn gồm dữ liệu và thông tin truy vấn: thời gian, kho lưu trữ đã đọc, số phân vùng và số dòng. Các BR theo lô có kết quả ở Parquet được đọc bằng DuckDB [7], một engine phân tích chạy ngay trong tiến trình của API. Các BR có kết quả ở Cassandra được đọc bằng một truy vấn theo đúng khoá phân vùng.
 
 **Tầng ứng dụng.** Giao diện React có 8 màn hình, mỗi màn hình một BR. Chân mỗi màn hình hiện thời gian truy vấn và số phân vùng đã đọc, nên người dùng thấy ngay hiệu quả của cách tổ chức dữ liệu mà không cần mở báo cáo.
 
@@ -307,7 +307,7 @@ ShopInsight gồm năm tầng: thu nhận, xử lý, lưu trữ, phục vụ và
 
 ### 4.2 Cassandra: thiết kế khoá ngược từ câu hỏi
 
-Cassandra giữ năm bảng gold cần đọc nhanh: bốn bảng của nhánh thời gian thực (BR1, BR3, BR5, BR8) và bảng nguy cơ hết hàng của BR6. Hệ thống chạy Cassandra 4.1.12, một node trong Docker. Mục này giải thích cách Cassandra tổ chức dữ liệu theo khoá, vì sao khoá phải được thiết kế từ câu hỏi của màn hình, và chỗ dễ sai nhất khi ghi lại kết quả: dòng rác.
+Cassandra giữ năm bảng gold cần đọc nhanh: bốn bảng của nhánh thời gian thực (BR1, BR3, BR5, BR8) và bảng nguy cơ hết hàng của BR6. Hệ thống chạy Cassandra [5] 4.1.12, một node trong Docker. Mục này giải thích cách Cassandra tổ chức dữ liệu theo khoá, vì sao khoá phải được thiết kế từ câu hỏi của màn hình, và chỗ dễ sai nhất khi ghi lại kết quả: dòng rác.
 
 **Khoá phân vùng và khoá sắp xếp.** Khoá chính của một bảng Cassandra gồm hai phần:
 - Khoá phân vùng (partition key) quyết định dòng nằm ở phân vùng nào. Cassandra băm khoá này để chọn node lưu, và mọi dòng cùng khoá phân vùng được lưu liền nhau. Truy vấn nêu đủ khoá phân vùng chỉ đọc đúng một phân vùng, dù bảng lớn bao nhiêu.
@@ -325,7 +325,7 @@ Màn hình BR1 luôn hỏi: "doanh thu từng phút của ngành X trong ngày D
 
 Màn hình BR3 hỏi: "top 20 sản phẩm của cửa sổ 15 phút W". Mỗi cửa sổ là một phân vùng (`window_start`), các dòng trong đó xếp theo hạng tăng dần (`rank ASC`, chiều mặc định). Top 20 của một cửa sổ là 20 dòng đầu của một phân vùng: 1 phân vùng, 20 dòng, 2.3 ms.
 
-**Thiết kế ngược từ câu hỏi, và cái giá của nó.** Kho dữ liệu dạng mô hình chiều ở mục 4.1 đi theo hướng ngược lại. Bảng được tổ chức quanh mức chi tiết của nghiệp vụ, và một bảng `fact_event` trả lời nhiều câu hỏi bằng cách nối với những bảng chiều mà câu hỏi cần. Ở Cassandra, mỗi câu hỏi có một bảng riêng. `gmv_by_minute` không trả lời được câu hỏi của BR3, `trending_products` không trả lời được câu hỏi của BR1, vì khoá của bảng này không hỗ trợ bộ lọc của bảng kia. Thêm một câu hỏi mới nghĩa là thêm một bảng và một đường ghi mới.
+**Thiết kế ngược từ câu hỏi, và cái giá của nó.** Kho dữ liệu dạng mô hình chiều ở mục 4.1 đi theo hướng ngược lại. Bảng được tổ chức quanh mức chi tiết của nghiệp vụ, và một bảng `fact_event` trả lời nhiều câu hỏi bằng cách nối với những bảng chiều mà câu hỏi cần. Ở Cassandra, mỗi câu hỏi có một bảng riêng: cách mô hình hoá đi từ truy vấn, thường gặp ở các cơ sở dữ liệu NoSQL phân tán [12]. `gmv_by_minute` không trả lời được câu hỏi của BR3, `trending_products` không trả lời được câu hỏi của BR1, vì khoá của bảng này không hỗ trợ bộ lọc của bảng kia. Thêm một câu hỏi mới nghĩa là thêm một bảng và một đường ghi mới.
 
 BR3 cho thấy cái giá này bằng số đo. Khi mở màn hình, người dùng chưa chọn cửa sổ nào, nên câu hỏi thật là "cửa sổ mới nhất là cửa sổ nào". Không khoá nào trả lời được câu này, vì Cassandra chỉ sắp xếp các dòng trong một phân vùng, không sắp xếp các phân vùng với nhau. Nhóm chọn giữ nguyên bảng: API đọc danh sách khoá bằng `SELECT DISTINCT window_start` (chỉ đọc khoá, không đọc dòng), lấy khoá lớn nhất rồi đọc phân vùng đó. Chân màn hình ghi đúng số phân vùng đã quét. Thời gian tăng theo số cửa sổ trong bảng:
 
@@ -347,7 +347,7 @@ Ba bảng, ba cách: chép cách dọn của bảng này sang bảng kia sẽ l�
 
 ### 4.3 Spark: một engine cho cả nhánh theo lô và nhánh thời gian thực
 
-Mọi bước xử lý của ShopInsight chạy trên Apache Spark 4.1.3, viết bằng PySpark. Spark chạy ở chế độ `local[*]`: một tiến trình Java trên một máy, dùng mọi nhân CPU của máy đó. Ở chế độ này driver, tức tiến trình điều phối công việc, cũng là executor duy nhất làm việc tính toán. Với tập làm việc khoảng 4.75 triệu sự kiện, một máy là đủ, và cả bốn thành viên chạy được cùng một pipeline trên máy của mình. Mục này trình bày khác biệt giữa hai cách chạy của Spark, năm khái niệm của Structured Streaming mà nhánh thời gian thực dùng, hai bẫy cấu hình, và một chỗ dễ sai khi dựng chiều SCD loại 2.
+Mọi bước xử lý của ShopInsight chạy trên Apache Spark [3] 4.1.3, viết bằng PySpark. Spark chạy ở chế độ `local[*]`: một tiến trình Java trên một máy, dùng mọi nhân CPU của máy đó. Ở chế độ này driver, tức tiến trình điều phối công việc, cũng là executor duy nhất làm việc tính toán. Với tập làm việc khoảng 4.75 triệu sự kiện, một máy là đủ, và cả bốn thành viên chạy được cùng một pipeline trên máy của mình. Mục này trình bày khác biệt giữa hai cách chạy của Spark, năm khái niệm của Structured Streaming mà nhánh thời gian thực dùng, hai bẫy cấu hình, và một chỗ dễ sai khi dựng chiều SCD loại 2.
 
 **Theo lô và theo luồng.** Hai nhánh dùng chung API DataFrame nhưng chạy theo hai cách khác nhau:
 - Job theo lô (`batch_silver.py`, `batch_warehouse.py`, `batch_gold.py`, `gold_br7.py`) đọc bằng `spark.read` một tập tệp đã có sẵn, tính một lần, ghi ra Parquet rồi kết thúc.
@@ -355,7 +355,7 @@ Mọi bước xử lý của ShopInsight chạy trên Apache Spark 4.1.3, viết
 
 Hai nhánh làm sạch dữ liệu bằng cùng một hàm `clean()` của `batch_silver.py`. Job theo luồng nhập hàm này chứ không chép lại, nên bảy quy tắc làm sạch luôn giống nhau ở cả hai nhánh. Một số phép tính không được phép trên DataFrame luồng, ví dụ xếp hạng bằng hàm cửa sổ hay đếm số giá trị phân biệt. BR3 vì thế xếp hạng bên trong `foreachBatch`, còn BR5 đếm số sản phẩm trong giỏ bằng `collect_set` thay cho `count(distinct)`.
 
-**Năm khái niệm của Structured Streaming.** Cả bốn job thời gian thực đọc nguồn qua cùng một hàm trong `processing/source.py`:
+**Năm khái niệm của Structured Streaming.** Structured Streaming [4] coi luồng sự kiện như một bảng được nối thêm dòng liên tục, và chạy cùng một câu truy vấn DataFrame trên phần mới tới. Cả bốn job thời gian thực đọc nguồn qua cùng một hàm trong `processing/source.py`:
 
 ```python
     return (
@@ -704,26 +704,225 @@ Các số của mục 4.4 đo trên máy của Đắt (20 nhân, 15 GB RAM, Ubun
 
 ## 5. Ứng dụng: API và tám màn hình
 
-*Chờ viết: T23, Khang.*
+Sản phẩm cuối của đồ án là một dashboard React gồm 8 màn hình, mỗi màn hình một BR. Mỗi màn hình gọi endpoint FastAPI của BR đó, và chân màn hình in lại khối `meta` mà endpoint trả về: thời gian truy vấn phía server, kho lưu trữ đã đọc, số phân vùng và số dòng. Người xem vì vậy thấy ngay mỗi câu trả lời tốn bao nhiêu và đọc bao nhiêu dữ liệu, không cần mở báo cáo.
+
+### 5.1 Chạy hệ thống
+
+Toàn bộ hệ thống chạy trên một máy cá nhân. Bước đầu tiên dựng hạ tầng, vì nhánh theo lô cần nó: `load_star_postgres.py` nạp kho dữ liệu vào PostgreSQL, còn `batch_gold.py` ghi bảng của BR6 vào Cassandra.
+
+```bash
+./run_demo.sh infra    # Cassandra 4.1.12 và PostgreSQL 16.15 trong Docker, schema, kiểm dữ liệu theo lô
+```
+
+Khi chưa có dữ liệu, bước `infra` in ra danh sách lệnh dựng. Dữ liệu theo lô chỉ cần dựng một lần, theo đúng thứ tự sau:
+
+```bash
+SPARK_CONF_DIR=conf python ingestion/load_bronze.py
+SPARK_CONF_DIR=conf python processing/batch_silver.py
+python ingestion/gen_catalog.py
+python ingestion/gen_inventory.py
+SPARK_CONF_DIR=conf python processing/batch_warehouse.py
+python serving/load_star_postgres.py
+python processing/batch_gold.py                   # BR2, BR4, BR6
+python processing/gold_br7.py                     # BR7
+```
+
+Sau đó `run_demo.sh` chạy phần còn lại:
+
+```bash
+./run_demo.sh stream   # streaming_gold.py --fresh, rồi replayer.py --speed 60 --start "2019-11-17 08:00:00"
+./run_demo.sh app      # FastAPI ở cổng 8000, dashboard ở http://localhost:5173
+./run_demo.sh stop     # dừng mọi tiến trình mà script đã mở
+```
+
+`--start "2019-11-17 08:00:00"` là giờ UTC, tức 15:00 giờ Việt Nam của ngày có nhiều lượt mua nhất tháng. Với `--speed 60`, một giờ dữ liệu phát lại trong một phút.
+
+### 5.2 Tám màn hình
+
+Các ảnh dưới đây là ảnh Gate 2b, chụp ngày 10/11/2026 trên máy của Đắt, sau lần phát lại ngày 17/11 từ 15:00 tới 21:30 giờ Việt Nam (78 tệp, 187,468 sự kiện). Chân màn hình là một lần tải trang, thường là lần đầu nên còn "lạnh"; thời gian đo lặp lại 20 lần nằm ở mục 6.2.
+
+| BR | Màn hình | Kho đọc | Chân màn hình trên ảnh |
+|---|---|---|---|
+| BR1 | Real-time Operations | Cassandra | 2.517 ms, 1 phân vùng, 120 dòng |
+| BR2 | Conversion Funnel | Parquet qua DuckDB | 354.57 ms, 30 phân vùng, 3 dòng (thẻ phễu); 321.79 ms, 30 phân vùng, 45 dòng (bảng theo ngành) |
+| BR3 | Trending Products | Cassandra | 9.1 ms, 381 phân vùng, 40 dòng (cộng hai lần đọc) |
+| BR4 | RFM Segments | Parquet qua DuckDB | 72.78 ms, 1 phân vùng, 31,005 dòng (năm lần gọi song song) |
+| BR5 | Abandoned Carts | Cassandra | 38.381 ms, 1 phân vùng, 2,600 dòng |
+| BR6 | Inventory Alerts | Cassandra | 28.77 ms, 5 phân vùng, 525 dòng |
+| BR7 | Bought Together | Parquet qua DuckDB | 10.8 ms, 2 phân vùng, 10 dòng |
+| BR8 | Risk Alerts | Cassandra | 45.81 ms, 1 phân vùng, 5,815 dòng |
+
+**BR1, doanh thu theo từng phút.** Bốn thẻ số cho 60 phút gần nhất (20:30 tới 21:29): doanh thu 309K, 1,011 đơn, giá trị trung bình mỗi đơn 305.61, giảm 6.6% so với 330.7K của 60 phút trước. Biểu đồ vẽ doanh thu từng phút và tự làm mới mỗi 10 giây. Ban điều hành đổi ngành hàng ở bộ lọc để xem ngành nào đang kéo doanh thu; mỗi lựa chọn là đúng một phân vùng của `gmv_by_minute`.
+
+![BR1: doanh thu theo từng phút](evidence/gate2b_br1.png)
+
+**BR2, phễu chuyển đổi.** Từ 1 tới 30/11 có 966,143 phiên xem sản phẩm, 131,498 phiên tới bước giỏ hàng (13.61%) và 54,676 phiên mua, tức tỉ lệ chuyển đổi chung 5.66%. Cột "drop-off" cho thấy 86.39% phiên rời đi trước bước giỏ hàng, trong khi 41.58% phiên đã tới giỏ thì mua, nên trang sản phẩm là chỗ nhóm marketing nên xem trước. Bảng "Conversion by Category" bên dưới tách phễu theo 14 ngành hàng; trong các ngành lớn, electronics có tỉ lệ từ xem sang giỏ cao nhất (15.88%). Ghi chú dưới phễu nói rõ ngày 15/11 gần như không có lượt mua vì khoảng trống trong dữ liệu gốc (mục 3.1).
+
+![BR2: phễu chuyển đổi và bảng theo ngành hàng](evidence/gate2b_br2.png)
+
+**BR3, sản phẩm đang tăng mạnh.** Màn hình mở ở cửa sổ mới nhất, 21:04 tới 21:19. Sản phẩm 1005115 của Apple dẫn đầu với 80 lượt xem; so với cửa sổ một phút trước, không có sản phẩm mới vào top 20, 6 sản phẩm lên hạng và 7 sản phẩm xuống hạng. Mũi tên đổi hạng cần đọc thêm cửa sổ trước, và chân màn hình cộng cả hai lần đọc.
+
+![BR3: sản phẩm đang tăng mạnh](evidence/gate2b_br3.png)
+
+**BR4, phân khúc khách hàng theo RFM.** Heatmap 5x5 theo điểm R và F của 31,005 khách đã mua tính tới 30/11, trong đó 6,477 khách là champion và 6,419 khách là at_risk. Ô R5-F5 có 2,228 khách; bấm vào một ô thì danh sách khách của ô đó hiện bên dưới, xếp theo tổng chi. Dòng chú thích dưới heatmap nói rõ số ngày từ lần mua cuối lấy từ lần chấm đã đặt phân khúc hiện tại của khách, đúng giới hạn ở mục 6.1.
+
+![BR4: heatmap RFM](evidence/gate2b_br4.png)
+
+**BR5, giỏ hàng bị bỏ quên.** Ngày 17/11 có 2,600 giỏ bị bỏ quên với tổng giá trị 1.4M; giỏ trung bình 542.91, giỏ lớn nhất 53,157.63. Danh sách xếp theo giá trị giỏ giảm dần và hiện 200 giỏ lớn nhất, còn bốn thẻ số tính trên cả 2,600 giỏ. Người dùng lọc theo giá trị tối thiểu, và nút "Create reminder campaign" mô phỏng việc gửi lời nhắc cho các giỏ đang lọc.
+
+![BR5: giỏ hàng bị bỏ quên](evidence/gate2b_br5.png)
+
+**BR6, nguy cơ hết hàng.** Màn hình liệt kê các sản phẩm gấp nhất trước, tô đỏ khi còn dưới 3 ngày. Với mỗi kho, API đọc 100 sản phẩm gấp nhất, tức đầu phân vùng của `stockout_risk` vì phân vùng đã xếp sẵn theo số ngày còn hàng, rồi thêm tối đa 5 sản phẩm không bán được trong 7 ngày. Khi xem cả năm kho, màn hình có 525 dòng. Bốn thẻ số ở trên (500 critical, 0 low stock, 25 no sales, 525 SKU) đếm trên chính 525 dòng đó, không phải trên toàn bộ 63,655 cặp sản phẩm và kho.
+
+![BR6: nguy cơ hết hàng](evidence/gate2b_br6.png)
+
+**BR7, sản phẩm thường được mua kèm.** Người dùng chọn một sản phẩm gợi ý hoặc nhập mã. Với sản phẩm 1005115, mười sản phẩm hay được mua cùng phiên đều thuộc ngành điện tử, 8 của Apple và 2 của Samsung. Danh sách xếp theo lift: đứng đầu là 1005230 với lift 4.07 nhưng chỉ mua cùng trong 3 phiên, còn 1004249 được mua cùng nhiều nhất (26 phiên) với lift 1.72. Cột số phiên đặt cạnh lift để người dùng không đọc một lift cao trên rất ít phiên thành một quy luật chắc chắn.
+
+![BR7: mười sản phẩm hay được mua kèm sản phẩm 1005115](evidence/gate2b_br7.png)
+
+**BR8, tài khoản đặt đơn bất thường.** Ngày 17/11 có 5,815 cảnh báo: 3 high, 337 medium và 5,475 low, theo ngưỡng 1 đơn là low, 2 tới 3 đơn là medium và từ 4 đơn trở lên là high trong một cửa sổ 5 phút. Dòng thời gian hiện 200 cảnh báo mới nhất, còn bốn thẻ số đếm trên cả 5,815. Ảnh chụp khi đã mở một cảnh báo: khách 512379060, cửa sổ 21:25 tới 21:30, 1 đơn trị giá 218.54, mức low.
+
+![BR8: cảnh báo đơn bất thường, một cảnh báo đang mở](evidence/gate2b_br8.png)
 
 ## 6. Đánh giá và kết luận
 
+Hệ thống được đánh giá theo ba tiêu chí: tính đúng đắn (con số trên màn hình có đúng không), hiệu năng (có trả lời dưới 2 giây không) và tính hữu dụng (có trả lời đúng câu hỏi của người dùng không). Mục 6.4 ghi các giới hạn của những kết luận này. Số đo chính thức của mục này là lần đo ngày 10/11/2026 trên máy của Đắt (20 nhân logic, 15 GB RAM, Ubuntu 26.04.1 trong WSL2), `main` tại `02b22f1`, trừ thời gian dựng nhánh theo lô đo ngày 3/11.
+
 ### 6.1 Tính đúng đắn
 
-*Chờ viết: T24, Khang.*
+**Phương pháp.** Một con số trên màn hình chỉ có giá trị khi nó đúng. Nhóm kiểm tính đúng đắn bằng cách viết lại đáp án của cả tám câu hỏi theo một đường độc lập, rồi so từng dòng với đúng bảng mà màn hình đọc. Đáp án nằm trong `checks/correctness_8br.py`: SQL thuần chạy bằng DuckDB trên tầng silver (riêng BR6 đọc chuỗi tồn kho), viết từ định nghĩa trong `docs/BR_SCOPE.md` và `docs/API_CONTRACT.md`, không nhập hàm nào từ thư mục `processing/`. Nhờ vậy, một lỗi trong code Spark không thể lặp lại y hệt ở phía đáp án. Một số chỗ đáp án cố ý đi đường khác hẳn: BR6 dựng lại lượng bán mỗi ngày từ chính phương trình cân bằng của tồn kho (tồn hôm nay bằng tồn hôm qua cộng hàng nhập trừ hàng bán) thay vì đọc cột lượng bán, còn BR3 và BR5 tự áp mốc nước để chỉ so những cửa sổ đã đóng.
+
+Một dòng được tính là khớp khi khoá và mọi giá trị được so đều bằng nhau: tiền là số thập phân và phải bằng đúng, số thực khớp trong sai số tương đối 10^-4 vì Cassandra lưu `float` 32 bit. Điểm của một BR bằng số dòng khớp chia cho số dòng của bên nhiều hơn, nên cả dòng thiếu, dòng thừa lẫn dòng bị ghi hai lần đều làm giảm điểm. Ngưỡng đạt là 99%.
+
+**Kết quả.** Bảng dưới là lần chạy ngày 10/11 sau lần phát lại ngày 17/11 từ 15:00 tới 21:30 giờ Việt Nam, mốc nước cuối 21:19:59. Dòng thứ chín là hai bảng chiều SCD loại 2: ở cả `dim_product` và `dim_user`, `checks/scd2_integrity.py` chạy sáu phép kiểm (khoảng hiệu lực chồng nhau, hở, rỗng, số phiên bản hiện hành khác 1, cờ hiện hành sai, cột rỗng) và cả mười hai phép đều ra 0 vi phạm.
+
+| # | Hàng | Giá trị được so | Đáp án | Bảng của màn hình | Khớp | Tỉ lệ |
+|---|---|---|---|---|---|---|
+| 1 | BR1 | doanh thu và số đơn theo ngày, ngành hàng (kể cả `all`), phút | 4,563 | 4,563 | 4,563 | 100% |
+| 2 | BR2 | số phiên và số sự kiện từng bước theo ngày bắt đầu phiên và ngành hàng | 465 | 465 | 465 | 100% |
+| 3 | BR3 | sản phẩm, lượt xem, lượt thêm giỏ theo cửa sổ đã đóng và hạng | 7,580 | 7,580 | 7,580 | 100% |
+| 4 | BR4 | điểm R, F, M và phân khúc của từng khách | 258,330 | 258,330 | 258,330 | 100% |
+| 5 | BR5 | giá trị giỏ, khách, số sản phẩm, sự kiện cuối theo ngày và phiên | 2,600 | 2,600 | 2,600 | 100% |
+| 6 | BR6 | số ngày còn hàng, tồn kho, tốc độ bán theo kho và sản phẩm ngày 30/11 | 63,655 | 63,655 | 63,655 | 100% |
+| 7 | BR7 | số lần mua cùng, support và lift của từng cặp có thứ tự | 314 | 314 | 314 | 100% |
+| 8 | BR8 | số đơn, tổng giá trị, mức cảnh báo theo ngày, cửa sổ 5 phút, khách | 5,815 | 5,815 | 5,815 | 100% |
+| 9 | SCD2 | sáu phép kiểm toàn vẹn trên mỗi bảng chiều | 12 phép | | 12 đạt | 100% |
+
+Cả chín hàng đạt 100%, trên ngưỡng 99%. Kết quả lặp lại được: cùng máy, lần phát lại thứ hai ngày 10/11 cho đúng tám hàng BR như trên. Trước đó, lần chạy trên máy của Khang ngày 6/11 và lần chạy lại khi Đắt review ngày 8/11 cũng cho 100% ở cả tám BR; hai lần đó tính BR8 theo ngưỡng cũ (từ 3 đơn là medium, từ 10 đơn là high), trước khi ngưỡng đổi ở PR #37. Một đáp án độc lập thứ hai, `checks/ground_truth.py`, viết riêng bằng DuckDB trên Parquet của kho dữ liệu (riêng BR8 trên silver), cũng cho 100% ở bốn bảng nó kiểm: BR4 (31,005 khách đã mua), BR6 (63,655 dòng), BR7 (314 cặp) và BR8 (5,815 cảnh báo, so số đơn và tổng giá trị).
+
+**Phép kiểm có thể trượt.** Một phép kiểm luôn ra 100% thì chưa chứng minh được gì. Trong lần chạy ngày 6/11, chạy lại cùng lệnh với mốc nước sớm hơn 10 phút, đáp án bỏ đi những cửa sổ mà theo nó chưa đóng: BR3 còn 97.36%, BR5 còn 96.77%, và script trả mã lỗi 1. Trước khi so số thực theo sai số tương đối, BR6 chỉ khớp 63,652 trên 63,655 dòng: ba giá trị như 5.6875 bị Cassandra lưu thành 5.68749. Khi Đắt review, cách so tiền được siết lại thành so đúng: tăng doanh thu của một phút trong Cassandra thêm 1.00 (11,782.53 thành 11,783.53) thì BR1 tụt từ 100% xuống 99.98% và in ra đúng dòng lệch; còn một dòng bị ghi hai lần thì điểm giảm từ 100% xuống 50%. Các lần này cho thấy phép so đủ nhạy để bắt một sai lệch nhỏ.
+
+**Một sai lệch được giữ lại có chủ đích.** Ngoài điểm và phân khúc, danh sách khách trong một ô của BR4 còn hiện số thô: số ngày từ lần mua cuối, số lần mua, tổng chi. So riêng ba số này, chỉ 234,977 trên 258,330 khách (90.96%) khớp với lần chấm ngày 30/11: 23,198 khách lệch số ngày, 590 khách lệch số lần mua hoặc tổng chi. Nguyên nhân nằm ở thiết kế SCD loại 2 của `dim_user`: một phiên bản chỉ mở khi ô RFM đổi (mục 4.3), nên khách giữ nguyên ô qua nhiều lần chấm vẫn mang số thô của lần chấm đã mở phiên bản đó. `checks/ground_truth.py` so số thô của mỗi khách với đúng lần chấm hiện hành của khách đó và ra 100%, nên 90.96% là khoảng cách do thiết kế chứ không phải lỗi tính. Heatmap và bộ lọc chỉ dùng điểm và phân khúc, nên vẫn đúng cho mọi khách. Nhóm chọn giữ thiết kế này, ghi chú ngay trên màn hình BR4, và ghi nó thành giới hạn ở mục 6.4.
 
 ### 6.2 Hiệu năng
 
-*Chờ viết: T24, Khang.*
+**Thời gian của tám màn hình.** Mục tiêu của đồ án là mỗi màn hình trả lời dưới 2 giây. Với mỗi màn hình, nhóm gọi endpoint mà màn hình gọi khi vừa mở, 3 lần làm nóng rồi 20 lần đo liên tiếp, và ghi hai thời gian: `meta`, thời gian truy vấn mà API tự báo và in ở chân màn hình, và `curl`, thời gian trọn một lượt HTTP gồm truy vấn, mã hoá JSON và truyền dữ liệu. Thời gian vẽ của React không được tính. p50 và p95 tính theo nearest rank.
+
+| BR | Kho đọc | Phân vùng | meta p50 / p95 (ms) | curl p50 / p95 (ms) | Dưới 2 giây |
+|---|---|---|---|---|---|
+| BR1 | Cassandra | 1 | 2.6 / 3.1 | 5.2 / 6.1 | có |
+| BR2 | Parquet qua DuckDB | 30 | 17.9 / 21.4 | 19.8 / 23.2 | có |
+| BR3 | Cassandra | 380 | 5.9 / 7.2 | 7.9 / 9.5 | có |
+| BR4 | Parquet qua DuckDB | 1 | 30.2 / 40.0 | 43.7 / 53.4 | có |
+| BR5 | Cassandra | 1 | 9.6 / 11.9 | 23.3 / 61.3 | có |
+| BR6 | Cassandra | 5 | 14.9 / 17.9 | 18.0 / 22.2 | có |
+| BR7 | Parquet qua DuckDB | 2 | 9.6 / 11.7 | 22.8 / 28.3 | có |
+| BR8 | Cassandra | 1 | 19.8 / 32.2 | 47.4 / 63.9 | có |
+
+Cả 8 màn hình đạt. Chậm nhất ở p95 phía client là BR8, 63.9 ms, thấp hơn ngưỡng 2 giây khoảng 30 lần. So với 50 giây của câu "doanh thu theo ngành hàng" khi đọc thẳng tệp thô (mục 1.3, đo trên toàn bộ 67.5 triệu dòng; các màn hình đọc mẫu 7%, xem mục 6.4), thời gian chờ dữ liệu giảm hơn hai bậc độ lớn. Ba điều cần đọc kèm bảng:
+- Màn hình BR4 bắn song song năm lần gọi, mỗi điểm R một lần, mỗi lần 6,201 khách. Khi đo, năm lần gọi được đo lần lượt, và dòng BR4 ghi giá trị xấu nhất trong năm ở mỗi cột. Chân màn hình trên ảnh, lấy từ một lần tải song song thật, ghi 72.78 ms. Endpoint BR4 không lọc trả cả 258,330 khách, màn hình không gọi kiểu này, có `curl` p95 1,052.0 ms trong khi `meta` p95 chỉ 408.5 ms: phần lớn thời gian là truyền JSON.
+- Một số màn hình gọi thêm request ngoài request được đo. BR2 gọi thêm 15 request cho bảng theo ngành (chân bảng ghi 321.79 ms), BR3 đọc thêm cửa sổ một phút trước để vẽ mũi tên đổi hạng, BR7 gọi danh sách sản phẩm gợi ý khi mở. Các request này không được đo lặp; quan sát một lần trên ảnh đều dưới 2 giây.
+- Chân màn hình trên ảnh thường là lần tải đầu, nên có thể cao hơn p95 khi đã nóng: BR2 354.57 ms so với p95 21.4 ms, BR8 45.81 ms so với 32.2 ms.
+
+BR8 và BR5 có khoảng cách lớn nhất giữa `meta` và `curl` (19.8 so với 47.4 ms, 9.6 so với 23.3 ms ở p50) vì cùng một lý do với BR4: chúng trả cả ngày, 5,815 cảnh báo và 2,600 giỏ, để bốn thẻ số đếm đủ, dù danh sách chỉ hiện 200 dòng. Ở BR3, 380 phân vùng là danh sách khoá phải đọc trước để tìm cửa sổ mới nhất, đúng cái giá đã phân tích ở mục 4.2. So sánh giữa các cách lưu vật lý (partition pruning, BRIN, GIN, đúng và sai partition key ở Cassandra) nằm ở mục 4.4.
+
+**Nhánh theo lô.** Dựng toàn bộ dữ liệu theo lô từ tệp CSV gốc tới các bảng gold mất 426.5 giây: `load_bronze.py` 34.6, `batch_silver.py` 17.9, `gen_catalog.py` 9.4, `gen_inventory.py` 19.5, `batch_warehouse.py` 273.0, `batch_gold.py` 57.0 và `gold_br7.py` 15.2 giây; cả bảy job thoát với mã 0. Việc này chỉ chạy một lần khi dữ liệu nguồn thay đổi, nên không nằm trên đường chờ của người dùng.
+
+**Nhánh thời gian thực.** Bốn job đọc kịp nguồn: trong lần phát lại, BR1, BR3 và BR5 xử lý 483.0, 466.9 và 483.0 sự kiện mỗi giây, bằng tốc độ replayer cấp (480.7 dòng mỗi giây). BR8 chỉ đọc lượt mua nên là 16.0. Vì vậy đây là tốc độ của nguồn, không phải trần của Spark; nhóm không chạy thử quá tải. Mỗi lô nhỏ phải xong trước khi lô sau tới, tức dưới 5 giây. Thời gian xử lý một lô (`triggerExecution`, kể cả ghi Cassandra) có p50, p95 và max như sau: BR1 616, 877 và 3,201 ms; BR3 852, 1,252 và 3,524 ms; BR5 587, 800 và 3,199 ms; BR8 590, 865 và 3,200 ms. Max rơi vào lô đầu tiên, lúc JVM và câu truy vấn khởi động.
+
+Độ tươi của màn hình phụ thuộc vào chế độ đầu ra. Một sự kiện tới Cassandra chậm nhất sau một chu kỳ 5 giây cộng thời gian xử lý một lô, tính từ lúc tệp của nó vào thư mục nguồn. BR1 và BR8 dùng `update`, nên cửa sổ đang diễn ra (một phút với BR1, năm phút với BR8) hiện lên và tăng dần ngay ở lô nhỏ kế tiếp. BR3 và BR5 dùng `append`, nên một cửa sổ chỉ hiện khi mốc nước đã vượt qua điểm cuối của nó, tức 10 phút thời gian sự kiện sau khi cửa sổ kết thúc. Khi phát lại ở `--speed 60`, 10 phút đó chỉ là 10 giây; trên một sàn thật nó là 10 phút, và đây là cái giá của việc chỉ ghi những cửa sổ đã chắc chắn.
 
 ### 6.3 Tính hữu dụng
 
-*Chờ viết: T24, Khang.*
+**Mỗi câu hỏi có một màn hình trả lời.** Bảng dưới đối chiếu câu hỏi của từng nhóm người dùng ở mục 1.2 với màn hình và thao tác trả lời nó, dựa trên các ảnh ở mục 5.2.
+
+| Nhóm người dùng | Câu hỏi | Màn hình và thao tác | Câu trả lời trên dữ liệu demo |
+|---|---|---|---|
+| Ban điều hành | Doanh thu đang đi thế nào so với một giờ trước? | BR1, mở màn hình | 309K trong 60 phút, giảm 6.6% so với 60 phút trước |
+| Tăng trưởng và marketing | Khách rời đi ở bước nào? | BR2, mở màn hình | 86.39% phiên rời đi trước bước giỏ hàng |
+| Tăng trưởng và marketing | Phân khúc nào nên được đầu tư? | BR4, chọn một ô | 6,419 khách at_risk; ô R5-F5 có 2,228 khách |
+| Tăng trưởng và marketing | Khách nào bỏ quên giỏ hàng? | BR5, lọc theo giá trị | 2,600 giỏ ngày 17/11 (15:00 tới 21:30), tổng 1.4M |
+| Hàng hoá | Sản phẩm nào đang tăng mạnh? | BR3, mở màn hình | 1005115 dẫn đầu cửa sổ 21:04 tới 21:19 |
+| Hàng hoá | Mua A thì thường mua kèm gì? | BR7, chọn sản phẩm | với 1005115: 1004249 mua cùng trong 26 phiên, lift 1.72 |
+| Vận hành và rủi ro | Sản phẩm nào sắp hết hàng, ở kho nào? | BR6, lọc kho và số ngày | danh sách tô đỏ dưới 3 ngày, theo từng kho |
+| Vận hành và rủi ro | Tài khoản nào đặt đơn bất thường? | BR8, lọc mức cảnh báo | 3 cảnh báo high và 337 medium ngày 17/11 (15:00 tới 21:30), mở được từng cảnh báo |
+
+**Khảo sát người dùng.** Bảng trên chỉ cho thấy mỗi câu hỏi có một màn hình trả lời, chưa cho thấy người dùng thấy câu trả lời đó dễ đọc và đáng tin. Phần này đánh giá bằng khảo sát theo kế hoạch ở `docs/EVALUATION_SURVEY.md`: 5 người tham gia làm bốn tác vụ, mỗi tác vụ ứng với một nhóm người dùng, rồi chấm theo thang 1 tới 5. Ngưỡng thành công đặt trước: thời gian ở chân màn hình dưới 2,000 ms trên mọi màn hình, điểm cảm nhận tốc độ trung bình từ 4.0, điểm độ rõ của thông tin trung bình từ 4.2, và 100% tác vụ hoàn thành không lỗi.
+
+> **Chờ kết quả khảo sát (T18).** Đoạn này điền số người tham gia, điểm trung bình từng tiêu chí và tỉ lệ hoàn thành tác vụ khi có kết quả. Không công bố số nào trước khi khảo sát chạy xong.
 
 ### 6.4 Kết luận, giới hạn và hướng phát triển
 
-*Chờ viết: T24, Khang.*
+**Giới hạn.** Các kết luận ở trên đúng trong phạm vi sau, và nhóm ghi rõ để người đọc không suy rộng quá mức:
+
+- **Không có cụm máy thật.** Spark chạy `local[*]` trên một máy, Cassandra chỉ có một node. Các con số hiệu năng là số đo tương đối giữa các cấu hình trên cùng máy, không phải số của một hệ thống sản xuất.
+- **Tập làm việc là mẫu 7% khách.** Mọi số đo chạy trên 4,754,015 sự kiện chứ không phải 67.5 triệu. Mục 4.4 cho thấy ở cỡ này cả PostgreSQL lẫn DuckDB đều trả lời câu doanh thu 31 ngày dưới 0.1 giây; nhóm chưa đo các cách lưu thay đổi thế nào khi dữ liệu lớn hơn.
+- **Luồng thời gian thực là luồng phát lại.** Replayer ghi sự kiện theo thứ tự thời gian của tầng bronze, nên luồng gần như không có sự kiện đến trễ. Cách mốc nước 10 phút xử lý sự kiện đến muộn vì vậy chưa được thử trên một luồng thật, và nhánh thời gian thực chưa được thử với tốc độ cao hơn tốc độ replayer cấp.
+- **Bốn BR thời gian thực không đọc kho dữ liệu.** Chúng tính thẳng trên sự kiện đã làm sạch, vì gắn phiên bản SCD loại 2 cho từng lô nhỏ vượt quá thời gian của nhóm (mục 4.1). Trong năm bảng gold ở Cassandra, chỉ bảng của BR6 được sinh từ kho dữ liệu.
+- **Bảng accumulating snapshot được dựng lại toàn bộ.** Parquet không cho sửa dòng, nên `fact_session_funnel` được tính lại và ghi đè ở mỗi lần chạy theo lô thay vì cập nhật tăng dần, và bảng không giữ lịch sử của phiên (mục 4.4).
+- **Số thô trong danh sách khách của BR4 có thể là của lần chấm trước** (mục 6.1). Điểm, phân khúc và heatmap vẫn đúng.
+- **Thẻ số của BR6 chỉ đếm các dòng đang hiện** (mục 5.2), không phải toàn bộ 63,655 cặp sản phẩm và kho.
+- **Tồn kho và thuộc tính sản phẩm là dữ liệu giả lập** (mục 3.3, 3.4). BR6 và phép so `jsonb` với `struct` chứng minh cơ chế, không phản ánh hành vi thật của kho hàng hay catalogue.
+- **Không có xác thực và phân quyền.** Dashboard giả định chạy trong mạng nội bộ.
+
+**Hướng phát triển.** Theo thứ tự mà nhóm cho là có ích nhất:
+
+1. Thay thư mục tệp bằng Kafka. Phần đọc nguồn đã tách riêng trong `processing/source.py`, nên đây là thay đổi ở một tệp (mục 4.1).
+2. Chạy trên toàn bộ 67.5 triệu sự kiện với một cụm Spark và Cassandra nhiều node, để đo xem khoảng cách giữa đọc theo khoá và tính lại từ kho dữ liệu tăng thế nào theo kích thước.
+3. Thêm endpoint đếm sẵn cho các thẻ số và heatmap: số khách của từng ô BR4, số cảnh báo theo mức của BR8, số giỏ của BR5, số sản phẩm theo mức của BR6. Màn hình khi đó không phải tải cả ngày dữ liệu chỉ để đếm (mục 6.2), và thẻ số của BR6 đếm đúng trên toàn bảng.
+4. Chuyển kho dữ liệu sang Delta Lake hoặc Iceberg, để `fact_session_funnel` được cập nhật bằng `MERGE` đúng như định nghĩa của bảng accumulating snapshot.
+5. Cho nhánh thời gian thực đọc chiều sản phẩm và chiều khách hàng, ví dụ bằng một bản chiều hiện hành được làm mới định kỳ và nối trong từng lô nhỏ.
+
+**Kết luận.** ShopInsight biến 9.0 GB nhật ký hành vi thành 8 màn hình, mỗi màn hình trả lời một câu hỏi của một nhóm người dùng. Câu hỏi "doanh thu theo ngành hàng" mất 50 giây khi đọc thẳng toàn bộ tệp thô; trên hệ thống, chạy với mẫu 7% khách, màn hình chậm nhất trả dữ liệu trong 63.9 ms ở p95. Cả tám câu trả lời khớp 100% với một đáp án viết độc lập, và bốn trong số đó khớp thêm với một đáp án độc lập thứ hai. Bài học lớn nhất của nhóm là con số chỉ đáng tin khi đi kèm cách đo lại được. Mọi số trong báo cáo này đều có lệnh hoặc tệp bằng chứng ở bảng nguồn số liệu cuối mỗi mục, và nhiều quyết định thiết kế đã đổi chính vì một phép đo: số phân vùng shuffle của nhánh thời gian thực, cách xoá dòng rác của BR3, ngưỡng cảnh báo của BR8, và cách so tiền trong phép kiểm đúng đắn.
+
+### Nguồn số liệu của mục 5 và 6
+
+Trừ khi ghi khác, các số đo ngày 10/11/2026 trên máy của Đắt, `main` tại `02b22f1`, sau lần phát lại ngày 17/11 từ 15:00 tới 21:30 giờ Việt Nam (78 tệp, 187,468 sự kiện). Danh sách đầy đủ các tệp bằng chứng ở `docs/evidence/README.md`.
+
+| Số liệu | Nguồn |
+|---|---|
+| Ảnh tám màn hình và số đọc trên ảnh (309K, 966,143 phiên, 21:04 tới 21:19, 31,005 khách, 2,600 giỏ, 525 dòng, lift 4.07, 5,815 cảnh báo, ...) | `docs/evidence/gate2b_br1.png` tới `gate2b_br8.png` |
+| Cách chạy hệ thống | `run_demo.sh` (chú thích đầu tệp và danh sách lệnh dựng dữ liệu theo lô mà bước `infra` in ra khi thiếu dữ liệu) |
+| API của BR6 đọc 100 sản phẩm gấp nhất và tối đa 5 sản phẩm không bán mỗi kho; thẻ số đếm trên các dòng trả về | `_LIMIT_PER_WAREHOUSE`, `_NO_SALES_PER_WAREHOUSE` trong `serving/api/routers/br6.py`; `criticalCount`, `rows.length` trong `web/src/pages/BR6Page.tsx` |
+| Bảng chín hàng: tám BR 100%, SCD2 12 phép đạt; lần phát lại thứ hai; `ground_truth.py` 100% ở BR4, BR6, BR7, BR8; số thô BR4 90.96%, 23,198 và 590 khách | `docs/evidence/correctness_8br.txt`, mục "10 November 2026: the nine-row table (T19)" và "BR4's raw values"; đầu ra gốc ở `docs/evidence/t14_checks.txt` |
+| Lần chạy 6/11 (máy của Khang) và 8/11 (Đắt review): 100% ở tám BR; mốc nước sớm 10 phút: 97.36% và 96.77%; 63,652 / 63,655 trước khi đổi cách so số thực; tiền lệch 1.00 cho 99.98%, dòng ghi hai lần cho 50% | `docs/evidence/correctness_8br.txt`, các mục "Result", "The check can fail" và "Reviewer re-run after the exact money comparison" |
+| Thời gian tám màn hình: phân vùng, meta và curl p50 / p95; BR4 năm lần gọi; endpoint BR4 không lọc 408.5 và 1,052.0 ms; các request phụ và chân màn hình lần đầu | `docs/evidence/gate2b_screens.txt`; số thô ở `docs/evidence/gate2b_curl_raw.txt`; bảng tổng hợp `docs/evidence/perf_table.md` |
+| Dựng nhánh theo lô 426.5 giây và thời gian từng job | `docs/evidence/batch_timings.txt` (máy của Đắt, 3/11/2026, `aa65472`) |
+| Thông lượng 483.0, 466.9, 483.0, 16.0 sự kiện mỗi giây; replayer 480.7 dòng mỗi giây; `triggerExecution` p50, p95, max của bốn job | `docs/evidence/streaming_perf.txt`, lần 1; log ở `docs/evidence/t14_logs/` |
+| Kế hoạch khảo sát: 5 người, bốn tác vụ, các ngưỡng | `docs/EVALUATION_SURVEY.md` |
 
 ## Tài liệu tham khảo
 
-*Chờ viết: T28, Khang.*
+[1] M. Kechinov (REES46), "eCommerce behavior data from multi category store," Kaggle. https://www.kaggle.com/datasets/mkechinov/ecommerce-behavior-data-from-multi-category-store
+
+[2] R. Kimball và M. Ross, *The Data Warehouse Toolkit: The Definitive Guide to Dimensional Modeling*, 3rd ed. Wiley, 2013.
+
+[3] M. Zaharia et al., "Apache Spark: A unified engine for big data processing," *Communications of the ACM*, vol. 59, no. 11, pp. 56–65, 2016.
+
+[4] M. Armbrust et al., "Structured Streaming: A declarative API for real-time applications in Apache Spark," in *Proc. ACM SIGMOD*, 2018, pp. 601–613.
+
+[5] A. Lakshman và P. Malik, "Cassandra: A decentralized structured storage system," *ACM SIGOPS Operating Systems Review*, vol. 44, no. 2, pp. 35–40, 2010.
+
+[6] Apache Software Foundation, "Apache Parquet: File format." https://parquet.apache.org/docs/file-format/
+
+[7] M. Raasveldt và H. Mühleisen, "DuckDB: An embeddable analytical database," in *Proc. ACM SIGMOD*, 2019, pp. 1981–1984.
+
+[8] The PostgreSQL Global Development Group, *PostgreSQL 16 Documentation*, chương 5.11 (Table Partitioning) và chương 11 (Indexes). https://www.postgresql.org/docs/16/
+
+[9] A. M. Hughes, *Strategic Database Marketing*. Probus Publishing, 1994.
+
+[10] R. Agrawal, T. Imieliński và A. Swami, "Mining association rules between sets of items in large databases," in *Proc. ACM SIGMOD*, 1993, pp. 207–216.
+
+[11] S. Brin, R. Motwani, J. D. Ullman và S. Tsur, "Dynamic itemset counting and implication rules for market basket data," in *Proc. ACM SIGMOD*, 1997, pp. 255–264.
+
+[12] M. Kleppmann, *Designing Data-Intensive Applications*. O'Reilly Media, 2017.
