@@ -708,7 +708,13 @@ Sản phẩm cuối của đồ án là một dashboard React gồm 8 màn hình
 
 ### 5.1 Chạy hệ thống
 
-Toàn bộ hệ thống chạy trên một máy cá nhân. Dữ liệu theo lô chỉ cần dựng một lần, theo đúng thứ tự sau:
+Toàn bộ hệ thống chạy trên một máy cá nhân. Bước đầu tiên dựng hạ tầng, vì nhánh theo lô cần nó: `load_star_postgres.py` nạp kho dữ liệu vào PostgreSQL, còn `batch_gold.py` ghi bảng của BR6 vào Cassandra.
+
+```bash
+./run_demo.sh infra    # Cassandra 4.1.12 và PostgreSQL 16.15 trong Docker, schema, kiểm dữ liệu theo lô
+```
+
+Khi chưa có dữ liệu, bước `infra` in ra danh sách lệnh dựng. Dữ liệu theo lô chỉ cần dựng một lần, theo đúng thứ tự sau:
 
 ```bash
 SPARK_CONF_DIR=conf python ingestion/load_bronze.py
@@ -721,10 +727,9 @@ python processing/batch_gold.py                   # BR2, BR4, BR6
 python processing/gold_br7.py                     # BR7
 ```
 
-Sau đó `run_demo.sh` dựng phần còn lại theo ba bước:
+Sau đó `run_demo.sh` chạy phần còn lại:
 
 ```bash
-./run_demo.sh infra    # Cassandra 4.1.12 và PostgreSQL 16.15 trong Docker, schema, kiểm dữ liệu theo lô
 ./run_demo.sh stream   # streaming_gold.py --fresh, rồi replayer.py --speed 60 --start "2019-11-17 08:00:00"
 ./run_demo.sh app      # FastAPI ở cổng 8000, dashboard ở http://localhost:5173
 ./run_demo.sh stop     # dừng mọi tiến trình mà script đã mở
@@ -824,7 +829,7 @@ Cả chín hàng đạt 100%, trên ngưỡng 99%. Kết quả lặp lại đư�
 | BR7 | Parquet qua DuckDB | 2 | 9.6 / 11.7 | 22.8 / 28.3 | có |
 | BR8 | Cassandra | 1 | 19.8 / 32.2 | 47.4 / 63.9 | có |
 
-Cả 8 màn hình đạt. Chậm nhất ở p95 phía client là BR8, 63.9 ms, thấp hơn ngưỡng 2 giây khoảng 30 lần. So với 50 giây của câu "doanh thu theo ngành hàng" khi đọc thẳng tệp thô (mục 1.3), thời gian chờ dữ liệu giảm hơn hai bậc độ lớn. Ba điều cần đọc kèm bảng:
+Cả 8 màn hình đạt. Chậm nhất ở p95 phía client là BR8, 63.9 ms, thấp hơn ngưỡng 2 giây khoảng 30 lần. So với 50 giây của câu "doanh thu theo ngành hàng" khi đọc thẳng tệp thô (mục 1.3, đo trên toàn bộ 67.5 triệu dòng; các màn hình đọc mẫu 7%, xem mục 6.4), thời gian chờ dữ liệu giảm hơn hai bậc độ lớn. Ba điều cần đọc kèm bảng:
 - Màn hình BR4 bắn song song năm lần gọi, mỗi điểm R một lần, mỗi lần 6,201 khách. Khi đo, năm lần gọi được đo lần lượt, và dòng BR4 ghi giá trị xấu nhất trong năm ở mỗi cột. Chân màn hình trên ảnh, lấy từ một lần tải song song thật, ghi 72.78 ms. Endpoint BR4 không lọc trả cả 258,330 khách, màn hình không gọi kiểu này, có `curl` p95 1,052.0 ms trong khi `meta` p95 chỉ 408.5 ms: phần lớn thời gian là truyền JSON.
 - Một số màn hình gọi thêm request ngoài request được đo. BR2 gọi thêm 15 request cho bảng theo ngành (chân bảng ghi 321.79 ms), BR3 đọc thêm cửa sổ một phút trước để vẽ mũi tên đổi hạng, BR7 gọi danh sách sản phẩm gợi ý khi mở. Các request này không được đo lặp; quan sát một lần trên ảnh đều dưới 2 giây.
 - Chân màn hình trên ảnh thường là lần tải đầu, nên có thể cao hơn p95 khi đã nóng: BR2 354.57 ms so với p95 21.4 ms, BR8 45.81 ms so với 32.2 ms.
@@ -846,11 +851,11 @@ BR8 và BR5 có khoảng cách lớn nhất giữa `meta` và `curl` (19.8 so v�
 | Ban điều hành | Doanh thu đang đi thế nào so với một giờ trước? | BR1, mở màn hình | 309K trong 60 phút, giảm 6.6% so với 60 phút trước |
 | Tăng trưởng và marketing | Khách rời đi ở bước nào? | BR2, mở màn hình | 86.39% phiên rời đi trước bước giỏ hàng |
 | Tăng trưởng và marketing | Phân khúc nào nên được đầu tư? | BR4, chọn một ô | 6,419 khách at_risk; ô R5-F5 có 2,228 khách |
-| Tăng trưởng và marketing | Khách nào bỏ quên giỏ hàng? | BR5, lọc theo giá trị | 2,600 giỏ ngày 17/11, tổng 1.4M |
+| Tăng trưởng và marketing | Khách nào bỏ quên giỏ hàng? | BR5, lọc theo giá trị | 2,600 giỏ ngày 17/11 (15:00 tới 21:30), tổng 1.4M |
 | Hàng hoá | Sản phẩm nào đang tăng mạnh? | BR3, mở màn hình | 1005115 dẫn đầu cửa sổ 21:04 tới 21:19 |
 | Hàng hoá | Mua A thì thường mua kèm gì? | BR7, chọn sản phẩm | với 1005115: 1004249 mua cùng trong 26 phiên, lift 1.72 |
 | Vận hành và rủi ro | Sản phẩm nào sắp hết hàng, ở kho nào? | BR6, lọc kho và số ngày | danh sách tô đỏ dưới 3 ngày, theo từng kho |
-| Vận hành và rủi ro | Tài khoản nào đặt đơn bất thường? | BR8, lọc mức cảnh báo | 3 cảnh báo high và 337 medium ngày 17/11, mở được từng cảnh báo |
+| Vận hành và rủi ro | Tài khoản nào đặt đơn bất thường? | BR8, lọc mức cảnh báo | 3 cảnh báo high và 337 medium ngày 17/11 (15:00 tới 21:30), mở được từng cảnh báo |
 
 **Khảo sát người dùng.** Bảng trên chỉ cho thấy mỗi câu hỏi có một màn hình trả lời, chưa cho thấy người dùng thấy câu trả lời đó dễ đọc và đáng tin. Phần này đánh giá bằng khảo sát theo kế hoạch ở `docs/EVALUATION_SURVEY.md`: 5 người tham gia làm bốn tác vụ, mỗi tác vụ ứng với một nhóm người dùng, rồi chấm theo thang 1 tới 5. Ngưỡng thành công đặt trước: thời gian ở chân màn hình dưới 2,000 ms trên mọi màn hình, điểm cảm nhận tốc độ trung bình từ 4.0, điểm độ rõ của thông tin trung bình từ 4.2, và 100% tác vụ hoàn thành không lỗi.
 
@@ -878,7 +883,7 @@ BR8 và BR5 có khoảng cách lớn nhất giữa `meta` và `curl` (19.8 so v�
 4. Chuyển kho dữ liệu sang Delta Lake hoặc Iceberg, để `fact_session_funnel` được cập nhật bằng `MERGE` đúng như định nghĩa của bảng accumulating snapshot.
 5. Cho nhánh thời gian thực đọc chiều sản phẩm và chiều khách hàng, ví dụ bằng một bản chiều hiện hành được làm mới định kỳ và nối trong từng lô nhỏ.
 
-**Kết luận.** ShopInsight biến 9.0 GB nhật ký hành vi thành 8 màn hình, mỗi màn hình trả lời một câu hỏi của một nhóm người dùng. Câu hỏi "doanh thu theo ngành hàng" mất 50 giây khi đọc thẳng tệp thô; trên hệ thống, màn hình chậm nhất trả dữ liệu trong 63.9 ms ở p95. Cả tám câu trả lời khớp 100% với một đáp án viết độc lập, và bốn trong số đó khớp thêm với một đáp án độc lập thứ hai. Bài học lớn nhất của nhóm là con số chỉ đáng tin khi đi kèm cách đo lại được. Mọi số trong báo cáo này đều có lệnh hoặc tệp bằng chứng ở bảng nguồn số liệu cuối mỗi mục, và nhiều quyết định thiết kế đã đổi chính vì một phép đo: số phân vùng shuffle của nhánh thời gian thực, cách xoá dòng rác của BR3, ngưỡng cảnh báo của BR8, và cách so tiền trong phép kiểm đúng đắn.
+**Kết luận.** ShopInsight biến 9.0 GB nhật ký hành vi thành 8 màn hình, mỗi màn hình trả lời một câu hỏi của một nhóm người dùng. Câu hỏi "doanh thu theo ngành hàng" mất 50 giây khi đọc thẳng toàn bộ tệp thô; trên hệ thống, chạy với mẫu 7% khách, màn hình chậm nhất trả dữ liệu trong 63.9 ms ở p95. Cả tám câu trả lời khớp 100% với một đáp án viết độc lập, và bốn trong số đó khớp thêm với một đáp án độc lập thứ hai. Bài học lớn nhất của nhóm là con số chỉ đáng tin khi đi kèm cách đo lại được. Mọi số trong báo cáo này đều có lệnh hoặc tệp bằng chứng ở bảng nguồn số liệu cuối mỗi mục, và nhiều quyết định thiết kế đã đổi chính vì một phép đo: số phân vùng shuffle của nhánh thời gian thực, cách xoá dòng rác của BR3, ngưỡng cảnh báo của BR8, và cách so tiền trong phép kiểm đúng đắn.
 
 ### Nguồn số liệu của mục 5 và 6
 
@@ -895,6 +900,7 @@ Trừ khi ghi khác, các số đo ngày 10/11/2026 trên máy của Đắt, `ma
 | Dựng nhánh theo lô 426.5 giây và thời gian từng job | `docs/evidence/batch_timings.txt` (máy của Đắt, 3/11/2026, `aa65472`) |
 | Thông lượng 483.0, 466.9, 483.0, 16.0 sự kiện mỗi giây; replayer 480.7 dòng mỗi giây; `triggerExecution` p50, p95, max của bốn job | `docs/evidence/streaming_perf.txt`, lần 1; log ở `docs/evidence/t14_logs/` |
 | Kế hoạch khảo sát: 5 người, bốn tác vụ, các ngưỡng | `docs/EVALUATION_SURVEY.md` |
+
 ## Tài liệu tham khảo
 
 [1] M. Kechinov (REES46), "eCommerce behavior data from multi category store," Kaggle. https://www.kaggle.com/datasets/mkechinov/ecommerce-behavior-data-from-multi-category-store

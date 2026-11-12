@@ -3155,7 +3155,7 @@ draft was written on 8 Nov on Khang's machine, before the W46 PRs merged; on 12 
 |---|---|
 | `docs/REPORT.md` section 5: how to run the system (`run_demo.sh` and the batch build order), a footer table of the eight screens, one paragraph per screen with its `gate2b_br*.png` image | AI-drafted; every number read from the screenshots |
 | `docs/REPORT.md` section 6: 6.1 the nine-row correctness table and the checks that show it can fail, 6.2 the eight screens' meta and curl p50/p95, batch build and stream throughput, 6.3 question-to-screen table and the survey plan, 6.4 limits, future work, conclusion; "Nguồn số liệu của mục 5 và 6" | AI-drafted; numbers quoted from `docs/evidence/`, nothing re-measured for the text |
-| `docs/REPORT.md` reference list [1]–[12], and the citation marks for it in 1.1, 2.4, 2.7, 3.1, 4.1, 4.2 and 4.3 | AI-drafted |
+| `docs/REPORT.md` reference list [1]–[12], the citation marks for it in 1.1, 2.4, 2.7, 3.1, 4.1, 4.2 and 4.3, and four short additions beside them: support and lift in 2.7, DuckDB running inside the API process in 4.1, query-first modelling in NoSQL in 4.2, Structured Streaming's table that keeps growing in 4.3 | AI-drafted |
 | `docs/AI_USAGE.md` — this session | AI-drafted |
 
 ### How it was checked
@@ -3167,7 +3167,7 @@ draft was written on 8 Nov on Khang's machine, before the W46 PRs merged; on 12 
 | 6.1 | Quoted from the T19 section of `correctness_8br.txt`, with the 6 Nov run (Khang's machine) and the 8 Nov review re-run for the checks that can fail |
 | 6.2 | Quoted from `gate2b_screens.txt`, `perf_table.md`, `batch_timings.txt` and run 1 of `streaming_perf.txt` |
 | The survey plan in 6.3 | `docs/EVALUATION_SURVEY.md` |
-| Sections 1 to 4.3 change only by the citation marks | Word-level diff against `main`: twelve insertions, nothing removed |
+| Sections 1 to 4.3 change only by the citation marks and the four additions above | Word-level diff against `main`: insertions only, nothing removed. The four additions were read against the code in the PR #50 review; 2.7's support is `co_count / n_sessions` in `processing/gold_br7.py` |
 | References [1]–[12] | Each is cited at least once (`grep`) |
 
 ### What the AI got wrong, and was corrected on
@@ -3181,6 +3181,11 @@ draft was written on 8 Nov on Khang's machine, before the W46 PRs merged; on 12 
   comes first; 1004249 is the pair bought together most often (26 sessions, lift 1.72). Both are now stated.
 - **The 8 Nov draft numbered every table and figure.** Section 4.4 already uses its own figure numbers (Hình
   4.4a-c), so the numbering was dropped from this PR rather than renumber Dat's section.
+- **The 12 Nov draft put the batch build before `./run_demo.sh infra` in 5.1.** `load_star_postgres.py` needs
+  Postgres and `batch_gold.py` writes BR6 to Cassandra, so on a fresh machine that order stops at the Postgres load.
+  Caught in Dat's review of PR #50 and fixed on the branch: `infra` first, as in the README and `run_demo.sh`. The same
+  commit says the 50 s of 1.3 is the full file while the screens read the 7% sample (6.2 and the conclusion), and marks
+  the 6.3 counts for BR5 and BR8 as the replayed 15:00-21:30.
 
 ### Judgement that stayed with the team
 
