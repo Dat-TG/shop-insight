@@ -1,0 +1,327 @@
+report_engine_compare - the same star schema on PostgreSQL and on Parquet read by DuckDB (report 4.5)
+
+====================================================================================================
+HEADER
+====================================================================================================
+date        2026-11-08T10:20:52+07:00
+machine     DESKTOP-CFEMIDH | Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.43 | 12 logical cores | 15.6 GB RAM
+versions    Python 3.14.4 | DuckDB 1.5.5 | PostgreSQL 16.15 (Debian 16.15-1.pgdg13+2) | Cassandra 4.1.12
+repo        f690021 (Merge pull request #35 from Dat-TG/w45-khang-deck)
+postgres    star loaded by processing/batch_warehouse.py step 6, database size 1376 MB
+parquet     data/warehouse/ written by the same run
+runs        3 warm-up + 20 timed per query; client wall time, ms; p95 = 19th of 20
+
+====================================================================================================
+1  ROW COUNTS, BOTH ENGINES
+====================================================================================================
+dim_date                        92          92   same
+dim_event_type                   5           5   same
+dim_warehouse                    5           5   same
+dim_product                210,454     210,454   same
+dim_user                   319,426     319,426   same
+fact_event               4,754,015   4,754,015   same
+fact_session_funnel        970,797     970,797   same
+fact_inventory_daily     1,909,650   1,909,650   same
+
+====================================================================================================
+2  STORAGE
+====================================================================================================
+fact_event            postgres table   459.7 MB + indexes  309.6 MB   parquet  119.4 MB in 31 files
+fact_session_funnel   postgres table   150.0 MB + indexes   48.7 MB   parquet   75.0 MB in 31 files
+fact_inventory_daily  postgres table   153.9 MB + indexes   66.4 MB   parquet   13.5 MB in 30 files
+dim_product           postgres table    90.3 MB + indexes   29.1 MB   parquet    4.9 MB in 1 files
+dim_user              postgres table    28.9 MB + indexes   28.0 MB   parquet    4.3 MB in 1 files
+fact_event.event_time parquet type INT96  row groups 31, with min/max 0
+fact_event.price      parquet type INT64  row groups 31, with min/max 31
+
+====================================================================================================
+3  TIMINGS
+====================================================================================================
+Q1  BR1 from the star: revenue and orders per minute, 17/11 19:30-21:30, all categories
+    postgres   p50      2.0   p95      2.4   min      1.7   max      3.0
+    duckdb     p50     12.1   p95     16.1   min     10.2   max     17.0
+    cassandra  p50      2.2   p95      3.2   min      1.8   max      3.4   (gmv_by_minute, 1 partition, 120 rows read)
+    rows       120 postgres, 120 duckdb, identical: True
+    first row  [(datetime.datetime(2019, 11, 17, 19, 30), 7726.08, 17)]
+    pg plan    Index Scan x1; Execution Time: 1.305 ms
+
+Q2  events on one day (partition pruning on event_date)
+    postgres   p50     12.8   p95     15.0   min     11.5   max     17.9
+    duckdb     p50      3.0   p95      5.0   min      2.7   max      5.0
+    rows       1 postgres, 1 duckdb, identical: True
+    first row  [(131796,)]
+    pg plan    Seq Scan x1; Execution Time: 21.520 ms
+
+Q3  revenue per category on one day (star join fact_event x dim_product)
+    postgres   p50     28.0   p95     29.3   min     23.5   max     32.3
+    duckdb     p50     12.7   p95     16.4   min     11.3   max     17.2
+    rows       14 postgres, 14 duckdb, identical: True
+    first row  [('accessories', 242.9, 6)]
+    pg plan    Bitmap Index Scan x1, Index Scan x1, Parallel Bitmap Heap Scan x1; Execution Time: 25.461 ms
+
+Q4  one hour of events by event_time only, no event_date filter
+    postgres   p50     12.9   p95     17.5   min     12.0   max     21.3
+    duckdb     p50     14.3   p95     20.1   min     11.7   max     20.3
+    rows       1 postgres, 1 duckdb, identical: True
+    first row  [(33328, 10165462.36)]
+    pg plan    Bitmap Heap Scan x31, Bitmap Index Scan x31, Seq Scan x1; Execution Time: 20.141 ms
+
+Q5  products whose nested attributes have color crimson_red (jsonb + GIN vs struct)
+    postgres   p50     16.7   p95     21.7   min     14.4   max     22.5
+    duckdb     p50      6.1   p95      9.0   min      5.2   max     12.3
+    rows       1 postgres, 1 duckdb, identical: True
+    first row  [(21078,)]
+    pg plan    Bitmap Heap Scan x1, Bitmap Index Scan x1; Execution Time: 14.578 ms
+
+Q6  BR6 question: 20 SKUs closest to stock-out, warehouse 1, 30/11
+    postgres   p50      0.5   p95      1.0   min      0.3   max      1.6
+    duckdb     p50      6.4   p95      7.7   min      5.3   max      8.1
+    rows       20 postgres, 20 duckdb, identical: True
+    first row  [(1002540, 0.0, 0)]
+    pg plan    Index Scan x1; Execution Time: 0.113 ms
+
+====================================================================================================
+4  CHECK
+====================================================================================================
+Q1  identical result sets: True
+Q2  identical result sets: True
+Q3  identical result sets: True
+Q4  identical result sets: True
+Q5  identical result sets: True
+Q6  identical result sets: True
+COMPARE OK
+
+====================================================================================================
+SOURCE
+====================================================================================================
+"""Report 4.5: the same star, two engines, plus the Cassandra gold table for BR1.
+
+Six questions run against PostgreSQL (the star loaded by batch_warehouse.py step 6)
+and DuckDB (reading the Parquet star in data/warehouse/ directly). Q1 also reads the
+Cassandra table BR1's screen reads, to put a number on "serve the screen from the
+star instead of a gold table".
+
+Each query: 3 warm-up runs, then 20 timed runs. Times are client wall time around
+execute + fetchall, so both engines pay their driver round trip. Both run warm:
+Postgres from shared buffers, DuckDB from the OS page cache. p95 is nearest-rank on
+20 runs, i.e. the 19th fastest. Every Postgres and DuckDB pair must return the same
+rows (money rounded to the cent) or the run fails.
+
+Run from the repo root, with the stack up and the star loaded:
+    .venv/bin/python report_engine_compare.py > docs/evidence/report_engine_compare.txt
+"""
+
+import datetime as dt
+import math
+import os
+import platform
+import re
+import statistics
+import subprocess
+import sys
+import time
+from collections import Counter
+from decimal import Decimal
+from pathlib import Path
+
+import duckdb
+import psycopg2
+from cassandra.cluster import Cluster
+
+WARMUP, RUNS = 3, 20
+W = "data/warehouse"
+
+
+def env():
+    vals = {}
+    for line in Path(".env.example").read_text().splitlines():
+        if "=" in line and not line.lstrip().startswith("#"):
+            k, v = line.split("=", 1)
+            vals[k.strip()] = v.strip()
+    return vals
+
+
+def pq(table):
+    return f"read_parquet('{W}/{table}/**/*.parquet', hive_partitioning = true)"
+
+
+# (key, question, Postgres SQL, DuckDB SQL)
+QUERIES = [
+    ("Q1", "BR1 from the star: revenue and orders per minute, 17/11 19:30-21:30, all categories",
+     """SELECT date_trunc('minute', event_time) AS minute, sum(price), count(*)
+        FROM fact_event
+        WHERE event_date = DATE '2019-11-17' AND event_type_key = 3
+          AND event_time >= TIMESTAMP '2019-11-17 19:30' AND event_time < TIMESTAMP '2019-11-17 21:30'
+        GROUP BY 1 ORDER BY 1 DESC""",
+     f"""SELECT date_trunc('minute', event_time) AS minute, sum(price), count(*)
+        FROM {pq('fact_event')}
+        WHERE event_date = DATE '2019-11-17' AND event_type_key = 3
+          AND event_time >= TIMESTAMP '2019-11-17 19:30' AND event_time < TIMESTAMP '2019-11-17 21:30'
+        GROUP BY 1 ORDER BY 1 DESC"""),
+    ("Q2", "events on one day (partition pruning on event_date)",
+     "SELECT count(*) FROM fact_event WHERE event_date = DATE '2019-11-29'",
+     f"SELECT count(*) FROM {pq('fact_event')} WHERE event_date = DATE '2019-11-29'"),
+    ("Q3", "revenue per category on one day (star join fact_event x dim_product)",
+     """SELECT p.category_l1, sum(f.price), count(*)
+        FROM fact_event f JOIN dim_product p ON p.product_sk = f.product_sk
+        WHERE f.event_date = DATE '2019-11-29' AND f.event_type_key = 3
+        GROUP BY 1 ORDER BY 2 DESC""",
+     f"""SELECT p.category_l1, sum(f.price), count(*)
+        FROM {pq('fact_event')} f JOIN {pq('dim_product')} p ON p.product_sk = f.product_sk
+        WHERE f.event_date = DATE '2019-11-29' AND f.event_type_key = 3
+        GROUP BY 1 ORDER BY 2 DESC"""),
+    ("Q4", "one hour of events by event_time only, no event_date filter",
+     """SELECT count(*), sum(price) FROM fact_event
+        WHERE event_time >= TIMESTAMP '2019-11-17 20:00' AND event_time < TIMESTAMP '2019-11-17 21:00'""",
+     f"""SELECT count(*), sum(price) FROM {pq('fact_event')}
+        WHERE event_time >= TIMESTAMP '2019-11-17 20:00' AND event_time < TIMESTAMP '2019-11-17 21:00'"""),
+    ("Q5", "products whose nested attributes have color crimson_red (jsonb + GIN vs struct)",
+     """SELECT count(*) FROM dim_product WHERE attributes @> '{"color": "crimson_red"}'""",
+     f"""SELECT count(*) FROM {pq('dim_product')} WHERE attributes.color = 'crimson_red'"""),
+    ("Q6", "BR6 question: 20 SKUs closest to stock-out, warehouse 1, 30/11",
+     """SELECT product_id, days_to_stockout, stock_on_hand FROM fact_inventory_daily
+        WHERE warehouse_id = 1 AND snapshot_date = DATE '2019-11-30' AND days_to_stockout IS NOT NULL
+        ORDER BY days_to_stockout, product_id LIMIT 20""",
+     f"""SELECT product_id, days_to_stockout, stock_on_hand FROM {pq('fact_inventory_daily')}
+        WHERE warehouse_id = 1 AND snapshot_date = DATE '2019-11-30' AND days_to_stockout IS NOT NULL
+        ORDER BY days_to_stockout, product_id LIMIT 20"""),
+]
+
+CASSANDRA_Q1 = ("SELECT window_start, gmv, order_count FROM gmv_by_minute "
+                "WHERE event_date = '2019-11-17' AND category_l1 = 'all' LIMIT 120")
+
+
+def timed(fn):
+    for _ in range(WARMUP):
+        fn()
+    ms = []
+    for _ in range(RUNS):
+        t0 = time.perf_counter()
+        rows = fn()
+        ms.append((time.perf_counter() - t0) * 1000)
+    s = sorted(ms)
+    return {"p50": statistics.median(s), "p95": s[math.ceil(0.95 * RUNS) - 1],
+            "min": s[0], "max": s[-1], "rows": rows}
+
+
+def norm(rows):
+    out = []
+    for r in rows:
+        cells = []
+        for v in r:
+            if isinstance(v, (Decimal, float)):
+                v = round(float(v), 2)
+            elif isinstance(v, dt.datetime):
+                v = v.replace(tzinfo=None)
+            cells.append(v)
+        out.append(tuple(cells))
+    return sorted(out, key=repr)
+
+
+def fmt(t):
+    return f"p50 {t['p50']:8.1f}   p95 {t['p95']:8.1f}   min {t['min']:8.1f}   max {t['max']:8.1f}"
+
+
+def main():
+    e = env()
+    pg = psycopg2.connect(host=e["POSTGRES_HOST"], port=e["POSTGRES_PORT"], dbname=e["POSTGRES_DB"],
+                          user=e["POSTGRES_USER"], password=os.environ.get("POSTGRES_PASSWORD", "local_dev_only"))
+    pg.autocommit = True
+    cur = pg.cursor()
+    duck = duckdb.connect()
+    cass = Cluster([e["CASSANDRA_HOST"]], port=int(e["CASSANDRA_PORT"])).connect(e["CASSANDRA_KEYSPACE"])
+
+    head = subprocess.run(["git", "log", "-1", "--format=%h (%s)"], capture_output=True, text=True).stdout.strip()
+    cur.execute("SHOW server_version")
+    pg_version = cur.fetchone()[0]
+    cur.execute("SELECT pg_size_pretty(pg_database_size(current_database()))")
+    pg_size = cur.fetchone()[0]
+    cpu = os.cpu_count()
+    mem = round(os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES") / 2**30, 1)
+
+    bar = "=" * 100
+    print("report_engine_compare - the same star schema on PostgreSQL and on Parquet read by DuckDB (report 4.5)")
+    print()
+    print(bar); print("HEADER"); print(bar)
+    print(f"date        {dt.datetime.now().astimezone().isoformat(timespec='seconds')}")
+    print(f"machine     {platform.node()} | {platform.platform()} | {cpu} logical cores | {mem} GB RAM")
+    print(f"versions    Python {platform.python_version()} | DuckDB {duckdb.__version__} | PostgreSQL {pg_version} | Cassandra 4.1.12")
+    print(f"repo        {head}")
+    print(f"postgres    star loaded by processing/batch_warehouse.py step 6, database size {pg_size}")
+    print(f"parquet     {W}/ written by the same run")
+    print(f"runs        {WARMUP} warm-up + {RUNS} timed per query; client wall time, ms; p95 = 19th of 20")
+    print()
+
+    print(bar); print("1  ROW COUNTS, BOTH ENGINES"); print(bar)
+    for t in ["dim_date", "dim_event_type", "dim_warehouse", "dim_product", "dim_user",
+              "fact_event", "fact_session_funnel", "fact_inventory_daily"]:
+        cur.execute(f"SELECT count(*) FROM {t}")
+        n_pg = cur.fetchone()[0]
+        n_dk = duck.sql(f"SELECT count(*) FROM {pq(t)}").fetchone()[0]
+        print(f"{t:<22}{n_pg:>12,}{n_dk:>12,}   {'same' if n_pg == n_dk else 'DIFFERENT'}")
+    print()
+
+    print(bar); print("2  STORAGE"); print(bar)
+    for t in ["fact_event", "fact_session_funnel", "fact_inventory_daily", "dim_product", "dim_user"]:
+        cur.execute(f"""SELECT sum(pg_table_size(c.oid)), sum(pg_indexes_size(c.oid)), count(*)
+                        FROM pg_class c LEFT JOIN pg_inherits i ON i.inhrelid = c.oid
+                        LEFT JOIN pg_class p ON p.oid = i.inhparent
+                        WHERE c.relname = '{t}' OR p.relname = '{t}'""")
+        tbl, idx, parts = cur.fetchone()
+        files = list(Path(W, t).rglob("*.parquet"))
+        size = sum(f.stat().st_size for f in files)
+        print(f"{t:<22}postgres table {tbl / 2**20:7.1f} MB + indexes {idx / 2**20:6.1f} MB"
+              f"   parquet {size / 2**20:6.1f} MB in {len(files)} files")
+    st = duck.sql(f"""SELECT path_in_schema, any_value(type), count(*),
+                             count(*) FILTER (stats_min_value IS NOT NULL)
+                      FROM parquet_metadata('{W}/fact_event/*/*.parquet')
+                      WHERE path_in_schema IN ('event_time', 'price') GROUP BY 1 ORDER BY 1""").fetchall()
+    for col, typ, groups, with_stats in st:
+        print(f"fact_event.{col:<11}parquet type {typ:<6} row groups {groups}, with min/max {with_stats}")
+    print()
+
+    print(bar); print("3  TIMINGS"); print(bar)
+    checks = []
+    for key, question, sql_pg, sql_dk in QUERIES:
+        def run_pg(sql=sql_pg):
+            cur.execute(sql)
+            return cur.fetchall()
+        t_pg = timed(run_pg)
+        t_dk = timed(lambda sql=sql_dk: duck.execute(sql).fetchall())
+        same = norm(t_pg["rows"]) == norm(t_dk["rows"])
+        checks.append((key, same))
+        cur.execute("EXPLAIN (ANALYZE, BUFFERS) " + sql_pg)
+        plan = [r[0] for r in cur.fetchall()]
+        # one line per scan node: "->  Seq Scan on fact_event_20191129 f  (cost=..."
+        scans = Counter()
+        for ln in plan:
+            m = re.search(r"((?:Parallel )?(?:Seq|Index Only|Index|Bitmap Heap|Bitmap Index) Scan)(?: using \S+)? on (\S+)", ln)
+            if m:
+                scans[m.group(1)] += 1
+        print(f"{key}  {question}")
+        print(f"    postgres   {fmt(t_pg)}")
+        print(f"    duckdb     {fmt(t_dk)}")
+        if key == "Q1":
+            prep = cass.prepare(CASSANDRA_Q1)
+            t_cs = timed(lambda: cass.execute(prep).all())
+            print(f"    cassandra  {fmt(t_cs)}   (gmv_by_minute, 1 partition, {len(t_cs['rows'])} rows read)")
+        print(f"    rows       {len(t_pg['rows'])} postgres, {len(t_dk['rows'])} duckdb, identical: {same}")
+        print(f"    first row  {norm(t_pg['rows'])[:1]}")
+        print(f"    pg plan    {', '.join(f'{k} x{v}' for k, v in sorted(scans.items()))}; "
+              f"{[ln.strip() for ln in plan if ln.strip().startswith('Execution Time')][0]}")
+        print()
+
+    print(bar); print("4  CHECK"); print(bar)
+    ok = all(same for _, same in checks)
+    for key, same in checks:
+        print(f"{key}  identical result sets: {same}")
+    print("COMPARE OK" if ok else "COMPARE FAILED")
+    print()
+    print(bar); print("SOURCE"); print(bar)
+    print(Path(__file__).read_text())
+    sys.exit(0 if ok else 1)
+
+
+if __name__ == "__main__":
+    main()
+

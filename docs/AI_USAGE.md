@@ -3195,3 +3195,57 @@ Made by AI, flagged for review:
   calls; footers of single cold loads read higher (BR2 354.57 ms), and 6.2 says so.
 - **6.4 lists BR6's cards counting only the rows on screen as a limit.** If the screen is changed before
   submission, that line and the BR6 paragraph in 5.2 change with it.
+
+## Session 46 — 12 November 2026 (W46)
+
+**Tool:** Claude Code (Opus 5.5).
+**Scope:** the two report gaps left the day before the PDF is due (13 Nov): section 4.5, which is sprint task T22
+(Nguyên), and the survey paragraph of 6.3, which waits on T18 (Tín). Khang asked for both to be filled on his PR #50
+because of the deadline. No application code changed.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| `docs/REPORT.md` 4.5: the main solution (Cassandra gold tables) against PLAN.md's two alternatives (Postgres on the star, DuckDB on the Parquet star) in one table; BR1's question answered three ways; why the batch BRs read Parquet; why BR6 is served from Cassandra; four alternatives not measured (Kafka, Spark Cassandra Connector, Delta/Iceberg, Neo4j) | AI-drafted, Khang's review pending; written as a fallback for T22, Nguyên may replace it |
+| `docs/REPORT.md` "Nguồn số liệu của mục 4": a paragraph and five rows for 4.5 | AI-drafted |
+| `docs/REPORT.md` 6.3: the "Chờ kết quả khảo sát (T18)" box replaced by a statement that no survey result exists by submission, keeping the plan and its four thresholds; 6.4: one limitation line for the missing survey | AI-drafted; no survey number written |
+| `docs/evidence/report_engine_compare.txt` (new in the repo) — measured 8 Nov on Khang's machine (Session 45's draft); source at the end of the file | Run and captured 8 Nov; the commands were typed by Claude Code in Khang's session, at Khang's request |
+| `docs/evidence/README.md` — one row for that file | AI-drafted |
+| `docs/AI_USAGE.md` — this session | AI-drafted |
+
+### How it was checked
+
+| Claim | How it was checked |
+|---|---|
+| Every p50 in 4.5's comparison table (1.1, 1.8, 81.1; 1.5, 6.7, 88.2; 1.6, 3.3, 5.9, 7.3; 1 to 31 days; GIN 10.3, DuckDB 3.2) | Read from `benchmark/results/summary_20261110_010557.csv`, the same file 4.4 quotes |
+| BR1 three ways 2.2 / 3.2, 2.0 / 2.4, 12.1 / 16.1 ms; same 120 rows in Postgres and DuckDB; Index Scan | `report_engine_compare.txt` sections 3 and 4 (Q1). Only Q1 and the sizes are used: Q2-Q6 overlap the 10 Nov benchmark, which is the record, and the README row says so |
+| `fact_event` 459.7 + 309.6 MB against 119.4 MB, about 6.4 times | Same file, section 2 |
+| PLAN.md names Cassandra as the main solution and Postgres, DuckDB on the Parquet star as alternatives #1 and #2 | `PLAN.md`, "Cấu hình benchmark" table |
+| Kafka and Neo4j reasons are the team's | `PLAN.md` "Cổng chặn Kafka"; `SYSTEM_DESIGN.md` 5.7. The connector reason is 4.3's; the Delta/Iceberg wording follows 4.4's limitation paragraph |
+
+### What the AI got wrong, and was corrected on
+
+- **Session 45's 8 Nov draft of 4.5 drew every number from Khang's machine.** The 10 Nov benchmark on Đắt's
+  machine is the record (`docs/evidence/README.md`), so this version quotes it and keeps from 8 Nov only what the
+  benchmark did not measure: BR1 answered by all three systems, and table sizes.
+- **The same draft gave Delta/Iceberg's reason as a jar-version problem.** Section 4.4 already gives the team's
+  reason ("nằm ngoài các công nghệ nhóm được dùng"); 4.5 now uses that one.
+- **This session first tried to edit Session 45 in place.** The ai-usage-log rule is append-only, so the changes are
+  recorded here instead and Session 45 is left as written.
+
+### Judgement that stayed with the team
+
+Decided by Khang:
+- Fill 4.5 and the 6.3 gap himself on #50 because of the 13 Nov deadline (12 Nov).
+
+Made by AI, flagged for review:
+- **4.5 is T22, Nguyên's task.** If Nguyên pushes her own 4.5, hers replaces this one.
+- **6.3 says no survey result exists by submission.** That is true of the repo on 12 Nov; if Tín has results, the
+  paragraph and the 6.4 line are replaced by them. No score was estimated or written.
+- **4.5 quotes one measurement from Khang's machine** next to the benchmark from Đắt's; the source table names the
+  machine and date of each.
+
+Carried forward from Session 45:
+- The conclusion quotes BR8's 63.9 ms curl p95 as the slowest screen.
+- 6.4 lists BR6's cards counting only the rows on screen as a limit.

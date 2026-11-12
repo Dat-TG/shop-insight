@@ -646,7 +646,38 @@ Câu doanh thu theo ngành nối `fact_event` với `dim_product` qua `product_s
 
 ### 4.5 Phương án thay thế và so sánh
 
-*Chờ viết: T22, Nguyên.*
+Đề bài yêu cầu so sánh giải pháp chính với ít nhất một giải pháp thay thế. Giải pháp chính của ShopInsight là phục vụ các màn hình cần đọc nhanh bằng bảng gold trong Cassandra, mỗi bảng có khoá thiết kế ngược từ câu hỏi của màn hình (mục 4.2). Theo kế hoạch benchmark trong `PLAN.md`, hai phương án thay thế được đo trên cùng mô hình logic và cùng mẫu 7%: phương án 1 là PostgreSQL, trả lời từ star schema bằng partition và index; phương án 2 là DuckDB đọc thẳng star schema dạng Parquet. Số đo lấy từ benchmark ngày 10/11 ở mục 4.4, cộng một phép đo ngày 8/11 cho riêng câu hỏi của BR1, phép duy nhất cho cả ba hệ trả lời cùng một câu hỏi. Phương án đơn giản nhất, không xây gì và truy vấn thẳng tệp CSV, đã bị loại ở mục 1.3 (50 giây trên tệp gốc) và ở E4 của mục 4.4 (177.0 so với 9.0 ms trên cùng mẫu 7%).
+
+| Tiêu chí | Cassandra, bảng gold (giải pháp chính) | Phương án 1: PostgreSQL trên star schema | Phương án 2: DuckDB trên Parquet star |
+|---|---|---|---|
+| Tổ chức dữ liệu | Mỗi câu hỏi một bảng, phi chuẩn hoá, khoá theo câu hỏi | Star schema, partition theo ngày, B-tree, BRIN, GIN | Star schema, thư mục theo ngày, lưu theo cột |
+| Thêm một câu hỏi mới | Thêm một bảng và một đường ghi | Thêm một câu truy vấn, có thể thêm index | Thêm một câu truy vấn |
+| Độ tươi | Luồng ghi sau mỗi lô nhỏ 5 giây | Theo lô: dựng lại kho và nạp PostgreSQL mất 273 giây | Theo lô, như PostgreSQL |
+| Đi đúng đường truy cập, p50 | 1.1 ms (`stockout_risk`) và 1.8 ms (`gmv_by_minute`), đọc một phân vùng | 1.5 ms (một giờ qua B-tree) tới 6.7 ms (doanh thu theo ngành một ngày) | 1.6 ms (đếm một ngày) tới 7.3 ms (doanh thu theo ngành một ngày) |
+| Câu hỏi lệch thiết kế, p50 | Lọc ngoài partition key: 81.1 ms, đọc 63,655 dòng để trả 5 | Không có index phù hợp: 88.2 ms (quét tuần tự để lấy một giờ) | Không cắt được thư mục: 3.3 ms; lọc theo giờ phải đọc cả 31 tệp vì `event_time` không có min/max |
+| Khoảng ngày được hỏi tăng từ 1 lên 31 ngày | Không áp dụng: mỗi màn hình đọc một phân vùng | 6.7 lên 75.0 ms, khoảng 11 lần | 7.3 lên 24.6 ms, khoảng 3.4 lần |
+| Dung lượng `fact_event` | Không lưu `fact_event` | 459.7 MB bảng cộng 309.6 MB index | 119.4 MB trong 31 tệp |
+| Vận hành | Một dịch vụ chạy liên tục | Một dịch vụ chạy liên tục, thêm bước nạp sau mỗi lần dựng kho | Chỉ là tệp, đọc ngay trong tiến trình của API |
+
+**Cùng một câu hỏi, ba cách trả lời.** Câu hỏi của BR1, doanh thu và số đơn của từng phút trong 120 phút (17/11, 19:30 tới 21:30, mọi ngành hàng), được chạy theo ba cách trên cùng một máy:
+
+| Cách trả lời | p50 / p95 (ms) | Cách đọc |
+|---|---|---|
+| Cassandra, bảng `gmv_by_minute` | 2.2 / 3.2 | một phân vùng, 120 dòng tính sẵn |
+| PostgreSQL, gom nhóm trên `fact_event` | 2.0 / 2.4 | Index Scan trên partition của ngày 17/11 |
+| DuckDB, gom nhóm trên Parquet | 12.1 / 16.1 | quét tệp của ngày 17/11 |
+
+PostgreSQL và DuckDB trả về cùng 120 dòng. Ở cỡ dữ liệu này, PostgreSQL trên kho dữ liệu nhanh ngang Cassandra, nên bảng gold không được chọn vì tốc độ. Lý do thật là độ tươi: kho dữ liệu được dựng theo lô, mỗi lần mất vài phút, nên không chứa phút vừa xảy ra, trong khi bảng gold được luồng ghi sau mỗi lô nhỏ 5 giây. Lý do thứ hai là đọc theo khoá chỉ chạm một phân vùng dù bảng chứa bao nhiêu ngày, còn câu gom nhóm trên kho dữ liệu tăng theo khoảng ngày được hỏi (hàng tương ứng ở bảng trên). Nhóm chưa đo khoảng cách này trên toàn bộ 67.5 triệu sự kiện (mục 6.4).
+
+**Vì sao các BR theo lô đọc Parquet qua DuckDB.** BR2, BR4 và BR7 đọc bảng gold dạng Parquet bằng DuckDB chứ không đọc PostgreSQL. Trên các câu hỏi của benchmark, cả hai engine đều dưới 0.1 giây và không bên nào thắng toàn diện: PostgreSQL nhanh hơn khi câu hỏi đi thẳng được qua index (một giờ qua B-tree 1.5 so với 5.9 ms), còn DuckDB nhanh hơn khi quét và gom nhóm nhiều ngày (24.6 so với 75.0 ms cho 31 ngày) và khi lọc trong thuộc tính lồng nhau (3.2 so với 10.3 ms dùng GIN). Nhóm chọn Parquet vì ba lý do không nằm ở tốc độ. Thứ nhất, Spark ghi Parquet trực tiếp, còn PostgreSQL cần thêm một bước nạp sau mỗi lần dựng kho. Thứ hai, `fact_event` ở Parquet nhỏ hơn khoảng 6.4 lần (119.4 MB so với 769.3 MB gồm cả index). Thứ ba, DuckDB chạy ngay trong tiến trình của API, không cần một máy chủ cơ sở dữ liệu. PostgreSQL vẫn được giữ làm bản thứ hai của cùng mô hình logic, để các so sánh ở đây công bằng (mục 4.1).
+
+**BR6: một BR theo lô vẫn phục vụ từ Cassandra.** `stockout_risk` được tính theo lô từ `fact_inventory_daily` nhưng ghi vào Cassandra, vì câu hỏi của màn hình (các sản phẩm gấp nhất của một kho) khớp đúng khoá: phân vùng theo kho, sắp sẵn theo số ngày còn hàng. Đi đúng khoá mất 1.1 ms; hỏi một sản phẩm ở mọi kho, câu hỏi mà khoá không phục vụ, mất 81.1 ms. Đó là cái giá của mô hình query-first: nhanh với câu hỏi đã biết trước, đắt với câu hỏi mới.
+
+**Bốn phương án không đo.**
+- *Kafka thay cho thư mục tệp.* Kafka là lựa chọn của một hệ thống thật. Nhóm không đặt giờ cho nó vì tiêu chí chấm điểm không tính việc "có Kafka", và thư mục tệp cho phép phát lại y hệt cùng một đoạn dữ liệu, điều mà phép đối chiếu ở mục 6.1 cần. Hàm đọc nguồn đã được tách riêng trong `processing/source.py` từ W40, để việc thay sau này chỉ đụng một tệp.
+- *Spark Cassandra Connector thay cho `cassandra-driver`.* Lý do không dùng đã nêu ở mục 4.3: connector là một gói jar phải khớp đúng phiên bản Spark và Scala.
+- *Delta Lake hoặc Apache Iceberg.* Một định dạng bảng cho phép cập nhật dòng trên Parquet, nên `fact_session_funnel` có thể được cập nhật bằng `MERGE` đúng như định nghĩa của bảng accumulating snapshot. Hai định dạng này nằm ngoài các công nghệ nhóm được dùng; cái giá của việc không dùng được ghi ở phần giới hạn cuối mục 4.4 và ở mục 6.4.
+- *Cơ sở dữ liệu đồ thị (Neo4j) cho BR7.* "Mua kèm" là bài toán đồ thị theo nghĩa sách giáo khoa: sản phẩm là đỉnh, số lần mua cùng là trọng số cạnh. Nhóm bác bỏ vì chi phí: mỗi công nghệ mới tốn khoảng một tuần mà lịch không có, tiêu chí nội dung công nghệ chấm độ sâu chứ không chấm số công nghệ, và ở cỡ dữ liệu này một phép tự nối trong Spark đã đủ, với bảng cặp của BR7 chỉ có 314 dòng, trong khi màn hình chỉ hỏi một bước từ một sản phẩm (`SYSTEM_DESIGN.md` mục 5.7).
 
 ### Nguồn số liệu của mục 4
 
@@ -701,6 +732,16 @@ Các số của mục 4.4 đo trên máy của Đắt (20 nhân, 15 GB RAM, Ubun
 | Một thư mục mỗi giá trị, một tệp mỗi thư mục, cột sắp trong tệp; dimension một tệp; `TRUNCATE` rồi nạp lại ở PostgreSQL | `write_fact`, `write_dim`, `main` và `load_postgres` trong `processing/batch_warehouse.py` |
 | Khoá của năm bảng Cassandra | `serving/cassandra_schema.cql` |
 | BR6 chỉ đọc ngày cuối của `fact_inventory_daily`; BR4 lấy phiên bản hiện hành của `dim_user` | `processing/batch_gold.py` |
+
+Số của mục 4.5 lấy từ benchmark ngày 10/11 ở trên, trừ phép so BR1 ba cách và dung lượng `fact_event`, đo trên máy của Khang (12 nhân, 15.6 GB RAM, Ubuntu trong WSL2; DuckDB 1.5.5; PostgreSQL 16.15 và Cassandra 4.1.12 trong Docker) ngày 8/11/2026, `main` tại `f690021`, 3 lần khởi động và 20 lần đo mỗi câu.
+
+| Số liệu | Lệnh |
+|---|---|
+| Các p50 trong bảng so sánh ba phương án: 1.1, 1.8, 81.1 ms; 1.5, 6.7, 88.2 ms; 1.6, 3.3, 5.9, 7.3 ms; 6.7 lên 75.0 ms và 7.3 lên 24.6 ms; 3.2 và 10.3 ms | `benchmark/results/summary_20261110_010557.csv`, như bảng số đo của mục 4.4 |
+| BR1 ba cách: 2.2 / 3.2, 2.0 / 2.4 và 12.1 / 16.1 ms; 120 dòng giống nhau ở PostgreSQL và DuckDB; Index Scan | `docs/evidence/report_engine_compare.txt`, mục 3 và 4, câu Q1 (mã nguồn ở cuối tệp). Các câu Q2 tới Q6 trong tệp này đo trước benchmark ngày 10/11 và không được dùng trong báo cáo |
+| `fact_event`: 459.7 MB bảng và 309.6 MB index ở PostgreSQL, 119.4 MB Parquet; khoảng 6.4 lần | `docs/evidence/report_engine_compare.txt`, mục 2; (459.7 + 309.6) / 119.4 = 6.44 |
+| Kafka không có giờ đặt trước; hàm đọc nguồn tách ra `processing/source.py` từ W40 | `PLAN.md`, mục "Cổng chặn Kafka" |
+| Lý do bác bỏ Neo4j; bảng cặp của BR7 có 314 dòng | `SYSTEM_DESIGN.md` mục 5.7; `docs/evidence/correctness_8br.txt`, dòng BR7 của bảng chín hàng |
 
 ## 5. Ứng dụng: API và tám màn hình
 
@@ -857,9 +898,9 @@ BR8 và BR5 có khoảng cách lớn nhất giữa `meta` và `curl` (19.8 so v�
 | Vận hành và rủi ro | Sản phẩm nào sắp hết hàng, ở kho nào? | BR6, lọc kho và số ngày | danh sách tô đỏ dưới 3 ngày, theo từng kho |
 | Vận hành và rủi ro | Tài khoản nào đặt đơn bất thường? | BR8, lọc mức cảnh báo | 3 cảnh báo high và 337 medium ngày 17/11 (15:00 tới 21:30), mở được từng cảnh báo |
 
-**Khảo sát người dùng.** Bảng trên chỉ cho thấy mỗi câu hỏi có một màn hình trả lời, chưa cho thấy người dùng thấy câu trả lời đó dễ đọc và đáng tin. Phần này đánh giá bằng khảo sát theo kế hoạch ở `docs/EVALUATION_SURVEY.md`: 5 người tham gia làm bốn tác vụ, mỗi tác vụ ứng với một nhóm người dùng, rồi chấm theo thang 1 tới 5. Ngưỡng thành công đặt trước: thời gian ở chân màn hình dưới 2,000 ms trên mọi màn hình, điểm cảm nhận tốc độ trung bình từ 4.0, điểm độ rõ của thông tin trung bình từ 4.2, và 100% tác vụ hoàn thành không lỗi.
+**Khảo sát người dùng.** Bảng trên chỉ cho thấy mỗi câu hỏi có một màn hình trả lời, chưa cho thấy người dùng thấy câu trả lời đó dễ đọc và đáng tin. Nhóm lập kế hoạch khảo sát ở `docs/EVALUATION_SURVEY.md`: 5 người tham gia làm bốn tác vụ, mỗi tác vụ ứng với một nhóm người dùng, rồi chấm theo thang 1 tới 5. Ngưỡng thành công đặt trước gồm bốn mức: thời gian ở chân màn hình dưới 2,000 ms trên mọi màn hình, điểm cảm nhận tốc độ trung bình từ 4.0, điểm độ rõ của thông tin trung bình từ 4.2, và 100% tác vụ hoàn thành không lỗi.
 
-> **Chờ kết quả khảo sát (T18).** Đoạn này điền số người tham gia, điểm trung bình từng tiêu chí và tỉ lệ hoàn thành tác vụ khi có kết quả. Không công bố số nào trước khi khảo sát chạy xong.
+Tới ngày nộp báo cáo, nhóm chưa có kết quả của khảo sát này, nên báo cáo không đưa ra điểm hài lòng hay tỉ lệ hoàn thành tác vụ nào. Trong bốn ngưỡng, chỉ ngưỡng thời gian đo được mà không cần người dùng: cả tám màn hình dưới 2 giây, kể cả chân màn hình của lần tải đầu (mục 6.2). Ba ngưỡng còn lại cần người dùng thật và được ghi thành giới hạn ở mục 6.4.
 
 ### 6.4 Kết luận, giới hạn và hướng phát triển
 
@@ -873,6 +914,7 @@ BR8 và BR5 có khoảng cách lớn nhất giữa `meta` và `curl` (19.8 so v�
 - **Số thô trong danh sách khách của BR4 có thể là của lần chấm trước** (mục 6.1). Điểm, phân khúc và heatmap vẫn đúng.
 - **Thẻ số của BR6 chỉ đếm các dòng đang hiện** (mục 5.2), không phải toàn bộ 63,655 cặp sản phẩm và kho.
 - **Tồn kho và thuộc tính sản phẩm là dữ liệu giả lập** (mục 3.3, 3.4). BR6 và phép so `jsonb` với `struct` chứng minh cơ chế, không phản ánh hành vi thật của kho hàng hay catalogue.
+- **Chưa có khảo sát người dùng.** Tính hữu dụng mới được đánh giá bằng phép đối chiếu câu hỏi với màn hình và bằng thời gian phản hồi; mức hài lòng và tỉ lệ hoàn thành tác vụ chưa được đo (mục 6.3).
 - **Không có xác thực và phân quyền.** Dashboard giả định chạy trong mạng nội bộ.
 
 **Hướng phát triển.** Theo thứ tự mà nhóm cho là có ích nhất:
