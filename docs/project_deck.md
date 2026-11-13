@@ -2,7 +2,8 @@
 
 Deck là Claude Slides "Group15_ShopInsight_Project", 26 trang, chia theo 6 mục của report. Chỉ Đắt sửa deck,
 thông qua Claude. Cả nhóm viết nội dung vào file này, rồi ở T25 Claude dựng slide từ đây. Hình kiến trúc ở trang 08
-được vẽ lại từ F14: [figures/shopinsight_architecture.html](figures/shopinsight_architecture.html).
+được vẽ lại từ F14: [figures/shopinsight_architecture.html](figures/shopinsight_architecture.html). Từ bản 22 (13/11
+tối) hình đó được vẽ lại bằng khối và mũi tên của chính Slides, không còn là ảnh.
 
 ## Cách viết (T20, hạn T2 9/11)
 
@@ -41,6 +42,12 @@ từ REPORT.md, docs/evidence và code, theo yêu cầu của Đắt. Mỗi số
 "Số liệu", và đã được một lượt kiểm độc lập đối chiếu lại. Tín và Nguyên đọc lại khối của mình trước khi thu (T29);
 muốn đổi chữ nào thì sửa thẳng ở đây. Cùng lượt đó trang 20 được sửa số partition (381, không phải 1) và trang 17,
 22 được sửa vài chữ cho khớp evidence.
+
+Bản 22 (13/11 tối, theo yêu cầu của Đắt): trang 05, 07, 08, 09, 10, 11 và 12 thay danh sách ý bằng sơ đồ (khối,
+mũi tên, nhãn), mỗi sơ đồ được một lượt kiểm số liệu và một lượt kiểm hình độc lập; dòng "**Mặt slide:**" của các khối
+đó ghi sơ đồ vẽ gì. Ý chính và lời thoại của các trang này không đổi. Tài liệu tham khảo (trang 26) tách thành mục
+riêng. Dòng "Nguồn:" trên slide không dẫn REPORT.md nữa, vì báo cáo nộp là Google Doc của Khang và đánh số mục khác;
+REPORT.md chỉ còn ở phần "Chi tiết" của dòng Số liệu, cho nhóm tra.
 
 Trang 14-21 mở đầu đoạn demo của từng BR. Lời thoại ở đó ngắn: câu hỏi nghiệp vụ và vì sao màn hình trả lời
 được câu hỏi đó. Thao tác demo nằm trong kịch bản T16.
@@ -99,7 +106,8 @@ Nguồn gợi ý: REPORT.md §1.1 Bối cảnh, §1.3 Vì sao không truy vấn 
 - Dữ liệu thô chưa sạch: 32.4% sự kiện không có ngành hàng, giờ ghi theo UTC nên lệch ngày so với giờ Việt Nam
 - ShopInsight làm trước một lần những việc tốn kém, để màn hình chỉ đọc phần nhỏ nó cần
 
-Số liệu: REPORT.md, bảng "Nguồn số liệu của mục 1" (mỗi số kèm lệnh đo trên `data/raw/2019-Nov.csv`).
+Số liệu: đo trên `data/raw/2019-Nov.csv` bằng `wc -l`, `ls -l`, `time` và `awk` (máy 12 nhân, 15 GB RAM, WSL2). Lệnh
+đo của từng số ở REPORT.md, bảng "Nguồn số liệu của mục 1".
 
 **Lời thoại:**
 Đồ án dùng nhật ký hành vi của một sàn thương mại điện tử trong tháng mười một năm hai nghìn mười chín: sáu mươi
@@ -147,7 +155,7 @@ Nguồn gợi ý: REPORT.md §2, docs/BR_SCOPE.md.
 - Bốn BR cần toàn bộ lịch sử (BR2, BR4, BR6, BR7): chạy theo lô trên kho dữ liệu
 - Mỗi thành viên giữ trọn hai BR, một theo lô và một theo luồng; hỏi thẳng nhật ký thô thì không câu nào xong dưới 2 giây
 
-Số liệu: REPORT.md §1.3, §2 và docs/BR_SCOPE.md. Tiêu đề: hai nhịp (trả lời gần như ngay lúc sự kiện xảy ra, hoặc tính theo lô
+Số liệu: docs/BR_SCOPE.md (phạm vi, nguồn dữ liệu và người phụ trách của 8 BR). Chi tiết: REPORT.md §1.3, §2. Tiêu đề: hai nhịp (trả lời gần như ngay lúc sự kiện xảy ra, hoặc tính theo lô
 trên toàn bộ lịch sử) là REPORT.md §1.2 dòng 28. Ý 1: REPORT.md §2 dòng 61 ("Mỗi yêu cầu trả lời một câu hỏi của một
 nhóm người dùng ở mục 1.2 và có một màn hình riêng trên dashboard"). Ý 2 và 3: bảng BR ở REPORT.md §2 dòng 65-72 (cột
 "Cách xử lý", "Nơi lưu kết quả") và dòng 74 (BR1, BR3, BR5, BR8 đọc luồng, ghi Cassandra; BR2, BR4, BR6, BR7 đọc kho
@@ -159,6 +167,10 @@ docs/BR_SCOPE.md (Đắt BR1, BR2; Khang BR3, BR4; Nguyên BR5, BR7; Tín BR6, B
 REPORT.md §1.3 dòng 34: mọi câu hỏi phải quét cả tệp, đọc một lượt đã mất 25 giây (bảng "Nguồn số liệu của mục 1" dòng
 52), doanh thu theo ngành hàng mất 50 giây (dòng 53). Lời thoại: "hai giây" là ngưỡng ở REPORT.md §1.1 dòng 15; "BR
 một, ba, năm và tám" và "BR hai, bốn, sáu và bảy" là các mã ở REPORT.md §2 dòng 74; lời thoại không có số đo nào khác.
+
+**Mặt slide:** sơ đồ hai cột: bốn BR thời gian thực (BR1, BR3, BR5, BR8) ghi Cassandra ở bên trái, bốn BR theo lô (BR2, BR4,
+BR7 ghi Parquet cho DuckDB; BR6 ghi Cassandra) ở bên phải, cột giữa là người phụ trách mỗi hàng. Dòng cuối: "Hỏi thẳng
+tệp CSV thô 9.0 GB thì không câu nào xong dưới 2 giây."
 
 **Lời thoại:**
 Mỗi yêu cầu nghiệp vụ, gọi tắt là BR, là câu hỏi của một nhóm người dùng và có một màn hình riêng. BR một, ba, năm và
@@ -182,7 +194,8 @@ Nguồn gợi ý: REPORT.md §3.1 và đoạn đặc trưng Big Data cuối §3 
 - Big Data: 9.0 GB; 4,767,012 sự kiện mẫu, 4,754,015 sau làm sạch; phát lại ×60 ~481 sự kiện/s; catalogue JSON lồng nhau
 - Dữ liệu gốc có 38.4 giờ liền không có lượt mua; nhóm giữ nguyên và nói rõ
 
-Số liệu: REPORT.md §3.1 và §3.5, bảng "Nguồn số liệu của mục 3". Tiêu đề: 67,501,979 sự kiện ở REPORT.md §3.1 dòng 146 và dòng
+Số liệu: `data/raw/2019-Nov.csv`; docs/evidence/batch_timings.txt mục 2 (BRONZE OK, SILVER OK);
+docs/evidence/correctness_8br.txt (lượt phát lại). Chi tiết: REPORT.md §3.1 và §3.5, bảng "Nguồn số liệu của mục 3". Tiêu đề: 67,501,979 sự kiện ở REPORT.md §3.1 dòng 146 và dòng
 216 (`wc -l`); "thật" ở bảng nguồn dòng 139; lấy mẫu theo khách và giữ mọi sự kiện của khách ở đoạn "Lấy mẫu" dòng
 160. Ý 1: REES46, tháng 11/2019 và 9 cột ở dòng 146-158 và dòng 216 (`head -1`), khớp 9 `StructField` ở
 processing/schema.py dòng 44-52; quy tắc `pmod(hash(user_id), 100) < 7` ở dòng 160 và `SAMPLE_RULE` ở
@@ -223,7 +236,7 @@ Nguồn gợi ý: REPORT.md §3.2, §3.3, §3.4.
 - Tồn kho: sinh theo lượt mua thật, để BR6 có dữ liệu mà tốc độ bán vẫn đúng nhu cầu
 - Catalogue và tồn kho là giả lập, chỉ để minh hoạ kỹ thuật
 
-Số liệu: REPORT.md §3.2, §3.3, §3.4. Tiêu đề: REPORT.md §3 dòng 135 (hai nguồn tự sinh là giả lập vì dữ liệu gốc không có thuộc
+Số liệu: seed/holidays_2019.csv; ingestion/gen_catalog.py; ingestion/gen_inventory.py. Chi tiết: REPORT.md §3.2, §3.3, §3.4. Tiêu đề: REPORT.md §3 dòng 135 (hai nguồn tự sinh là giả lập vì dữ liệu gốc không có thuộc
 tính sản phẩm và tồn kho) và bảng nguồn dòng 139-142 (catalogue "Giả lập", tồn kho "Giả lập, bám theo lượt mua thật").
 Ý 1: 3 dòng là dữ liệu của seed/holidays_2019.csv, cộng một dòng tiêu đề (Singles Day 11/11, Black Friday 29/11, Cyber
 Monday 2/12), ở REPORT.md §3.2 dòng 186 và dòng 225; commit vào git ở §3.2 dòng 188 (`git ls-files seed/` ra
@@ -237,6 +250,10 @@ từ lượt mua của silver: `purchases_by_warehouse()` dòng 30, `daily_sales
 109. Ý 4: catalogue "chỉ dùng để minh hoạ kỹ thuật lưu trữ" ở §3.3 dòng 194; cả hai nguồn tự sinh được gọi là "dữ liệu
 minh hoạ" ở §3 dòng 135. Lời thoại: "ba dòng" là 3 dòng dữ liệu của seed/holidays_2019.csv; "BR sáu" là BR6; "bốn
 nguồn" là bảng nguồn ở REPORT.md dòng 137-142.
+
+**Mặt slide:** sơ đồ ba hàng, mỗi nguồn bổ trợ một hàng: nội dung, cách sinh, bảng star nhận nó, và dùng để làm gì
+(lịch ngày lễ thật → `dim_date.is_holiday`; catalogue giả lập → `dim_product.attributes`; tồn kho giả lập từ lượt mua
+thật của silver → `fact_inventory_daily`, 12,731 SKU đã bán × 5 kho × 30 ngày → BR6).
 
 **Lời thoại:**
 Ba nguồn bổ trợ bù cho những gì nhật ký thô thiếu. Lịch ngày lễ là ba dòng viết tay, đưa vào git cùng mã nguồn để mọi
@@ -266,6 +283,10 @@ Số liệu: hình docs/figures/shopinsight_architecture.html; ô PostgreSQL l�
 này"); hai bản kho dữ liệu có số dòng bằng nhau ở docs/evidence/pg_vs_parquet_counts.txt. Lời thoại: "bảy phần trăm"
 là quy tắc lấy mẫu ở REPORT.md §3.1 và §4.1.
 
+**Mặt slide:** sơ đồ kiến trúc: hàng trên là nhánh thời gian thực (phát lại → Structured Streaming → Cassandra), hàng dưới
+là nhánh theo lô (CSV → Spark theo lô → Parquet), FastAPI (có DuckDB) ở giữa, 5 màn hình tra theo khoá và 3 màn hình
+báo cáo bên phải, PostgreSQL nét đứt "chỉ để so sánh".
+
 **Lời thoại:**
 Kiến trúc gồm hai nhánh. Nhánh theo lô: Spark lấy mẫu bảy phần trăm khách, làm sạch, dựng kho dữ liệu, rồi lưu
 Parquet, định dạng lưu theo cột, chia thư mục theo ngày, để DuckDB đọc cho ba màn hình báo cáo. Nhánh thời gian
@@ -289,9 +310,13 @@ Nguồn gợi ý: REPORT.md §4.4 (T15), SYSTEM_DESIGN §5.
 - `dim_product`, `dim_user` là SCD Type 2: mỗi sự kiện trỏ tới phiên bản có hiệu lực vào ngày của nó
 - Ngành hàng, thương hiệu gộp vào `dim_product`: star, không phải snowflake; Cassandra thì ngược lại, mỗi câu hỏi một bảng
 
-Số liệu: REPORT.md §4.4 (Hình 4.4a, Hình 4.4b, bảng ba fact, bảng đặt cạnh Cassandra); số dòng của chín bảng ở
-docs/evidence/batch_timings.txt mục 2 và pg_vs_parquet_counts.txt; SCD2 sạch ở docs/evidence/t14_checks.txt ("Run 1:
-scd2_integrity.py ..."). Lời thoại: "mười một thực thể" là Hình 4.4a.
+Số liệu: số dòng ở docs/evidence/batch_timings.txt mục 2 và pg_vs_parquet_counts.txt; SCD2 sạch ở
+docs/evidence/t14_checks.txt; khoá nối ở warehouse/ddl.sql. Chi tiết: REPORT.md §4.4 (Hình 4.4a, Hình 4.4b, bảng ba fact,
+bảng đặt cạnh Cassandra); SCD2 ở t14_checks.txt ("Run 1: scd2_integrity.py ..."). Lời thoại: "mười một thực thể" là Hình 4.4a.
+
+**Mặt slide:** star schema: ba fact (nền xanh đậm, kèm kiểu Kimball, grain và số dòng), năm dimension (số dòng, SCD Type 2),
+khoá nối ghi trên cạnh, `user_session` nét đứt giữa `fact_event` và `fact_session_funnel`; ô ghi chú "Star, không
+phải snowflake".
 
 **Lời thoại:**
 Ở mức khái niệm có mười một thực thể. Chỗ khó là giá sản phẩm và phân khúc khách đổi theo thời gian. Ở mức logic là
@@ -316,12 +341,19 @@ Nguồn gợi ý: REPORT.md §4.4 (T15); evidence E1, E4, E5, explain_star_join.
 - PostgreSQL (bản thứ hai): partition theo ngày hoặc theo kho; B-tree ghép (`event_date`, …), BRIN trên `event_time`, GIN trên `attributes`
 - Số đo đi kèm giới hạn: GIN lợi ít vì bộ lọc khớp nhiều dòng; tắt pruning vẫn rẻ vì index dò nhanh các partition còn lại
 
-Số liệu: `benchmark/results/summary_20261110_010557.csv` và `plans_20261110_010557.txt` (lần đo 10/11, 3 lần khởi
-động + 20 lần đo); bảng số đo và "Bốn điều phải đọc kèm bảng này" ở REPORT.md §4.4. Nếu T25 đặt số GIN, pruning
+Số liệu: benchmark/results/summary_20261110_010557.csv và plans_20261110_010557.txt (10/11, 3 lần khởi động + 20 lần đo,
+p50); docs/evidence/presentation_parquet_run.txt mục 6 (20/10); warehouse/ddl.sql. Chi tiết: bảng số đo và "Bốn điều
+phải đọc kèm bảng này" ở REPORT.md §4.4; footer Parquet ở presentation_parquet_run.txt mục 6 (fact_event: 31 tệp, mỗi
+tệp 1 row group, `event_time` INT96 có min/max ở 0/31 chunk); "Lọc một giờ" là 12:00-13:00 ngày 29/11, DuckDB đọc
+31/31 tệp, p50 5.891 ms (summary dòng 14). Nếu T25 đặt số GIN, pruning
 bật/tắt, B-tree hay `gmv_by_minute` thiếu khoá lên slide thì ghi kèm giới hạn đó (B-tree là index tạm tạo riêng cho
 benchmark). Không dùng thời gian của explain_star_join.txt (PostgreSQL lúc đó chỉ nạp 3 ngày) hay tên tệp trong
 duckdb_zonemap.txt (tệp không còn). Lời thoại: "khoảng bốn mili giây" và "gần chín mươi mili giây" là p50 của
 `postgres,event_time_one_hour,brin` (4.125 ms) và `seq_scan` (88.218 ms) trong summary.
+
+**Mặt slide:** Parquet bên trái (thư mục `event_date`, mỗi tệp 1 row group, `event_time` INT96 không có min/max), hai truy
+vấn ở giữa ("Lọc một ngày" đọc 1/31 thư mục, 1.565 ms; "Lọc một giờ" đọc 31/31 tệp, 5.891 ms), PostgreSQL bên phải
+(partition, index; BRIN 4.125 ms so với seq scan 88.218 ms).
 
 **Lời thoại:**
 Parquet là nơi lưu chính. Mỗi fact chia partition theo ngày, tức mỗi ngày một thư mục, nên lọc một ngày chỉ mở một
@@ -346,11 +378,15 @@ Nguồn gợi ý: REPORT.md §4.3; docs/evidence/batch_timings.txt (T02).
 - Hai nhánh gọi chung `clean()` của `batch_silver.py`: bảy quy tắc làm sạch giống hệt nhau
 - Ghi Cassandra trong `foreachBatch` bằng `cassandra-driver`, không dùng Spark Cassandra Connector
 
-Số liệu: docs/evidence/batch_timings.txt mục 1 (thời gian từng job, ngày 3/11); docs/evidence/streaming_perf.txt Run
-1 và Run 2 (thời gian mỗi micro-batch: p50, p95, max). Lời thoại: "khoảng bảy phút" là tổng 426.5 giây của
+Số liệu: docs/evidence/batch_timings.txt mục 1 (ngày 3/11); docs/evidence/streaming_perf.txt Run 1 và Run 2. Chi tiết:
+batch_timings.txt mục 1 là thời gian từng job; streaming_perf.txt cho thời gian mỗi micro-batch (p50, p95, max). Lời thoại: "khoảng bảy phút" là tổng 426.5 giây của
 batch_timings.txt; "chưa tới một giây" là p50 `triggerExecution` của bốn job: 587 tới 852 ms ở Run 1 (chưa chạy API
 và giao diện), 562 tới 795 ms ở Run 2 (API, web và trình duyệt cùng chạy, đúng điều kiện demo). Micro-batch đầu tiên
 chậm hơn vì khởi động JVM và truy vấn (max 3,524 ms ở Run 1).
+
+**Mặt slide:** pipeline: hàng trên là nhánh thời gian thực (replayer → `streaming_gold.py` → `foreachBatch` → 4 bảng
+Cassandra), hàng dưới là bảy job theo lô với số giây (tổng 426.5 s) và số dòng từng tầng, `clean()` ở giữa nối hai
+nhánh.
 
 **Lời thoại:**
 Cả hai nhánh chạy trên Spark ở chế độ local, một tiến trình dùng mọi nhân CPU. Bảy job theo lô chạy hết khoảng bảy
@@ -374,7 +410,8 @@ Nguồn gợi ý: REPORT.md §4.2, serving/cassandra_schema.cql.
 - `stockout_risk` (benchmark 10/11, p50): hỏi một kho 1.1 ms; hỏi một sản phẩm 81.1 ms, đọc cả 63,655 dòng để trả 5
 - Ba bảng để lại dòng cũ, ba cách dọn: xoá partition kho (BR6), xoá partition cửa sổ (BR3), upsert không xoá (BR5)
 
-Số liệu: REPORT.md §4.2 và §4.4 (bảng số đo); serving/cassandra_schema.cql; benchmark/results/summary_20261110_010557.csv. Tiêu
+Số liệu: serving/cassandra_schema.cql; benchmark/results/summary_20261110_010557.csv và plans_20261110_010557.txt (10/11,
+p50). Chi tiết: REPORT.md §4.2 và §4.4 (bảng số đo). Tiêu
 đề: "mỗi màn hình một bảng" là năm router Cassandra, mỗi router chỉ đọc một bảng (serving/api/routers/br1.py dòng 49
 `gmv_by_minute`; br3.py dòng 46 và 52-53 `trending_products`; br5.py dòng 43-44 và 66 `abandoned_carts`; br6.py dòng
 77-94 `stockout_risk`; br8.py dòng 52-53 và 69 `order_velocity_alerts`); "thiết kế ngược từ câu hỏi" là tên REPORT.md
@@ -395,6 +432,9 @@ thoại: "năm màn hình" là năm dòng Cassandra (BR1, BR3, BR5, BR6, BR8) �
 bằng cả bảng (plans dòng 1803-1804, env dòng 28); "chậm hơn khoảng bảy mươi ba lần" là 81.089 / 1.113 = 72.9,
 REPORT.md §4.4 dòng 638; "khi giá trị trong khoá đổi, dòng cũ vẫn nằm lại" là REPORT.md §4.2 dòng 341 (cột khoá sắp
 xếp đổi giá trị giữa hai lần ghi thì dòng cũ vẫn nằm đó).
+
+**Mặt slide:** năm thẻ bảng (partition key, clustering key, cách dọn dòng cũ, viền cam = ghi từ luồng, xanh = theo lô) và
+phép so khoá đúng/khoá sai trên `stockout_risk` (1.1 ms so với 81.1 ms, quét cả 63,655 dòng).
 
 **Lời thoại:**
 Năm màn hình đọc từ Cassandra. Cassandra không có phép nối, chỉ đọc nhanh qua partition key, tức khoá quyết định dòng
@@ -418,7 +458,7 @@ Nguồn gợi ý: REPORT.md §4.5 (T22); số đo benchmark T12, T14 và E4.
 - BR2, BR4, BR7 đọc Parquet: Spark ghi thẳng, `fact_event` nhỏ hơn PostgreSQL khoảng 6.4 lần, DuckDB chạy trong API
 - Cân nhắc nhưng không đo: Kafka, Spark Cassandra Connector, Delta Lake/Iceberg, Neo4j cho BR7
 
-Số liệu: REPORT.md §4.5; docs/evidence/report_engine_compare.txt (Q1, mục 2); docs/evidence/batch_timings.txt. Tiêu đề: "nhanh
+Số liệu: docs/evidence/report_engine_compare.txt (Q1, mục 2); docs/evidence/batch_timings.txt. Chi tiết: REPORT.md §4.5. Tiêu đề: "nhanh
 ngang Cassandra" và "bảng gold không được chọn vì tốc độ. Lý do thật là độ tươi" là REPORT.md §4.5 dòng 670; "mẫu 7%"
 là dòng 649. Ý chính 1: report_engine_compare.txt dòng 40-44 (Q1, p50: PostgreSQL 2.0, DuckDB 12.1, Cassandra 2.2 ms;
 Cassandra đọc `gmv_by_minute`, 1 partition, 120 dòng; PostgreSQL và DuckDB trả cùng 120 dòng); bảng "Cùng một câu hỏi,
@@ -743,7 +783,7 @@ Nguồn gợi ý: docs/evidence/perf_table.md, gate2b_screens.txt (T17), batch_t
 - Luồng theo kịp nguồn phát lại 480.7 sự kiện/s (chưa thử quá tải); micro-batch p50 587–852 ms, chu kỳ 5 s
 - Dựng theo lô từ CSV tới gold: 426.5 s, chỉ chạy lại khi nguồn đổi; tất cả đo trên một máy, tập làm việc là mẫu 7% khách
 
-Số liệu: docs/evidence/gate2b_screens.txt, perf_table.md, streaming_perf.txt, batch_timings.txt; REPORT.md §6.2. Tiêu đề: "thấp
+Số liệu: docs/evidence/gate2b_screens.txt, perf_table.md, streaming_perf.txt, batch_timings.txt. Chi tiết: REPORT.md §6.2. Tiêu đề: "thấp
 hơn ngưỡng khoảng 30 lần" là câu "thấp hơn ngưỡng 2 giây khoảng 30 lần" ở REPORT.md dòng 873 (§6.2), tức 2,000 / 63.9
 ms, curl p95 của dòng BR8 ở gate2b_screens.txt dòng 47; Google Doc §6.2.1 viết y như vậy. "Cả 8" là cột under_2s = yes
 ở gate2b_screens.txt dòng 40-47. Ý 1: 3 lần làm nóng + 20 lần đo và định nghĩa meta (QueryMeta.ms) / curl (time_total)
@@ -783,7 +823,8 @@ Nguồn gợi ý: REPORT.md §6.3 và docs/EVALUATION_SURVEY.md. Khảo sát T18
 - Footer `QueryMeta` trên cả 8 màn hình: thời gian truy vấn, kho đọc, số partition, số dòng trả về
 - Khảo sát 5 người, 4 tác vụ mới dừng ở kế hoạch (`EVALUATION_SURVEY.md`): chưa có điểm hài lòng hay tỉ lệ hoàn thành
 
-Số liệu: REPORT.md §6.3, §6.4; docs/EVALUATION_SURVEY.md; web/src/App.tsx; web/src/components/QueryMeta.tsx. Tiêu đề và ý 1:
+Số liệu: docs/EVALUATION_SURVEY.md; docs/evidence/gate2b_br2.png; web/src/App.tsx; web/src/components/QueryMeta.tsx.
+Chi tiết: REPORT.md §6.3, §6.4. Tiêu đề và ý 1:
 bảng đối chiếu 8 câu hỏi với màn hình ở REPORT.md §6.3 (dòng 888-899; Bảng 18 của Google Doc §6.3); 86.39% là dòng BR2
 của bảng đó (dòng 893), đọc từ ô drop-off của dòng Cart trên ảnh docs/evidence/gate2b_br2.png (cũng có ở
 gate2a_br2_run.txt dòng 86 và REPORT.md dòng 800). "Chưa được thực hiện" là gạch đầu dòng "Chưa có khảo sát người
@@ -819,7 +860,7 @@ Nguồn gợi ý: REPORT.md §6.4 (T24).
 - Tồn kho và catalogue là giả lập; chưa có khảo sát người dùng; chưa có xác thực và phân quyền
 - Hướng phát triển: Kafka thay thư mục tệp (đọc nguồn đã tách ở `source.py`); cụm nhiều node, đủ 67.5 triệu sự kiện
 
-Số liệu: REPORT.md §6.4; docs/evidence/correctness_8br.txt, gate2b_screens.txt. Tiêu đề và ý 1: 8/8 BR khớp 100% là bảng chín
+Số liệu: docs/evidence/correctness_8br.txt, gate2b_screens.txt. Chi tiết: REPORT.md §6.4. Tiêu đề và ý 1: 8/8 BR khớp 100% là bảng chín
 hàng của docs/evidence/correctness_8br.txt, mục "10 November 2026: the nine-row table (T19)" (dòng 125, các hàng ở
 dòng 150-158; REPORT.md §6.1); "dưới 2 giây" là cột under_2s và 63.9 ms là curl p95 của dòng BR8, gate2b_screens.txt
 dòng 47; "mọi số đều có lệnh hoặc tệp bằng chứng" là đoạn Kết luận ở REPORT.md dòng 928. Ý 2 và 3: các gạch đầu dòng
