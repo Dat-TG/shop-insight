@@ -1,0 +1,6 @@
+$ .venv/bin/python docs/evidence/review_20261113/r6_br5_sessions.py  (2026-11-13)
+whole month: 992,290 session windows; 77,878 abandoned windows in 77,377 sessions
+  abandoned windows followed by a later window of the same session with a purchase: 235 (0.30%) in 227 sessions
+  keys (event_date, user_session) holding more than one abandoned window: 465; windows whose cart_value a later window of the same key overwrites: 480
+replay 17 Nov 15:00-21:30: 2,621 closed abandoned carts, total cart_value 1,420,222.81
+  carts holding exact-duplicate cart events: 81; value the duplicates add 81,563.80 (5.74% of the total cart_value)

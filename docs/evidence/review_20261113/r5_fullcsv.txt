@@ -1,0 +1,14 @@
+$ .venv/bin/python -I docs/evidence/review_20261113/r5_fullcsv.py  (2026-11-13, commit 82417f7)
+machine  Dat-Xiaoxin | 20 logical cores
+versions Python 3.14.4 | DuckDB 1.5.5
+file     data/raw/2019-Nov.csv, 9,006,762,395 bytes
+threads  20
+page cache before warm-up 9.7 GB
+warm-up count(*)           run 0    2.6 s  (load before  6.80)  first row (67501979,)  rows 1
+page cache after warm-up  9.7 GB
+BR2 per-session funnel     run 1    3.6 s  (load before  6.57)  first row (13776051, 1868194, 773214, 63556110, 3028930, 916939)  rows 1
+BR2 per-session funnel     run 2    3.6 s  (load before  7.73)  first row (13776051, 1868194, 773214, 63556110, 3028930, 916939)  rows 1
+BR2 per-session funnel     run 3    3.7 s  (load before  7.73)  first row (13776051, 1868194, 773214, 63556110, 3028930, 916939)  rows 1
+BR7 partners of 1005115    run 1    2.2 s  (load before  8.63)  first row (34800250, 3, 4.329661263709599)  rows 10
+BR7 partners of 1005115    run 2    2.2 s  (load before  8.63)  first row (34800250, 3, 4.329661263709599)  rows 10
+BR7 partners of 1005115    run 3    2.2 s  (load before  8.74)  first row (34800250, 3, 4.329661263709599)  rows 10

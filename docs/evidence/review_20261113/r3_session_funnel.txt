@@ -1,0 +1,5 @@
+$ .venv/bin/python docs/evidence/review_20261113/r3_session_funnel.py  (2026-11-13)
+user_session values with more than one user_id (silver): 5
+fact_session_funnel sessions: 970,797
+last event on a later date than the start date: 7,433 (0.77%)
+longest span from start date to last-event date: 29 days

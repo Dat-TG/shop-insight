@@ -1,0 +1,7 @@
+$ .venv/bin/python docs/evidence/review_20261113/r3_price_versions.py  (2026-11-13)
+silver: 4,754,015 events, 128,972 products
+versions if every price change opens one: 246,083
+product 1005115: 47,059 events, 1,732 per-change versions
+range join rows with per-change versions (sum events x versions): 323,053,532 = 68.0 x the fact
+  of which product 1005115: 81,506,188 (25%)
+dim_product (day grain): 210,454 versions of 128,972 products; product 1005115: 21 versions

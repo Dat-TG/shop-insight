@@ -1,0 +1,48 @@
+$ .venv/bin/python -I docs/evidence/review_20261113/r5_gold_vs_onthefly.py  (2026-11-13, commit 82417f7)
+machine  Dat-Xiaoxin | 20 logical cores
+versions Python 3.14.4 | DuckDB 1.5.5
+method   3 warm-up + 20 timed runs per query, in-process, ms, nearest rank
+load     1-min load average before: 9.45 (other processes on the machine)
+BR2 gold funnel_daily                    p50     5.5  p95     7.5  rows      1
+BR2 star fact_session_funnel             p50     7.1  p95     9.0  rows      1
+BR2 silver, per session at read time     p50   106.6  p95   115.9  rows      1
+BR4 gold rfm_segments, r_score = 5       p50    13.6  p95    14.8  rows  6,201
+BR4 silver, RFM scored at read time      p50    27.2  p95    31.1  rows  6,201
+BR7 gold product_affinity, 1005115       p50     4.0  p95     4.9  rows     10
+BR7 silver, pairs at read time           p50    27.8  p95    31.0  rows     10
+load     1-min load average after: 10.61
+
+same answer?
+  BR2 (view, cart, purchase sessions; view, cart, purchase events): (966143, 131498, 54676, 4451411, 213486, 64883)
+      gold = star = silver: True
+  BR4 users with r_score 5: gold 6,201, read time 6,201, same set: True
+      of them, raw recency/frequency/monetary differ (section 6.1.4): 3,486
+  BR7 ten partners of 1005115, same products, counts and lift in the same order: True
+
+BR7 rows for 1005115 as the screen orders them (lift DESC, co_count DESC): product_b, co_count, lift
+  1005230    3  4.07
+  1004246    8  1.87
+  1004249   26  1.72
+  1005014    3  1.66
+  1005105   25  1.63
+  1005129    6  1.62
+  1003317    5  1.60
+  1003310    4  1.59
+  1002532    4  1.50
+  1005186    5  1.40
+most sessions together with 1005115: 1004249, 26 sessions, lift 1.72
+
+$ .venv/bin/python -I docs/evidence/review_20261113/r5_gold_vs_onthefly.py  (2026-11-13, commit 82417f7, second run)
+machine  Dat-Xiaoxin | 20 logical cores
+versions Python 3.14.4 | DuckDB 1.5.5
+method   3 warm-up + 20 timed runs per query, in-process, ms, nearest rank
+load     1-min load average before: 9.84 (other processes on the machine)
+BR2 gold funnel_daily                    p50     5.5  p95     7.1  rows      1
+BR2 star fact_session_funnel             p50     6.7  p95     8.0  rows      1
+BR2 silver, per session at read time     p50   100.4  p95   144.2  rows      1
+BR4 gold rfm_segments, r_score = 5       p50    14.9  p95    17.2  rows  6,201
+BR4 silver, RFM scored at read time      p50    33.2  p95    36.2  rows  6,201
+BR7 gold product_affinity, 1005115       p50     4.9  p95     6.8  rows     10
+BR7 silver, pairs at read time           p50    30.9  p95    35.8  rows     10
+load     1-min load average after: 10.02
+

@@ -1,0 +1,66 @@
+$ .venv/bin/python -I docs/evidence/review_20261113/r4_screen_counts.py  (2026-11-13)
+DuckDB 1.5.5
+
+-- BR2 fact_session_funnel, whole table vs the screen's range 1-30 Nov
+SELECT count(*) AS sessions_all,
+       count(*) FILTER (WHERE funnel_stage = 2) AS stage2_all,
+       count(*) FILTER (WHERE funnel_stage = 3) AS stage3_all,
+       count(*) FILTER (WHERE session_start_date <= DATE '2019-11-30') AS sessions_1_30,
+       count(*) FILTER (WHERE session_start_date <= DATE '2019-11-30' AND funnel_stage >= 2) AS reached_cart_1_30,
+       count(*) FILTER (WHERE session_start_date <= DATE '2019-11-30' AND funnel_stage = 2) AS stopped_at_cart_1_30,
+       count(*) FILTER (WHERE session_start_date <= DATE '2019-11-30' AND funnel_stage = 3) AS purchased_1_30,
+       count(*) FILTER (WHERE session_start_date <= DATE '2019-11-30' AND funnel_stage = 3 AND cart_count = 0) AS purchased_no_cart_event,
+       count(*) FILTER (WHERE session_start_date <= DATE '2019-11-30' AND cart_count > 0) AS with_cart_event,
+       count(*) FILTER (WHERE session_start_date <= DATE '2019-11-30' AND funnel_stage = 3 AND cart_count > 0) AS purchased_with_cart_event,
+       count(*) FILTER (WHERE session_start_date <= DATE '2019-11-30' AND first_view_at IS NULL) AS no_view_event,
+       count(*) FILTER (WHERE session_start_date = DATE '2019-12-01') AS sessions_dec1,
+       count(*) FILTER (WHERE session_start_date = DATE '2019-12-01' AND funnel_stage = 3) AS purchased_dec1
+FROM read_parquet('data/warehouse/fact_session_funnel/*/*.parquet', hive_partitioning = true)
+   sessions_all = 970,797 | stage2_all = 77,098 | stage3_all = 54,904 | sessions_1_30 = 966,143 | reached_cart_1_30 = 131,498 | stopped_at_cart_1_30 = 76,822 | purchased_1_30 = 54,676 | purchased_no_cart_event = 8,841 | with_cart_event = 122,657 | purchased_with_cart_event = 45,835 | no_view_event = 695 | sessions_dec1 = 4,654 | purchased_dec1 = 228
+
+-- BR2 funnel_daily 'all' rows summed over 1-30 Nov (the screen's funnel card)
+SELECT sum(views) AS views, sum(carts) AS carts, sum(purchases) AS purchases,
+       round(100 * sum(carts) / sum(views), 2) AS view_to_cart_pct,
+       round(100 * sum(purchases) / sum(carts), 2) AS cart_to_purchase_pct
+FROM read_parquet('data/gold/funnel_daily/*/*.parquet', hive_partitioning = true)
+WHERE category_l1 = 'all' AND event_date BETWEEN DATE '2019-11-01' AND DATE '2019-11-30'
+   views = 966,143 | carts = 131,498 | purchases = 54,676 | view_to_cart_pct = 13.61 | cart_to_purchase_pct = 41.58
+
+-- BR6 fact_inventory_daily on 2019-11-30, by the screen's bands
+SELECT count(*) AS pairs,
+       count(*) FILTER (WHERE days_to_stockout < 3) AS critical,
+       count(*) FILTER (WHERE days_to_stockout < 3 AND stock_on_hand = 0) AS critical_zero_stock,
+       count(*) FILTER (WHERE days_to_stockout >= 3 AND days_to_stockout < 7) AS low_stock,
+       count(*) FILTER (WHERE days_to_stockout IS NULL) AS no_sales_7d,
+       round(100 * count(*) FILTER (WHERE days_to_stockout IS NULL) / count(*), 1) AS no_sales_pct
+FROM read_parquet('data/warehouse/fact_inventory_daily/*/*.parquet', hive_partitioning = true)
+WHERE snapshot_date = DATE '2019-11-30'
+   pairs = 63,655 | critical = 566 | critical_zero_stock = 493 | low_stock = 435 | no_sales_7d = 58,003 | no_sales_pct = 91.1
+
+-- BR6 critical pairs (< 3 days) per warehouse on 2019-11-30
+SELECT warehouse_id, count(*) AS critical
+FROM read_parquet('data/warehouse/fact_inventory_daily/*/*.parquet', hive_partitioning = true)
+WHERE snapshot_date = DATE '2019-11-30' AND days_to_stockout < 3
+GROUP BY 1 ORDER BY 1
+   warehouse_id = 1 | critical = 120
+   warehouse_id = 2 | critical = 118
+   warehouse_id = 3 | critical = 111
+   warehouse_id = 4 | critical = 104
+   warehouse_id = 5 | critical = 113
+
+-- BR7 product_affinity ordered pairs
+SELECT count(*) AS ordered_pairs,
+       count(*) FILTER (WHERE co_count = 3) AS co_count_3,
+       round(100 * count(*) FILTER (WHERE co_count = 3) / count(*), 1) AS co_count_3_pct
+FROM read_parquet('data/gold/product_affinity/*.parquet')
+   ordered_pairs = 314 | co_count_3 = 138 | co_count_3_pct = 43.9
+
+-- BR8 purchases per user per 5-minute window over the whole month (silver)
+SELECT count(*) AS windows_with_purchase, max(n) AS max_purchases_in_window,
+       count(*) FILTER (WHERE n >= 4) AS windows_4_or_more
+FROM (SELECT user_id, time_bucket(INTERVAL 5 MINUTE, event_time) AS w, count(*) AS n
+      FROM read_parquet('data/silver/*/*/*.parquet', hive_partitioning = true)
+      WHERE event_type = 'purchase'
+      GROUP BY ALL)
+   windows_with_purchase = 60,258 | max_purchases_in_window = 5 | windows_4_or_more = 52
+

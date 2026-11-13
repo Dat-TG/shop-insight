@@ -1,0 +1,15 @@
+$ .venv/bin/python docs/evidence/review_20261113/r1_rfm_ties.py  (2026-11-13)
+DuckDB 1.5.5; read_parquet('data/warehouse/stg_rfm_snapshot/*/*.parquet', hive_partitioning = true)
+
+snapshot dates: 2019-11-07, 2019-11-14, 2019-11-21, 2019-11-28, 2019-11-30
+30/11: users 258,330, buyers 31,005, bought once 19,071 (61.5% of buyers)
+buyers per frequency (1..5, >= 6): [19071, 6107, 2418, 1168, 637, 1604]
+f_score of one-time buyers: [(1, 6201), (2, 6201), (3, 6201), (4, 468)]
+segment: one-time buyers / all buyers in the segment
+   at_risk           2,853 /  6,419  (44.4%)
+   champion            468 /  6,477  (7.2%)
+   hibernating       5,983 /  5,983  (100.0%)
+   loyal             3,348 /  5,707  (58.7%)
+   needs_attention   2,794 /  2,794  (100.0%)
+   promising         3,625 /  3,625  (100.0%)
+r_score of buyers with recency_days = 5: [(4, 360), (5, 572)]

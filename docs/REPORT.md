@@ -512,7 +512,7 @@ flowchart TB
     DD ---|date_key| FID
     FID ---|warehouse_key| DW
 ```
-<!-- PDF (T28): figures/report_4_4_star.png is this block rendered with Mermaid 11.17.2. -->
+<!-- PDF (T28): figures/report_4_4_star.png is now rendered from figures/report_4_4_star.mmd (an erDiagram with PK/FK and 1:N), not from this block. -->
 
 *Hình 4.4b. Star schema: ba fact (khung đôi), năm dimension, và khoá nối ghi trên cạnh. Đường chấm là `user_session`, khoá đi từ một phiên sang các sự kiện của phiên đó; phiên không có bảng dimension riêng.*
 

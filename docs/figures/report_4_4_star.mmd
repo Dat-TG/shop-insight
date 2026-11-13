@@ -1,0 +1,60 @@
+erDiagram
+    dim_user ||--o{ fact_event : "user_sk"
+    dim_user ||--o{ fact_session_funnel : "user_sk"
+    dim_event_type ||--o{ fact_event : "event_type_key"
+    dim_date ||--o{ fact_event : "date_key"
+    dim_product ||--o{ fact_event : "product_sk"
+    dim_product ||--o{ fact_inventory_daily : "product_sk"
+    dim_date ||--o{ fact_inventory_daily : "date_key"
+    dim_warehouse ||--o{ fact_inventory_daily : "warehouse_key"
+    fact_session_funnel ||..o{ fact_event : "user_session"
+
+    fact_event {
+        bigint event_sk PK
+        bigint user_sk FK
+        bigint product_sk FK
+        int date_key FK
+        smallint event_type_key FK
+        uuid user_session "degenerate"
+        numeric price
+    }
+    fact_session_funnel {
+        bigint session_sk PK
+        text user_session
+        bigint user_sk FK
+        smallint funnel_stage
+        numeric cart_value
+    }
+    fact_inventory_daily {
+        bigint product_sk FK
+        int date_key FK
+        smallint warehouse_key FK
+        int stock_on_hand
+        real days_to_stockout
+    }
+    dim_user {
+        bigint user_sk PK
+        bigint user_id
+        char rfm_cell "SCD2"
+        date valid_from
+        date valid_to
+    }
+    dim_product {
+        bigint product_sk PK
+        bigint product_id
+        numeric price "SCD2"
+        date valid_from
+        date valid_to
+    }
+    dim_date {
+        int date_key PK
+        boolean is_holiday
+    }
+    dim_event_type {
+        smallint event_type_key PK
+        smallint stage_rank
+    }
+    dim_warehouse {
+        smallint warehouse_key PK
+        smallint warehouse_id
+    }

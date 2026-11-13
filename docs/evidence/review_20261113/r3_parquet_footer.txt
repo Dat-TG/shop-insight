@@ -1,0 +1,10 @@
+$ .venv/bin/python docs/evidence/review_20261113/r3_parquet_footer.py  (2026-11-13)
+== fact_event: 31 files, 31 row groups ==
+date_key    INT32    chunks  31  with min/max  31  min = max  31
+event_time  INT96    chunks  31  with min/max   0  min = max   0
+price       INT64    chunks  31  with min/max  31  min = max   0  max per row group: 2,574.07 .. 2,574.07
+product_sk  INT64    chunks  31  with min/max  31  min = max   0
+== silver: 93 files, 93 row groups ==
+event_time  INT96    chunks  93  with min/max   0  min = max   0
+price       INT64    chunks  93  with min/max  93  min = max   0  max per row group: 1,644.59 .. 2,574.07
+fact_event rows with price > 1000: 236,207 of 4,754,015 (4.97%)
