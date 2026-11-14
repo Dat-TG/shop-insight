@@ -306,6 +306,19 @@ class StockoutRow(BaseModel):
     )
 
 
+class StockoutSummary(BaseModel):
+    """Counts over every SKU in the selected warehouses, for BR6's summary cards.
+
+    The list endpoint returns only the 100 most urgent SKUs per warehouse, so counting
+    its rows would miss most of the table. These counts read the whole slice.
+    """
+
+    critical: int = Field(..., description="days_to_stockout < 3")
+    low_stock: int = Field(..., description="3 <= days_to_stockout < 7")
+    no_sales: int = Field(..., description="days_to_stockout = 9999.0 (no sales in 7 days)")
+    total: int = Field(..., description="Every SKU in the selected warehouses")
+
+
 # ---------------------------------------------------------------------------
 # BR7 — Product Affinity (Parquet: product_affinity, from fact_event)
 # Gold: product_a, product_b, co_count, support, lift

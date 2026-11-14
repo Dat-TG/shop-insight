@@ -1,0 +1,7 @@
+$ .venv/bin/python docs/evidence/review_20261113/r6_br8_orders.py  (2026-11-13)
+whole month: 60,258 (user, 5-minute window) pairs with a purchase
+  by purchases: [(1, 55943), (2, 3800), (3, 463), (4, 42), (5, 10)]
+  percentiles 50 / 90 / 95 / 99 / 99.9 of purchases: [1, 1, 2, 2, 3]
+  windows with >= 4 orders: one purchase event = one order 52; one (user_session, event_time) = one order 52; one distinct product = one order 6
+replay 17 Nov 15:00-21:30, windows by purchases: [(1, 5475), (2, 295), (3, 42), (4, 3)]
+  alerts today (every window is low, medium or high): 5,815; proposed thresholds: medium 42, high 3

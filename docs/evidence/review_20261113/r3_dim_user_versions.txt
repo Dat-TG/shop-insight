@@ -1,0 +1,14 @@
+$ .venv/bin/python docs/evidence/review_20261113/r3_dim_user_versions.py  (2026-11-13)
+== dim_user versions ==
+rows 319,426  users 258,330  current 258,330  versions with version_no > 1: 61,096
+cell changes between snapshots: 61,096
+  NULL -> scored (first purchase): 23,974
+  scored -> other cell:            37,122
+  of which frequency and monetary unchanged: 31,204 (84.1% of 37,122)
+    only R changed: 23,172 (R down 23,172, R up 0)
+    F or M changed: 8,032
+== events that map to the 7 Nov snapshot ==
+silver events: 4,754,015
+events on 1-7 Nov: 794,272 (16.7%)
+  of users with a 7 Nov RFM cell: 140,609 (2.96% of all events)
+snapshot dates: 2019-11-07, 2019-11-14, 2019-11-21, 2019-11-28, 2019-11-30

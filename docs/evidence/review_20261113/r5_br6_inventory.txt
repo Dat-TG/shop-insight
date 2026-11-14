@@ -1,0 +1,17 @@
+$ .venv/bin/python -I docs/evidence/review_20261113/r5_br6_inventory.py  (2026-11-13, commit 82417f7)
+1. 30 Nov per warehouse: pairs, < 3 days, 3 to < 7 days, < 3 days with stock 0
+   warehouse 1  12,731   120    95    98
+   warehouse 2  12,731   118    95   106
+   warehouse 3  12,731   111    86    94
+   warehouse 4  12,731   104    81    90
+   warehouse 5  12,731   113    78   105
+   total        63,655   566   435   493
+   every warehouse has more than 100 critical pairs: True
+2. Parquet column types
+   velocity_7d        FLOAT
+   days_to_stockout   FLOAT
+   support            DOUBLE
+   lift               DOUBLE
+3. warehouse 1, product 1005161, 30 Nov
+   stock_on_hand 13, velocity_7d stored 2.2857143878936768, days_to_stockout stored 5.687499523162842
+   16/7 in 64 bit = 2.2857142857142856; 13 / (16/7) in 64 bit = 5.6875

@@ -26,7 +26,13 @@ const SEVERITY_CONFIG = {
   low:    { label: 'Low',    color: '#30d158', bg: 'rgba(48,209,88,0.08)',  badge: 'badge badge--success' },
 } as const;
 
-const SEVERITY_OPTIONS = ['all', 'high', 'medium', 'low'];
+// 'flagged' (the default) hides low alerts in the table: low is a single purchase in
+// five minutes, ordinary behaviour, and 94% of a day's alerts. It asks the API for
+// every severity, so the cards still count all three levels.
+const SEVERITY_OPTIONS = ['flagged', 'all', 'high', 'medium', 'low'];
+const SEVERITY_LABELS: Record<string, string> = {
+  flagged: 'Medium + High', all: 'All Severities', high: 'High', medium: 'Medium', low: 'Low',
+};
 
 // window_start is Vietnam wall clock with +07:00. Read first 19 chars as UTC for
 // arithmetic; toISOString gives the same wall clock back.
@@ -37,7 +43,7 @@ const money = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximum
 
 export default function BR8Page() {
   const [eventDate, setEventDate] = useState(DEMO_DATE);
-  const [severity, setSeverity]   = useState('all');
+  const [severity, setSeverity]   = useState('flagged');
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
 
   const [response, setResponse]   = useState<ApiResponse<VelocityAlertRow> | null>(null);
@@ -68,7 +74,10 @@ export default function BR8Page() {
     const load = () => {
       controller?.abort();
       controller = new AbortController();
-      const params = new URLSearchParams({ event_date: eventDate, severity });
+      const params = new URLSearchParams({
+        event_date: eventDate,
+        severity: severity === 'flagged' ? 'all' : severity,
+      });
       fetch(`${API_BASE}/api/br8/alerts?${params}`, { signal: controller.signal })
         .then(async r => {
           if (!r.ok) {
@@ -91,6 +100,7 @@ export default function BR8Page() {
   const highCount   = rows.filter(r => r.severity === 'high').length;
   const mediumCount = rows.filter(r => r.severity === 'medium').length;
   const lowCount    = rows.filter(r => r.severity === 'low').length;
+  const shown = severity === 'flagged' ? rows.filter(r => r.severity !== 'low') : rows;
   const secsAgo = fetchedAt ? Math.round((now - fetchedAt) / 1000) : null;
 
   return (
@@ -133,7 +143,7 @@ export default function BR8Page() {
               onChange={e => setSeverity(e.target.value)}
             >
               {SEVERITY_OPTIONS.map(s => (
-                <option key={s} value={s}>{s === 'all' ? 'All Severities' : s.charAt(0).toUpperCase() + s.slice(1)}</option>
+                <option key={s} value={s}>{SEVERITY_LABELS[s]}</option>
               ))}
             </select>
           </div>
@@ -188,27 +198,30 @@ export default function BR8Page() {
       )}
 
       {/* ── Empty State ─────────────────────────────────────── */}
-      {response && rows.length === 0 && (
+      {response && shown.length === 0 && (
         <div className="empty-panel">
           <ShieldAlert size={28} strokeWidth={1.5} className="empty-panel__icon" />
           <h3 className="empty-panel__title">No Alerts</h3>
           <p className="empty-panel__desc">
             No order velocity alerts found for {eventDate}
-            {severity !== 'all' ? ` with severity "${severity}"` : ''}.
+            {severity !== 'all' ? ` with severity "${SEVERITY_LABELS[severity]}"` : ''}.
             Try a different date or severity filter.
           </p>
         </div>
       )}
 
       {/* ── Alert Table ─────────────────────────────────────── */}
-      {response && rows.length > 0 && (
+      {response && shown.length > 0 && (
         <div className="content-stack">
           <div className="panel">
             <div className="panel__header">
               <div className="panel__title-group">
                 <h2 className="panel__title">Alert Timeline — {eventDate}</h2>
                 <span className="panel__subtitle">
-                  Newest window first · 5-minute rolling count per user
+                  Newest window first · orders per user in fixed 5-minute windows
+                  {severity === 'flagged' && lowCount > 0
+                    ? ` · ${lowCount.toLocaleString('en-US')} low alerts (1 order) hidden`
+                    : ''}
                 </span>
               </div>
             </div>
@@ -225,7 +238,7 @@ export default function BR8Page() {
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.slice(0, MAX_ROWS).map(row => {
+                  {shown.slice(0, MAX_ROWS).map(row => {
                     const sev = SEVERITY_CONFIG[row.severity as keyof typeof SEVERITY_CONFIG];
                     // Unique within a day: the table key is ((event_date), window_start, user_id).
                     // No index in it, so the expanded alert stays put when a refresh adds rows.
@@ -309,9 +322,9 @@ export default function BR8Page() {
                 </tbody>
               </table>
             </div>
-            {rows.length > MAX_ROWS && (
+            {shown.length > MAX_ROWS && (
               <span className="panel__subtitle">
-                Showing the {MAX_ROWS} newest of {rows.length.toLocaleString('en-US')} alerts. The counts above include all of them.
+                Showing the {MAX_ROWS} newest of {shown.length.toLocaleString('en-US')} alerts. The counts above include all of them.
               </span>
             )}
             <div className="panel__footer">

@@ -1,0 +1,55 @@
+$ .venv/bin/python docs/evidence/review_20261113/r1_raw_profile.py  (2026-11-13)
+DuckDB 1.5.5; raw = data/raw/2019-Nov.csv; bronze = data/bronze (7% user sample)
+
+1. purchases per Vietnam-time day (whole raw file)
+   2019-11-01    19,470
+   2019-11-02    21,903
+   2019-11-03    21,393
+   2019-11-04    27,233
+   2019-11-05    25,146
+   2019-11-06    24,934
+   2019-11-07    25,142
+   2019-11-08    25,354
+   2019-11-09    23,072
+   2019-11-10    22,979
+   2019-11-11    24,917
+   2019-11-12    22,762
+   2019-11-13    22,487
+   2019-11-14    23,192
+   2019-11-15     2,117
+   2019-11-16    68,247
+   2019-11-17   166,319
+   2019-11-18    43,573
+   2019-11-19    25,339
+   2019-11-20    24,889
+   2019-11-21    25,388
+   2019-11-22    24,376
+   2019-11-23    22,371
+   2019-11-24    22,737
+   2019-11-25    24,928
+   2019-11-26    24,277
+   2019-11-27    24,490
+   2019-11-28    23,865
+   2019-11-29    31,468
+   2019-11-30    28,413
+   2019-12-01     4,158
+   ranking: #1 2019-11-17 166,319, #2 2019-11-16 68,247, #3 2019-11-18 43,573, #4 2019-11-29 31,468, #5 2019-11-30 28,413
+   top day / Black Friday (29/11) = 166,319 / 31,468 = 5.29
+
+2. purchase-free gaps longer than 6 hours (UTC; add 7 hours for Vietnam time)
+   2019-11-14 18:09:37 -> 2019-11-16 08:32:34   38.38 h
+   2019-11-16 15:34:30 -> 2019-11-17 03:43:18   12.15 h
+
+3. events per type and conversion ratios
+   raw    view  63,556,110  cart  3,028,930  purchase  916,939 | cart/view 4.766%  purchase/view 1.443%  purchase/cart 30.27%
+   bronze view   4,487,269  cart    214,593  purchase   65,150 | cart/view 4.782%  purchase/view 1.452%  purchase/cart 30.36%
+
+4. source rate, whole marketplace (raw file)
+   month: 67,501,979 events / (30 x 86,400 s) = 26.0 events/s
+   demo window 17/11 08:00-14:30 UTC: 2,670,632 events / 23,400 s = 114.1 events/s
+   busiest minute 2019-11-17 14:37 UTC: 8,415 events = 140.2 events/s
+   replay 480.7 rows/s (streaming_perf.txt run 1) / window rate = 4.21; / busiest minute = 3.43
+
+5. exact duplicate rows in the raw file, cart and purchase only (all nine columns equal)
+   cart     extra rows  98,912 of 3,028,930 (3.27%), largest group 78
+   purchase extra rows       9 of   916,939 (0.00%), largest group 2

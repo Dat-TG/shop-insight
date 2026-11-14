@@ -1,0 +1,29 @@
+$ .venv/bin/python -I docs/evidence/review_20261113/r5_br8_thresholds.py  (2026-11-13, commit 82417f7)
+1. month: (user, 5-minute window) pairs with a purchase: 60,258
+   1 purchase(s)   55,943   92.84%   cumulative  92.84%
+   2 purchase(s)    3,800    6.31%   cumulative  99.15%
+   3 purchase(s)      463    0.77%   cumulative  99.91%
+   4 purchase(s)       42    0.07%   cumulative  99.98%
+   5 purchase(s)       10    0.02%   cumulative 100.00%
+   2 or 3 purchases (medium): 4,263 = 7.07%
+   4 or more (high): 52
+2. replay 17 Nov 15:00-21:30: level, alerts, in one session, all different products, one product
+   low    5,475 5,475 5,475 5,475
+   medium   337   301   178   148
+   high       3     3     0     2
+   all 5,815; low share 94.2%
+3. high alerts of the replay, event by event: window, user, session, product, price, time, category
+   16:15  539257885  8417cecc  1005116    1013.82  16:15:22  electronics.smartphone apple
+   16:15  539257885  8417cecc  1005116    1013.82  16:17:38  electronics.smartphone apple
+   16:15  539257885  8417cecc  1005116    1013.82  16:18:40  electronics.smartphone apple
+   16:15  539257885  8417cecc  1005116    1013.82  16:19:39  electronics.smartphone apple
+   20:30  568969177  497521af  26400318     242.22  20:30:24  - lucente
+   20:30  568969177  497521af  26400318     242.22  20:31:38  - lucente
+   20:30  568969177  497521af  26400318     242.22  20:33:04  - lucente
+   20:30  568969177  497521af  26400318     242.22  20:33:33  - lucente
+   20:40  531234392  098e4f69  12400203      84.60  20:41:40  construction.tools.drill patriot
+   20:40  531234392  098e4f69  22700127     100.39  20:42:50  - stels
+   20:40  531234392  098e4f69  22700127     100.39  20:43:46  - stels
+   20:40  531234392  098e4f69  22700127     100.39  20:44:51  - stels
+4. silver columns: ['event_time', 'product_id', 'category_id', 'category_code', 'category_l1', 'category_l2', 'category_l3', 'brand', 'price', 'user_id', 'user_session', 'event_date', 'event_type']
+   a quantity or order id column: False

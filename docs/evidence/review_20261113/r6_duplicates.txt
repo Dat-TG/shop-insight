@@ -1,0 +1,14 @@
+$ .venv/bin/python docs/evidence/review_20261113/r6_duplicates.py  (2026-11-13)
+silver, exact duplicates by event_type:
+  cart      events     214,286  extra duplicate rows   7,191 (3.36%)  largest group 32
+  purchase  events      65,150  extra duplicate rows       1 (0.00%)  largest group 2
+  view      events   4,474,579  extra duplicate rows     120 (0.00%)  largest group 3
+silver rows 4,754,015; removed by DISTINCT on every column 7,312; removed by DISTINCT on (user_session, product_id, event_type, event_time) 7,312
+silver purchases 65,150; same product bought again in the same session: 4,085 extra rows (6.27%)
+bronze (7% sample, before cleaning), exact duplicates by event_type:
+  cart      events     214,593  extra duplicate rows   7,194 (3.35%)  largest group 32
+  purchase  events      65,150  extra duplicate rows       1 (0.00%)  largest group 2
+  view      events   4,487,269  extra duplicate rows     120 (0.00%)  largest group 3
+raw CSV (all 67.5M events), exact duplicates, cart and purchase only:
+  cart      events   3,028,930  extra duplicate rows  98,912 (3.27%)  largest group 78
+  purchase  events     916,939  extra duplicate rows       9 (0.00%)  largest group 2

@@ -1,0 +1,31 @@
+$ .venv/bin/python docs/evidence/review_20261113/r1_raw_scan_timing.py  (2026-11-13)
+machine  Dat-Xiaoxin | 20 logical cores | 15.3 GB RAM
+versions Python 3.14.4 | DuckDB 1.5.5
+file     data/raw/2019-Nov.csv, 9,006,762,395 bytes
+SELECT coalesce(nullif(split_part(category_code, '.', 1), ''), 'unknown') AS category_l1,
+       sum(price) AS revenue, count(*) AS orders
+FROM read_csv('data/raw/2019-Nov.csv', header = true, columns = {'event_time': 'VARCHAR', 'event_type': 'VARCHAR', 'product_id': 'BIGINT', 'category_id': 'BIGINT', 'category_code': 'VARCHAR', 'brand': 'VARCHAR', 'price': 'DECIMAL(10,2)', 'user_id': 'BIGINT', 'user_session': 'VARCHAR'})
+WHERE event_type = 'purchase'
+GROUP BY 1 ORDER BY revenue DESC
+run 1    page cache before   0.4 GB | wall   9.05 s | cpu   21.3 s | busy cores (cpu/wall)   2.4
+run 2    page cache before   8.8 GB | wall   6.91 s | cpu   20.4 s | busy cores (cpu/wall)   3.0
+run 3    page cache before   8.8 GB | wall   4.30 s | cpu   16.7 s | busy cores (cpu/wall)   3.9
+run 4    page cache before   8.8 GB | wall   1.73 s | cpu   23.4 s | busy cores (cpu/wall)  13.5
+top 2 groups: [('electronics', '205,250,118.21', 493639), ('unknown', '29,880,506.68', 234218)]
+groups: 14 | orders: 916,939
+
+$ .venv/bin/python docs/evidence/review_20261113/r1_raw_scan_timing.py  (2026-11-13, second session, file already cached)
+machine  Dat-Xiaoxin | 20 logical cores | 15.3 GB RAM
+versions Python 3.14.4 | DuckDB 1.5.5
+file     data/raw/2019-Nov.csv, 9,006,762,395 bytes
+SELECT coalesce(nullif(split_part(category_code, '.', 1), ''), 'unknown') AS category_l1,
+       sum(price) AS revenue, count(*) AS orders
+FROM read_csv('data/raw/2019-Nov.csv', header = true, columns = {'event_time': 'VARCHAR', 'event_type': 'VARCHAR', 'product_id': 'BIGINT', 'category_id': 'BIGINT', 'category_code': 'VARCHAR', 'brand': 'VARCHAR', 'price': 'DECIMAL(10,2)', 'user_id': 'BIGINT', 'user_session': 'VARCHAR'})
+WHERE event_type = 'purchase'
+GROUP BY 1 ORDER BY revenue DESC
+run 1    page cache before   8.8 GB | wall   2.33 s | cpu   22.6 s | busy cores (cpu/wall)   9.7
+run 2    page cache before   8.8 GB | wall   1.84 s | cpu   24.5 s | busy cores (cpu/wall)  13.3
+run 3    page cache before   8.8 GB | wall   1.76 s | cpu   23.5 s | busy cores (cpu/wall)  13.4
+run 4    page cache before   8.8 GB | wall   1.73 s | cpu   23.9 s | busy cores (cpu/wall)  13.8
+top 2 groups: [('electronics', '205,250,118.21', 493639), ('unknown', '29,880,506.68', 234218)]
+groups: 14 | orders: 916,939

@@ -5,7 +5,7 @@ import {
   RefreshCw,
   Warehouse,
 } from 'lucide-react';
-import type { ApiResponse, StockoutRow } from '../types/api';
+import type { ApiResponse, StockoutRow, StockoutSummary } from '../types/api';
 import QueryMeta from '../components/QueryMeta';
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:8000';
@@ -43,6 +43,9 @@ export default function BR6Page() {
   const [maxDays, setMaxDays]         = useState<string>('');
 
   const [response, setResponse] = useState<ApiResponse<StockoutRow> | null>(null);
+  // The cards count every SKU in scope (GET /api/br6/summary); the table shows only
+  // the most urgent ones, so counting its rows would undercount.
+  const [summary, setSummary]   = useState<StockoutSummary | null>(null);
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState<string | null>(null);
 
@@ -85,20 +88,23 @@ export default function BR6Page() {
       .finally(() => {
         if (controllerRef.current === controller) setLoading(false);
       });
+    fetch(`${API_BASE}/api/br6/summary?${params}`, { signal: controller.signal })
+      .then(r => (r.ok ? (r.json() as Promise<ApiResponse<StockoutSummary>>) : null))
+      .then(json => { if (json) setSummary(json.data[0] ?? null); })
+      .catch(() => { /* the cards fall back to "–"; the table's error banner covers failures */ });
   };
 
   // Only a filter change clears the table: the old rows answer another question.
   useEffect(() => {
     setResponse(null);
+    setSummary(null);
     setError(null);
     fetchData();
     return () => controllerRef.current?.abort();
   }, [warehouseId, maxDays]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const rows = response?.data ?? [];
-  const criticalCount = rows.filter(r => r.days_to_stockout < CRITICAL_DAYS).length;
-  const warningCount  = rows.filter(r => r.days_to_stockout >= CRITICAL_DAYS && r.days_to_stockout < WARNING_DAYS).length;
-  const noSalesCount  = rows.filter(r => r.days_to_stockout >= SENTINEL).length;
+  const fmt = (n: number | undefined) => (n === undefined ? '–' : n.toLocaleString('en-US'));
 
   return (
     <div className="page">
@@ -182,21 +188,21 @@ export default function BR6Page() {
         <div className="br8-summary">
           <div className="br8-summary__card br8-summary__card--high">
             <AlertTriangle size={18} />
-            <span className="br8-summary__count">{criticalCount}</span>
+            <span className="br8-summary__count">{fmt(summary?.critical)}</span>
             <span className="br8-summary__label">Critical (&lt;3 d)</span>
           </div>
           <div className="br8-summary__card br8-summary__card--medium">
             <AlertTriangle size={18} />
-            <span className="br8-summary__count">{warningCount}</span>
+            <span className="br8-summary__count">{fmt(summary?.low_stock)}</span>
             <span className="br8-summary__label">Low Stock (3–7 d)</span>
           </div>
           <div className="br8-summary__card">
             <Warehouse size={18} />
-            <span className="br8-summary__count">{noSalesCount}</span>
+            <span className="br8-summary__count">{fmt(summary?.no_sales)}</span>
             <span className="br8-summary__label">No Sales</span>
           </div>
           <div className="br8-summary__card">
-            <span className="br8-summary__count">{rows.length}</span>
+            <span className="br8-summary__count">{fmt(summary?.total)}</span>
             <span className="br8-summary__label">Total SKUs</span>
           </div>
         </div>
@@ -222,7 +228,8 @@ export default function BR6Page() {
               <div className="panel__title-group">
                 <h2 className="panel__title">Stockout Risk — Most Urgent First</h2>
                 <span className="panel__subtitle">
-                  Sorted by days_to_stockout ASC · ∞ = zero velocity last 7 days
+                  Sorted by days_to_stockout ASC · ∞ = zero velocity last 7 days ·
+                  showing the {rows.length.toLocaleString('en-US')} most urgent; the cards count every SKU
                 </span>
               </div>
             </div>

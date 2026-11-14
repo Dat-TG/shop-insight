@@ -1,0 +1,17 @@
+$ .venv/bin/python docs/evidence/review_20261113/r6_sample_vs_full.py  (2026-11-13)
+== bronze, 7% user sample: 4,767,012 events, 258,390 users
+  sessions 971,868; with a cart or purchase 13.59%; with a purchase 5.65%
+  BR8 (user, 5-minute window) pairs with a purchase 60,258; >= 2 purchases 4,315 (7.16%); >= 4 purchases 52 (0.086%); largest 5
+  BR7 rule: purchase sessions 54,904; products in >= 20 sessions 364; product pairs with co_count >= 3 and lift > 1 157
+  (0.2 s)
+== raw CSV, full file: 67,501,979 events, 3,696,117 users
+  sessions 13,776,050; with a cart or purchase 13.56%; with a purchase 5.61%
+  BR8 (user, 5-minute window) pairs with a purchase 848,399; >= 2 purchases 59,740 (7.04%); >= 4 purchases 1,142 (0.135%); largest 8
+  BR7 rule: purchase sessions 773,214; products in >= 20 sessions 4,462; product pairs with co_count >= 3 and lift > 1 1,996
+  (12.8 s)
+== silver (for the link to the gold table): 4,754,015 events, 258,330 users
+  sessions 970,797; with a cart or purchase 13.60%; with a purchase 5.66%
+  BR8 (user, 5-minute window) pairs with a purchase 60,258; >= 2 purchases 4,315 (7.16%); >= 4 purchases 52 (0.086%); largest 5
+  BR7 rule: purchase sessions 54,904; products in >= 20 sessions 364; product pairs with co_count >= 3 and lift > 1 157
+  (0.2 s)
+gold product_affinity rows (each pair stored in both directions): 314

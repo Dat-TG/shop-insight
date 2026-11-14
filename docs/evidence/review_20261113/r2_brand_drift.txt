@@ -1,0 +1,10 @@
+$ .venv/bin/python -I docs/evidence/review_20261113/r2_brand_drift.py   # run 2026-11-13
+silver events                                    4,754,015
+events joined to their dim_product version       4,754,015
+category_l1 differs from the version                     0
+brand differs from the version                       8,924  (0.19%), 511 products
+  event 'unknown', version a real brand              8,541
+  event a real brand, version 'unknown'                 62
+  two different real brands                            321
+products with more than one brand in silver            612
+dim_product current versions (is_current)          128,972

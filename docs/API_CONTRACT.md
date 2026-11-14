@@ -516,6 +516,35 @@ the `NULL` that the star schema (`fact_inventory_daily`) stores honestly.
 }
 ```
 
+### 8.1 Summary cards (added 2026-11-14)
+
+**Endpoint:** `GET /api/br6/summary` — same query parameters as `/api/br6/stockout`.
+
+The list above returns at most 105 rows per warehouse, so counting its rows cannot
+fill the summary cards: on 14 Nov the list held 525 rows, and the table 63,655. This
+endpoint counts over the whole slice of the selected warehouses with `COUNT(*)` on a
+`days_to_stockout` range inside each warehouse partition, 4 counts per warehouse run
+concurrently. `/api/br6/stockout` itself is unchanged.
+
+**Response row fields** (`data` holds exactly one row):
+
+| Field | Type | Nullable | Notes |
+|---|---|---|---|
+| `critical` | `integer` | No | `days_to_stockout < 3` |
+| `low_stock` | `integer` | No | `3 ≤ days_to_stockout < 7` |
+| `no_sales` | `integer` | No | `days_to_stockout = 9999.0` |
+| `total` | `integer` | No | every SKU in the selected warehouses |
+
+`max_days` caps every count, as it caps the list.
+
+**Example response** (all five warehouses, 14 Nov 2026; cross-checked with cqlsh):
+```json
+{
+  "data": [ { "critical": 566, "low_stock": 435, "no_sales": 58003, "total": 63655 } ],
+  "meta": { "ms": 29.5, "warehouse": "Cassandra", "partitions": 5, "rows": 1 }
+}
+```
+
 ---
 
 ## 9. BR7 — Product Affinity

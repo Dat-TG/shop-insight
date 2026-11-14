@@ -1,0 +1,7 @@
+$ .venv/bin/python docs/evidence/review_20261113/r1_inventory_waiting.py  (2026-11-13)
+DuckDB 1.5.5; read_parquet('data/warehouse/fact_inventory_daily/*/*.parquet', hive_partitioning = true)
+
+pairs 63,655; below the reorder point on every day: 6,454 (10.1%)
+below the reorder point on 30/11: 10.6% of pairs
+30/11, under 3 days of stock: 566; of them at zero stock: 493; of those, always-below pairs: 474
+30/11, always-below pairs at zero stock (any velocity): 4,338

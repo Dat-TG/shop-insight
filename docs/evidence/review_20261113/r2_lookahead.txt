@@ -1,0 +1,8 @@
+$ .venv/bin/python -I docs/evidence/review_20261113/r2_lookahead.py   # run 2026-11-13
+silver events                          4,754,015
+events 1-7 Nov                           794,272  (16.7% of silver)
+customers with an event 1-7 Nov           85,244
+  events of customers scored at 7 Nov    140,609
+    before their first purchase           72,760  (9.2% of week-one events), 7,030 customers
+    at or after their first purchase      67,849
+  events of customers not scored         653,663  (no purchase by 7 Nov: 'not bought' is correct)

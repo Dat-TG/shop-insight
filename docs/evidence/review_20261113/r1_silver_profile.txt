@@ -1,0 +1,65 @@
+$ .venv/bin/python docs/evidence/review_20261113/r1_silver_profile.py  (2026-11-13)
+DuckDB 1.5.5; silver = data/silver, fact_session_funnel = data/warehouse
+
+1. silver per day around the purchase gap (Vietnam time)
+   2019-11-14  events  162,511  purchases  1,604  purchase/view 1.03%
+   2019-11-15  events  422,036  purchases    170  purchase/view 0.04%
+   2019-11-16  events  456,247  purchases  4,853  purchase/view 1.15%
+   2019-11-17  events  482,049  purchases 11,736  purchase/view 2.68%
+   2019-11-18  events  167,040  purchases  3,115  purchase/view 2.00%
+
+2. events per hour of day (silver, all month), hour in Vietnam time and UTC
+   00:00 VN = 17:00 UTC   308,858
+   01:00 VN = 18:00 UTC   229,493
+   02:00 VN = 19:00 UTC   164,400
+   03:00 VN = 20:00 UTC    97,223
+   04:00 VN = 21:00 UTC    59,429
+   05:00 VN = 22:00 UTC    34,136
+   06:00 VN = 23:00 UTC    23,624
+   07:00 VN = 00:00 UTC    32,391
+   08:00 VN = 01:00 UTC    58,586
+   09:00 VN = 02:00 UTC   120,911
+   10:00 VN = 03:00 UTC   168,572
+   11:00 VN = 04:00 UTC   214,331
+   12:00 VN = 05:00 UTC   239,479
+   13:00 VN = 06:00 UTC   249,688
+   14:00 VN = 07:00 UTC   251,287
+   15:00 VN = 08:00 UTC   257,789
+   16:00 VN = 09:00 UTC   258,622
+   17:00 VN = 10:00 UTC   258,792
+   18:00 VN = 11:00 UTC   251,158
+   19:00 VN = 12:00 UTC   254,108
+   20:00 VN = 13:00 UTC   278,597
+   21:00 VN = 14:00 UTC   309,274
+   22:00 VN = 15:00 UTC   316,675
+   23:00 VN = 16:00 UTC   316,592
+   quietest hour: 06:00 VN (23,624 events); four busiest: 00:00, 21:00, 22:00, 23:00 VN
+   sessions whose events fall on two dates, of 970,797 sessions:
+     Vietnam time (UTC+7)    7,433  (0.77%)
+     UTC+3                   3,206  (0.33%)
+     UTC                     2,426  (0.25%)
+
+3. silver purchases dated 2019-12-01: 286
+
+4. exact duplicate rows in silver (event_time, event_type, product_id, price, user_id, user_session all equal)
+   cart     extra rows  7,191 of   214,286 (3.36%), largest group 32
+   purchase extra rows      1 of    65,150 (0.00%), largest group 2
+   view     extra rows    120 of 4,474,579 (0.00%), largest group 3
+   total extra rows 7,312
+   sessions that carted and never bought: 77,098; with a duplicated cart row: 1,848
+   their cart value: with duplicates 37,305,392.91, without 35,998,980.60, excess 1,306,412.31 (3.63% of the deduplicated value)
+
+5. purchases per (user, fixed 5-minute window), silver, all month
+   1 purchase(s): 55,943 windows
+   2 purchase(s):  3,800 windows
+   3 purchase(s):    463 windows
+   4 purchase(s):     42 windows
+   5 purchase(s):     10 windows
+   windows with a purchase 60,258; max purchases in one window 5; windows with >= 10: 0
+
+6. abandoned sessions (fact_session_funnel.is_abandoned) per session_start_date
+   days 31; most: 2019-11-15 with 18,285; median per day 1,589.0
+   2019-11-14   2,121
+   2019-11-15  18,285
+   2019-11-16  13,085
+   2019-11-17   8,598

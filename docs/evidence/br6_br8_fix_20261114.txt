@@ -1,0 +1,29 @@
+# BR6 summary cards and BR8 default filter - product fix of 2026-11-14
+# machine  Dat's machine (WSL2, Ubuntu 26.04.1); Cassandra 4.1.12 in Docker, data from the 10 Nov build
+# why      report 6.3 counted BR6 and BR8 as partial answers: BR6's cards counted only the 525 rows the
+#          list returns (100 most urgent per warehouse + 5 no-sales), and 94.2% of BR8's alerts are 'low'.
+# change   GET /api/br6/summary (API_CONTRACT 8.1) counts every SKU; BR6Page's cards read it.
+#          BR8Page defaults to 'Medium + High': low alerts are hidden in the table, the cards still count all.
+
+## 1. /api/br6/summary vs cqlsh, all five warehouses
+$ curl -s localhost:8000/api/br6/summary
+{"data":[{"critical":566,"low_stock":435,"no_sales":58003,"total":63655}],"meta":{"ms":28.14,"warehouse":"Cassandra","partitions":5,"rows":1}}
+cqlsh, sum over warehouses 1-5, days_to_stockout < 3: 566
+cqlsh, sum over warehouses 1-5, days_to_stockout >= 3 AND days_to_stockout < 7: 435
+cqlsh, sum over warehouses 1-5, days_to_stockout >= 9999: 58003
+cqlsh, sum over warehouses 1-5, all rows: 63655
+$ curl -s "localhost:8000/api/br6/summary?warehouse_id=3&max_days=2"
+{"data":[{"critical":104,"low_stock":0,"no_sales":0,"total":104}],"meta":{"ms":3.98,"warehouse":"Cassandra","partitions":1,"rows":1}}
+$ curl -s localhost:8000/api/br6/stockout   (list endpoint, unchanged)
+rows 525 meta {'ms': 18.47, 'warehouse': 'Cassandra', 'partitions': 5, 'rows': 525}
+
+## 2. Timing, 3 warm-up calls then 20 timed, one client calling one after another
+br6 summary   curl p50   40.6 p95   44.7 ms | meta p50   37.6 p95   41.2 ms
+br6 stockout  curl p50   17.7 p95   21.4 ms | meta p50   14.2 p95   17.0 ms
+
+## 3. BR8, 2019-11-17: what the default view hides
+all alerts 5815 {'low': 5475, 'medium': 337, 'high': 3} -> shown by default (medium + high): 340 , hidden low: 5475
+
+## 4. Screens
+logs/slide_shots_v25/br6.png and br8.png (1440 px, captured with Playwright from the built web app, table trimmed to
+five or six rows like logs/slide_shots). Web build: npm run build OK; tests/test_fixtures.py unchanged and passing.
