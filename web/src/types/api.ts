@@ -260,6 +260,21 @@ export interface StockoutRow {
   velocity_7d: number;
 }
 
+/**
+ * BR6 summary cards — GET /api/br6/summary. Counts over every SKU in the selected
+ * warehouses, not only the 100 most urgent per warehouse that /stockout returns.
+ */
+export interface StockoutSummary {
+  /** days_to_stockout < 3 */
+  critical: number;
+  /** 3 <= days_to_stockout < 7 */
+  low_stock: number;
+  /** days_to_stockout = 9999.0 (no sales in 7 days) */
+  no_sales: number;
+  /** Every SKU in the selected warehouses */
+  total: number;
+}
+
 // =============================================================================
 // BR7 — Product Affinity  (Parquet: product_affinity, from fact_event)
 // Gold: product_a, product_b, co_count, support, lift

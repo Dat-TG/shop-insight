@@ -18,6 +18,11 @@ GET /api/br6/stockout
     skipped when max_days is below 9999; a product the first read already
     returned is not repeated.  So at most 105 rows per warehouse.
 
+GET /api/br6/summary   (added 2026-11-14, API_CONTRACT section 8.1)
+    Same query parameters. One row of counts over EVERY SKU in the selected
+    warehouses (critical < 3 days, low_stock 3-7, no_sales 9999.0, total), for
+    the screen's summary cards; counting the list's rows would undercount.
+
 Response shape
 --------------
 {
@@ -62,13 +67,15 @@ import time
 from fastapi import APIRouter, Query
 
 from serving.api.cassandra import session
-from serving.api.models import ApiResponse, QueryMeta, StockoutRow
+from serving.api.models import ApiResponse, QueryMeta, StockoutRow, StockoutSummary
 
 router = APIRouter(prefix="/api/br6", tags=["BR6 — Stockout Risk"])
 
 _LIMIT_PER_WAREHOUSE = 100
 _NO_SALES = 9999.0           # the days_to_stockout sentinel for velocity_7d = 0
 _NO_SALES_PER_WAREHOUSE = 5  # no-sales SKUs shown per warehouse, after the urgent ones
+_CRITICAL_DAYS = 3.0         # the screen's red band, days_to_stockout < 3
+_WARNING_DAYS = 7.0          # the screen's amber band, 3 <= days_to_stockout < 7
 
 
 @functools.cache
@@ -156,5 +163,86 @@ def get_stockout(
             warehouse="Cassandra",
             partitions=len(warehouses),
             rows=len(data),
+        ),
+    )
+
+
+@functools.cache
+def _count(lower: str, upper: str):
+    """COUNT(*) inside one warehouse partition, over a slice of days_to_stockout.
+
+    lower and upper are CQL comparisons such as ">= ?" or "< ?" ("" = unbounded).
+    days_to_stockout is the first clustering column, so the slice stays inside the
+    partition and the count reads only that warehouse's rows in the range.
+    """
+    where = "warehouse_id = ?"
+    if lower:
+        where += f" AND days_to_stockout {lower}"
+    if upper:
+        where += f" AND days_to_stockout {upper}"
+    return session().prepare(f"SELECT COUNT(*) FROM stockout_risk WHERE {where}")
+
+
+def _start_count(warehouse: int, low: float | None, high: float | None,
+                 max_days: float | None):
+    """Start counting rows with low <= days_to_stockout < high, capped at max_days.
+
+    Returns a driver future, or None when the range is empty. The caller starts every
+    count first and then waits, so the 20 small counts of five warehouses run at once.
+    """
+    upper, high_value = ("< ?", high) if high is not None else ("", None)
+    if max_days is not None and (high is None or max_days < high):
+        upper, high_value = "<= ?", float(max_days)
+    if low is not None and high_value is not None and high_value < low:
+        return None
+    params = [warehouse]
+    if low is not None:
+        params.append(low)
+    if upper:
+        params.append(high_value)
+    statement = _count(">= ?" if low is not None else "", upper)
+    return session().execute_async(statement, params)
+
+
+@router.get(
+    "/summary",
+    response_model=ApiResponse,
+    summary="Stockout risk counts over every SKU",
+    description=(
+        "Counts for the BR6 summary cards over the whole stockout_risk slice of the "
+        "selected warehouses, not only the rows /stockout returns: critical (< 3 days), "
+        "low stock (3-7 days), no sales (9999.0) and total. `max_days` caps every count, "
+        "as it caps the list."
+    ),
+)
+def get_stockout_summary(
+    warehouse_id: int | None = Query(
+        None, ge=1, le=5, description="Warehouse 1-5; omit for all five"
+    ),
+    max_days: float | None = Query(
+        None, gt=0, description="Only SKUs with days_to_stockout <= max_days; omit for all"
+    ),
+) -> ApiResponse:
+    warehouses = [warehouse_id] if warehouse_id is not None else [1, 2, 3, 4, 5]
+    counts = {"critical": 0, "low_stock": 0, "no_sales": 0, "total": 0}
+    started = time.perf_counter()
+    pending = []
+    for wh in warehouses:
+        pending.append(("critical", _start_count(wh, None, _CRITICAL_DAYS, max_days)))
+        pending.append(("low_stock", _start_count(wh, _CRITICAL_DAYS, _WARNING_DAYS, max_days)))
+        pending.append(("no_sales", _start_count(wh, _NO_SALES, None, max_days)))
+        pending.append(("total", _start_count(wh, None, None, max_days)))
+    for key, future in pending:
+        if future is not None:
+            counts[key] += future.result().one()[0]
+    elapsed_ms = (time.perf_counter() - started) * 1000
+
+    return ApiResponse(
+        data=[StockoutSummary(**counts)],
+        meta=QueryMeta(
+            ms=round(elapsed_ms, 2),
+            warehouse="Cassandra",
+            partitions=len(warehouses),
+            rows=1,
         ),
     )
