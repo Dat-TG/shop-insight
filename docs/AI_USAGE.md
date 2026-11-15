@@ -3477,9 +3477,15 @@ self-reflection slot and the line saying many checks were themselves done by AI 
 coordinated and decided over the team chat, which this file cannot see; give each member's own work its own section;
 say the run guide uses the GitHub link. This file is unchanged on those points.
 
+Decided by Dat (15 Nov), for the run guide and the release: the GitHub link is enough, so the zip fallback is removed
+from `docs/RUN_GUIDE_VI.md` 3 (the `WINHOME` line it held moved to the Windows branch of "Cách C" in 4, its only other
+user); merge this branch into `main` and move tag `submission-2026-11-15` (was `92be460`) to the merge commit.
+
 Open, for the team:
 - **The report's disclosure sits in Appendix A.1, not in the references or a footnote**, which is where the course
   rule asks for it, and it says "một phần" where this file records that AI drafted most code and documents.
-- **The summary is not in tag `submission-2026-11-15`** (on `92be460`), which is what the run guide clones. Whether
-  to move the tag is Dat's call.
+- **The repo is still private.** Without the zip, the guide's `git clone` is the only way in, so the repo must be
+  public (or the lecturer added) before grading.
+- **The Drive copy of the guide (PDF) and `Group15_ShopInsight_source.zip`** still describe the old tag and the
+  fallback until they are replaced.
 - **55 lines of this file still say "human review pending".**

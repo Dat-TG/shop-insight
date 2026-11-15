@@ -244,18 +244,6 @@ mã nguồn nặng 455 MB.
 > Windows mặc định đổi ký tự xuống dòng sang kiểu Windows và làm hỏng `run_demo.sh`; mã nguồn đặt dưới `/mnt/c` cũng
 > chạy chậm hơn nhiều.
 
-**Dự phòng khi chưa truy cập được GitHub.** Cùng thư mục Google Drive với tài liệu này có tệp
-`Group15_ShopInsight_source.zip`, có nội dung đúng bằng tag `submission-2026-11-15`. Chép tệp vào thư mục home, chạy
-`cd ~ && unzip Group15_ShopInsight_source.zip` thay cho lệnh `git clone`, rồi chạy tiếp từ dòng `cd ~/shop-insight`.
-Trên Windows, trình duyệt lưu tệp vào thư mục Downloads của Windows; chép tệp sang Ubuntu bằng hai lệnh dưới đây (lệnh
-đầu tìm thư mục người dùng Windows, kể cả khi tên có dấu cách). Trên macOS, Safari có thể tự giải nén tệp zip và chuyển
-tệp zip vào Thùng rác; khi đó lấy lại tệp bằng Put Back trong Thùng rác.
-
-```bash
-WINHOME="$(wslpath "$(cmd.exe /c 'echo %USERPROFILE%' 2>/dev/null | tr -d '\r')")"
-cp "$WINHOME/Downloads/Group15_ShopInsight_source.zip" ~
-```
-
 Các thư mục chính của mã nguồn:
 
 | Thư mục | Nội dung |
@@ -303,8 +291,13 @@ curl -L https://data.rees46.com/datasets/marketplace/2019-Nov.csv.gz \
 **Cách C:** tải bằng trình duyệt từ trang Kaggle (cần đăng nhập):
 <https://www.kaggle.com/datasets/mkechinov/ecommerce-behavior-data-from-multi-category-store>. Chọn tệp `2019-Nov.csv`;
 trình duyệt tải về tệp `2019-Nov.csv.zip`. Giải nén vào `data/raw/`: trên Linux và macOS dùng
-`unzip ~/Downloads/2019-Nov.csv.zip -d data/raw/`, trên Windows dùng `unzip "$WINHOME/Downloads/2019-Nov.csv.zip" -d data/raw/`
-(đặt biến `WINHOME` bằng dòng `WINHOME=...` trong phần dự phòng ở cuối mục 3).
+`unzip ~/Downloads/2019-Nov.csv.zip -d data/raw/`. Trên Windows, trình duyệt lưu tệp vào thư mục Downloads của
+Windows; hai lệnh dưới đây tìm thư mục người dùng Windows (kể cả khi tên có dấu cách) rồi giải nén từ đó:
+
+```bash
+WINHOME="$(wslpath "$(cmd.exe /c 'echo %USERPROFILE%' 2>/dev/null | tr -d '\r')")"
+unzip "$WINHOME/Downloads/2019-Nov.csv.zip" -d data/raw/
+```
 
 Kiểm tra kích thước tệp. Lệnh phải in ra `9006762395` (trên macOS có thêm một dấu cách phía trước):
 
