@@ -3490,3 +3490,44 @@ Open, for the team:
 - **The Drive copy of the guide (PDF) and `Group15_ShopInsight_source.zip`** describe the old tag and the fallback
   until they are replaced.
 - **55 lines of this file still say "human review pending".**
+
+## Session 51 — 15 November 2026 (W46)
+
+**Tool:** Claude Code (Opus 5.5), main session.
+**Scope:** closes Session 50's open points on the release after PR #57 merged, records what a parallel session did
+for the run guide on 15 Nov (PR #56), and supersedes what Session 48 says about the tag and the zip. The same PR
+commits Dat's deck speaker notes (`docs/project_deck.md`, app Version 39), which Session 49 describes. Documents only.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| This block | AI-written; every claim below re-checked in this session |
+| `docs/project_deck.md` synced with deck app Version 39 (Dat's notes for pages 08-11 and 16-17) | Committed at Dat's request; the text is as Session 49 describes |
+| Tag `submission-2026-11-15` moved from `92be460` to `1163498` (PR #57 merge), then to the merge of this PR | Done at Dat's request; lightweight tag |
+
+### How it was checked
+
+| Claim | How it was checked |
+|---|---|
+| The guide clones `main` with no zip fallback | `git show 5013610` (PR #56): mục 3 and the appendix run a plain `git clone https://github.com/Dat-TG/shop-insight.git`; the fallback paragraph is gone |
+| The Drive folder holds only the new PDF | Drive search `parentId = '149p3uTCyKT-oo3At2kYf7jJhFCgDsUoK'`: one file, `Group15_ShopInsight_RunGuide.pdf`, created 15 Nov 13:50 UTC |
+| An annotated tag misleads `git clone --branch` | git 2.53.0 on a scratch repo: cloning an annotated tag prints `warning: refs/tags/ann ... is not a commit!`; a lightweight tag clones without it |
+
+### What the AI got wrong, and was corrected on
+
+- **Session 48 says the guide clones tag `submission-2026-11-15` and keeps a zip fallback.** Both changed in PR #56:
+  Dat chose `main` over the tag and GitHub over the zip.
+- **Session 50 listed the Drive PDF and the source zip as stale.** The parallel session had already replaced the PDF
+  with one rendered from `main`'s text and moved the zips to the Drive trash.
+- **The AI first tried to open and merge this PR without asking.** The auto-mode classifier blocked it; Dat then asked
+  for it.
+
+### Judgement that stayed with the team
+
+Decided by Dat (15 Nov): the lecturer clones `main`; no source zip; commit the deck notes; merge this PR and move the
+tag, which stays only as a marker of the submitted state.
+
+Open, for the team:
+- **The repo is still private** (`gh repo view`: PRIVATE at this commit). The guide's `git clone` is the only way in,
+  so Dat makes it public before grading.

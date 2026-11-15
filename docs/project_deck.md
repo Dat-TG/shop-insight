@@ -315,13 +315,30 @@ báo cáo bên phải, PostgreSQL nét đứt "cùng 8 bảng star, phương án
 thế").
 
 **Lời thoại:**
-Kiến trúc gồm hai nhánh. Nhánh theo lô: Spark lấy mẫu bảy phần trăm khách, làm sạch, dựng kho dữ liệu, rồi lưu
-Parquet, định dạng lưu theo cột, chia thư mục theo ngày, để DuckDB đọc cho ba màn hình báo cáo. Nhánh thời gian thực:
-nhật ký được phát lại thành từng tệp JSON, Spark Structured Streaming tính ngay khi sự kiện tới rồi ghi vào Cassandra.
-Cassandra phục vụ năm màn hình tra theo khoá, riêng BR sáu tính theo lô. PostgreSQL chứa bản thứ hai của chính kho dữ
-liệu này, làm phương án thay thế để so sánh.
+Em xin trình bày phần giải pháp, bắt đầu từ kiến trúc tổng thể. Sơ đồ này có hai hàng, ứng với hai nhánh xử lý.
 
-**Số âm tiết:** 116
+Hàng dưới màu xanh là nhánh theo lô. Đầu vào là file CSV gốc, sáu mươi bảy phẩy năm triệu sự kiện. Spark lấy mẫu bảy
+phần trăm số khách bằng hash trên user id, nên chạy trên máy nào cũng ra cùng một tập. Sau đó Spark làm sạch, dựng
+star schema, rồi tính ra các bảng gold cho từng màn hình. Các bảng này lưu bằng Parquet, chia thư mục theo ngày. Ba
+màn hình báo cáo đọc Parquet qua DuckDB, chạy ngay trong FastAPI.
+
+Hàng trên màu cam là nhánh thời gian thực. Replayer đọc lại chính mẫu bảy phần trăm đó, để hai nhánh dùng chung một
+tập khách, rồi cứ năm giây ghi ra một file JSON. Spark Structured Streaming cũng cứ năm giây đọc các file mới, tính
+kết quả và ghi vào Cassandra.
+
+Cassandra có năm bảng, khoá của mỗi bảng được thiết kế theo đúng câu hỏi của màn hình. Bốn bảng do streaming ghi.
+Riêng bảng của BR sáu do nhánh theo lô ghi, là mũi tên xanh đi lên, vì màn hình BR sáu luôn tra theo từng kho, rất hợp
+với Cassandra. Ở FastAPI, mỗi BR có một router riêng, và kết quả nào trả về cũng kèm thời gian truy vấn và số
+partition đã đọc.
+
+Ô nét đứt là PostgreSQL. Nó chứa đúng tám bảng star schema như bản Parquet, nhưng chỉ dùng để so sánh, không màn hình
+nào đọc từ đây.
+
+Có một điểm em muốn nói rõ: nhánh streaming không đọc star schema. Hai dimension sản phẩm và khách hàng có lưu lịch sử
+và được dựng lại theo lô, nên lúc sự kiện vừa tới, phiên bản đúng của nó thường chưa có. Bốn BR này cũng không cần
+tới, vì ngành hàng và giá đã có sẵn trên từng sự kiện.
+
+**Số âm tiết:** 376
 
 ---
 
@@ -346,13 +363,29 @@ khoá nối ghi trên cạnh, `user_session` nét đứt giữa `fact_event` và
 phải snowflake".
 
 **Lời thoại:**
-Ở mức khái niệm có mười một thực thể. Ở mức logic là một star schema: bảng fact ở giữa ghi việc đã xảy ra, các bảng
-dimension quanh nó mô tả ai, cái gì, khi nào. Ba fact theo ba kiểu của Kimball: từng sự kiện, từng phiên qua phễu, và
-tồn kho mỗi ngày. Sản phẩm và khách hàng là SCD Type hai: đổi thì thêm phiên bản, sự kiện cũ vẫn trỏ tới bản cũ. Sản
-phẩm thêm phiên bản khi giá cuối ngày đổi. Khách thì thêm phiên bản khi điểm RFM đổi; RFM là lần mua gần nhất, tần
-suất và số tiền chi, chấm lại mỗi tuần.
+Ở mức khái niệm, nghiệp vụ có mười một thực thể, như khách hàng, phiên truy cập, sự kiện, sản phẩm, kho, tồn kho. Khó
+nhất là giá sản phẩm và phân khúc khách hàng thay đổi theo thời gian. Một sự kiện ngày mười thì phải dùng giá và phân
+khúc của đúng ngày mười.
 
-**Số âm tiết:** 125
+Ở mức logic, nhóm em dựng một star schema. Ba khối xanh đậm ở giữa là ba bảng fact, ghi lại những gì đã xảy ra. Các
+dimension xung quanh cho biết đó là khách nào, sản phẩm nào, ngày nào, kho nào. Chữ trên mỗi đường nối là khoá dùng để
+join.
+
+Ba fact này ứng với ba loại fact của Kimball. Với mỗi bảng, nhóm em chốt grain trước, nghĩa là một dòng đại diện cho
+cái gì. Fact event là loại transaction, mỗi dòng là một sự kiện. Fact session funnel là accumulating snapshot, mỗi
+dòng là một phiên, ghi lại thời điểm phiên đi qua từng bước của phễu, dùng cho BR hai. Fact inventory daily là
+periodic snapshot, mỗi dòng là tồn kho của một sản phẩm, ở một kho, trong một ngày, dùng cho BR sáu. Đường nét đứt là
+user session. Mã phiên nằm luôn trong fact event, không có bảng riêng, nên gọi là degenerate dimension.
+
+Ba dimension nhỏ là ngày có đánh dấu ngày lễ, kho, và loại sự kiện. Hai dimension quan trọng nhất là dim product và
+dim user, đều là SCD Type hai. Khi có thay đổi thì thêm một phiên bản mới chứ không ghi đè, nên sự kiện cũ vẫn trỏ về
+phiên bản cũ. Sản phẩm đổi phiên bản khi giá cuối ngày thay đổi, còn khách hàng khi ô RFM thay đổi. RFM là ba điểm về
+lần mua gần nhất, tần suất mua và số tiền đã chi, được chấm lại hằng tuần.
+
+Ô ghi chú bên trái nói đây là star chứ không phải snowflake. Ngành hàng, thương hiệu và giá gộp hết vào dim product,
+nên xem theo ngành hàng chỉ cần join một lần.
+
+**Số âm tiết:** 399
 
 ---
 
@@ -388,13 +421,26 @@ vấn ở giữa ("Lọc một ngày" đọc 1/31 thư mục, 1.565 ms; "Lọc m
 (partition, index; BRIN 4.125 ms so với seq scan 88.218 ms).
 
 **Lời thoại:**
-Parquet là nơi lưu chính. Mỗi fact chia partition theo ngày, tức mỗi ngày một thư mục, nên lọc một ngày chỉ mở một thư
-mục. Row group, tức một khối dòng trong tệp, có ghi min max từng cột để bỏ qua khối không cần đọc. Ở đây mỗi tệp chỉ
-có một row group, và Spark ghi cột thời gian theo kiểu timestamp cũ nên cột này không có min max. Cách sửa thì đã rõ,
-nhưng không màn hình nào lọc theo giờ, nên nhóm giữ nguyên. Bản PostgreSQL có thêm index. BRIN, loại index chỉ nhớ min
-max của từng nhóm trang, lọc một giờ sự kiện mất khoảng bốn mili giây, quét cả bảng mất gần chín mươi mili giây.
+Mức vật lý là chuyện dữ liệu nằm trên đĩa ra sao. Các con số trên slide là p50 của hai mươi lần đo.
 
-**Số âm tiết:** 138
+Bên trái là Parquet, nơi lưu chính. Mỗi bảng fact được partition theo ngày, mỗi ngày là một thư mục. Có ba mươi mốt
+thư mục là vì đã đổi sang giờ Việt Nam. Khi lọc một ngày bằng chính cột partition, DuckDB chỉ cần mở một trong ba mươi
+mốt thư mục. Còn nếu lọc cùng ngày đó qua date key, là một cột bình thường bên trong file, thì phải mở cả ba mươi mốt
+file, chậm gấp đôi.
+
+Cách thứ hai để bỏ qua dữ liệu là row group. Footer của file ghi min, max từng cột cho mỗi row group, row group nào
+chắc chắn không khớp thì bỏ qua. Nhưng ở đây cách này chưa có tác dụng. Mỗi file chỉ có một row group, và Spark lại
+ghi cột event time ở kiểu INT96, một kiểu timestamp cũ không có min, max. Vì vậy lọc một giờ vẫn phải đọc hết ba mươi
+mốt file. Muốn sửa thì chỉ cần cho Spark ghi kiểu TIMESTAMP MICROS, nhưng nhóm em chưa làm vì không có màn hình nào
+lọc theo giờ.
+
+Bên phải là bản PostgreSQL. Fact event cũng partition theo ngày, nên lọc một ngày chỉ đọc một partition. Bảng tồn kho
+thì partition theo năm kho. Bản này có ba loại index: B-tree ghép, BRIN trên event time và GIN trên thuộc tính sản
+phẩm. BRIN chỉ lưu min, max cho từng nhóm trang trên đĩa, nên rất nhỏ. Nó hợp với bảng này vì dữ liệu được ghi theo
+thứ tự thời gian. Lọc một giờ bằng BRIN mất khoảng bốn mili giây, còn quét cả bảng mất tám mươi tám, nhanh hơn khoảng
+hai mươi mốt lần.
+
+**Số âm tiết:** 370
 
 ---
 
@@ -421,13 +467,29 @@ Cassandra), hàng dưới là bảy job theo lô với số giây (tổng 426.5 
 nhánh.
 
 **Lời thoại:**
-Cả hai nhánh chạy trên Spark ở chế độ local, mỗi script một tiến trình dùng mọi nhân CPU. Bảy job theo lô chạy hết
-khoảng bảy phút. Nhánh thời gian thực dùng Structured Streaming: cứ năm giây, Spark gom tệp mới thành một micro-batch,
-tức một lô nhỏ. Watermark mười phút, tức Spark chờ sự kiện trễ thêm mười phút rồi mới đóng cửa sổ. Hai nhánh gọi chung
-một hàm làm sạch. Khi demo, một micro-batch thường xong chưa tới một giây. Luồng ghi kết quả vào Cassandra, phần này
-bạn Tín sẽ trình bày.
+Cả hai nhánh đều chạy trên Spark ở chế độ local sao, tức là không có cluster. Mỗi script chạy trong một JVM và dùng
+hết các nhân CPU của máy.
 
-**Số âm tiết:** 112
+Hàng dưới là bảy job theo lô, chạy lần lượt: lấy mẫu ra bronze, làm sạch ra silver, sinh hai nguồn giả lập, dựng star
+schema cho cả Parquet và PostgreSQL, rồi tính gold. Lâu nhất là bước dựng star schema, khoảng bốn phút rưỡi. Cả bảy
+job mất hơn bảy phút.
+
+Ở giữa là hàm clean, gồm bảy quy tắc làm sạch, ví dụ bỏ sự kiện có giá không dương, bỏ sự kiện thiếu user id hoặc
+session id, đổi sang giờ Việt Nam rồi tính lại ngày. Hàm này viết trong batch silver, còn job streaming import lại
+đúng hàm đó, nên hai nhánh luôn làm sạch giống nhau.
+
+Hàng trên là nhánh thời gian thực. Replayer cứ năm giây ghi ra một file JSON. Lúc demo, mỗi file chứa năm phút dữ
+liệu. Streaming gold cũng cứ năm giây gom các file mới thành một micro-batch. Watermark mười phút nghĩa là Spark lấy
+thời điểm của sự kiện mới nhất, lùi lại mười phút, và window nào kết thúc trước mốc đó thì được chốt. Sự kiện đến trễ
+hơn mốc này sẽ bị bỏ qua. Checkpoint lưu lại vị trí đã đọc và state xuống đĩa, nên nếu khởi động lại thì job chạy tiếp
+từ chỗ cũ.
+
+Kết quả được ghi trong foreachBatch, là một hàm Python chạy một lần cho mỗi micro-batch, dùng thư viện cassandra
+driver. Nhóm em không dùng Spark Cassandra Connector vì nó phải khớp đúng phiên bản Spark và Scala. Khi demo, mỗi
+micro-batch thường xong trong chưa tới một giây. Còn bốn bảng Cassandra được thiết kế khoá thế nào thì bạn Tín sẽ
+trình bày tiếp.
+
+**Số âm tiết:** 361
 
 ---
 
@@ -651,12 +713,23 @@ BR1 trong gate2b_curl_raw.txt: thời gian gọi API, không phải thời gian 
 ghi là API).
 
 **Lời thoại:**
-Ban điều hành hỏi: GMV, tức tổng giá trị đơn hàng, từng phút ra sao, ngành hàng nào đang dẫn? Spark tính GMV ngay trên
-luồng. Trong giờ cuối của lần phát lại, GMV đạt khoảng ba trăm lẻ chín nghìn, giảm sáu phẩy sáu phần trăm so với giờ
-trước đó. Trong Cassandra, ngày và ngành hàng là partition key, phút mới nhất nằm đầu, nên mỗi lần làm mới màn hình
-chỉ đọc một partition, chưa tới mười mili giây.
+Em xin tiếp tục với BR một, doanh thu theo từng phút. Câu hỏi của ban điều hành là GMV từng phút đang thế nào, và
+ngành hàng nào đang dẫn đầu. GMV ở đây là tổng giá của các lượt mua.
 
-**Số âm tiết:** 95
+Spark Structured Streaming cộng GMV và đếm số đơn theo window một phút cho từng ngành hàng, cộng thêm một dòng all là
+tổng của tất cả ngành. Như Tín vừa nói, một đơn ở đây là một lượt mua. Query chạy ở chế độ update, mỗi micro-batch ghi
+lại những phút vừa thay đổi, nên phút hiện tại tăng dần ngay trên màn hình.
+
+Trong bảng gmv by minute ở Cassandra, partition key là ngày và ngành hàng, các phút được sắp giảm dần nên phút mới
+nhất luôn nằm đầu. Màn hình chỉ cần đọc một partition và lấy một trăm hai mươi dòng đầu, tức là hai tiếng gần nhất:
+sáu mươi phút để vẽ biểu đồ, sáu mươi phút trước đó để so sánh.
+
+Ảnh chụp là ngày mười bảy tháng mười một. Trong sáu mươi phút gần nhất, GMV khoảng ba trăm lẻ chín nghìn, giảm sáu
+phẩy sáu phần trăm so với một tiếng trước. Biểu đồ tự làm mới mỗi mười giây. Nếu chọn electronics ở ô ngành hàng thì
+GMV còn khoảng hai trăm lẻ bảy nghìn, nghĩa là điện tử chiếm khoảng hai phần ba doanh thu. Footer ghi một partition và
+bảy phẩy bảy mili giây cho lần tải trong ảnh. Nhóm em đo hai mươi lần thì lần nào API cũng trả về dưới bảy mili giây.
+
+**Số âm tiết:** 308
 
 ---
 
@@ -679,12 +752,25 @@ dòng 24-25); "ba mươi partition" và "khoảng hai mươi mili giây" là dò
 curl p50 19.8 ms).
 
 **Lời thoại:**
-Marketing hỏi: khách rời đi ở bước nào, xem, thêm giỏ hay mua? Phễu được tính trước từ fact session funnel, theo ngày
-và ngành hàng. Cả tháng, hơn tám mươi sáu phần trăm số phiên rời đi trước khi thêm vào giỏ, vì vậy trang sản phẩm là
-chỗ marketing cần xem lại trước tiên. Phễu cả tháng đọc ba mươi partition ngày bằng DuckDB; khi cache đã nóng, mất
-khoảng hai mươi mili giây. Tiếp theo, bạn Nguyên nói về giỏ hàng bị bỏ quên và sản phẩm mua kèm.
+Màn hình thứ hai của em là BR hai, phễu chuyển đổi, thuộc nhánh theo lô. Marketing muốn biết khách rời đi ở bước nào:
+lúc xem, lúc thêm giỏ hay lúc mua.
 
-**Số âm tiết:** 102
+Phễu đếm theo phiên, lấy từ fact session funnel ở trang chín, mỗi phiên một dòng có ghi bước xa nhất mà phiên đi tới.
+Batch gold tính trước thành bảng funnel daily theo ngày và ngành hàng, chỉ có bốn trăm sáu mươi lăm dòng, chia thư mục
+theo ngày. Người dùng chọn khoảng ngày nào thì DuckDB chỉ đọc thư mục của những ngày đó.
+
+Ảnh chụp là cả tháng mười một, có chín trăm sáu mươi sáu nghìn phiên, nhưng chỉ mười ba phẩy sáu phần trăm đi tới bước
+thêm giỏ. Như vậy hơn tám mươi sáu phần trăm số phiên rời đi trước khi thêm giỏ, và trang sản phẩm là chỗ marketing
+nên xem lại đầu tiên. Trong những phiên đã thêm giỏ thì bốn mươi mốt phẩy sáu phần trăm mua hàng. Gần sáu mươi phần
+trăm còn lại bỏ dở giỏ hàng, và đây là chủ đề của BR năm. Dòng ghi chú dưới bảng nói thêm: file gốc gần như không có
+lượt mua nào từ một giờ sáng ngày mười lăm đến chiều ngày mười sáu, nên tỷ lệ chuyển đổi ngày mười lăm gần bằng không.
+
+Footer ghi ba mươi partition, tức là ba mươi thư mục ngày. Con số năm trăm mười tám mili giây trên ảnh chỉ là một lần
+tải. Đo hai mươi lần khi cache đã nóng thì p50 khoảng hai mươi mili giây. Cả hai đều dưới hai giây.
+
+Tiếp theo, bạn Nguyên sẽ trình bày về giỏ hàng bị bỏ quên và sản phẩm mua kèm.
+
+**Số âm tiết:** 315
 
 ---
 
