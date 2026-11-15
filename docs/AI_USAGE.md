@@ -3442,7 +3442,7 @@ above. No application code changed; the submitted report was not edited.
 
 | Artefact | Status |
 |---|---|
-| `docs/AI_USAGE_SUMMARY.md` — Vietnamese summary of this file: tool, extent of AI use, workflow, team decisions, corrections, open points, a self-reflection slot per member | AI-drafted; every session it cites was checked against this file; members' self-reflection to be written by each member |
+| `docs/AI_USAGE_SUMMARY.md` — Vietnamese summary of this file: tool, scope of this log, extent of AI use, each member's own work with PR and session references, team decisions, corrections, workflow, open points | AI-drafted, revised at Dat's request (see Judgement); every session and PR it cites was checked against this file or `gh pr view` |
 | Session 49 (above) | AI-reconstructed from git and session notes |
 
 ### How it was checked
@@ -3458,7 +3458,10 @@ above. No application code changed; the submitted report was not edited.
 ### What the AI got wrong, and was corrected on
 
 - **The earlier draft summary listed S34, S36, S38, S39 and S41 as tasks done for teammates.** S37 (Tín) was
-  missing; added.
+  missing. The list was later removed from the summary at Dat's request; Sessions 32-41 above keep the record.
+- **The first per-member list cited S35 for the measurement protocol and S28 for the deck structure.** The protocol
+  decision is in Session 40 and the deck decisions in Sessions 29 and 30; Nguyên's edit of pages 05-07 is not in this
+  file at all (it reached the deck in version 20), so the summary cites the deck version instead.
 - **The summary first said "more than 300" corrections.** That counted every bullet in the file; the corrections
   sections hold 201.
 - **The summary first spelled Dat's name "Đạt".** It is Đắt.
@@ -3468,6 +3471,11 @@ above. No application code changed; the submitted report was not edited.
 Decided by Dat (15 Nov): the report is final and is not edited, so the Appendix A.1 sentence stays as it is and this
 file plus the summary carry the detail. Rewriting earlier sessions, or git history, was considered and not done;
 this file stays append-only.
+
+Decided by Dat (15 Nov), for the summary only: drop the list of tasks done in Dat's session for teammates, the
+self-reflection slot and the line saying many checks were themselves done by AI agents; add that members also
+coordinated and decided over the team chat, which this file cannot see; give each member's own work its own section;
+say the run guide uses the GitHub link. This file is unchanged on those points.
 
 Open, for the team:
 - **The report's disclosure sits in Appendix A.1, not in the references or a footnote**, which is where the course

@@ -5,7 +5,10 @@ File này tóm tắt [`docs/AI_USAGE.md`](AI_USAGE.md), nhật ký đầy đủ 
 giá trị khi cần đối chiếu. Mỗi ý dưới đây ghi kèm số phiên (S…) để tra lại.
 
 **Công cụ:** Claude Code của Anthropic, model Claude Opus 5 (S1–S7), sau đó là Claude Opus 5.5 (S8–S50).
-Nhóm không dùng công cụ AI nào khác trong nhật ký này.
+
+**Phạm vi của nhật ký:** nhật ký ghi những gì xảy ra trong các phiên Claude Code. Nhóm còn trao đổi, phân công và
+chốt nhiều quyết định qua kênh chat của nhóm và trên Google Sheets theo dõi task. Những trao đổi đó không nằm trong
+nhật ký, nên nhật ký chỉ cho thấy một phần công việc của các thành viên.
 
 ## 1. Quy định môn học và cách nhóm khai báo
 
@@ -20,31 +23,53 @@ cầu ghi rõ công cụ cùng cách dùng. Nhóm khai báo theo ba cách:
 - Từ S3, commit không còn dòng co-author của AI, nên git không cho biết phần nào do AI viết. Nhật ký là nơi ghi
   đầy đủ việc đó.
 
-## 2. Mức độ AI tham gia
+## 2. Phân vai giữa thành viên và AI
 
-Nhóm ghi thẳng:
+| Thành viên | AI |
+|---|---|
+| Chốt domain, 8 câu hỏi nghiệp vụ, kiến trúc bronze → silver → star schema → gold và stack công nghệ | Khảo sát repo, đề xuất phương án và kế hoạch |
+| Trả lời các câu hỏi thiết kế, duyệt kế hoạch trước khi AI viết | Soạn nháp code, tài liệu, các mục báo cáo và nội dung slide |
+| Review PR, chạy lại trên máy mình, quyết định nhận hay bác bản nháp | Chạy lệnh đo và đối chiếu số liệu |
+| Bắt lỗi AI và yêu cầu làm lại (mục 5) | Sửa theo yêu cầu, ghi lại lỗi đã mắc |
+| Thuyết trình, quay video, trả lời câu hỏi | — |
+
+Nhóm ghi thẳng mức độ AI tham gia:
 
 - **Phần lớn bản nháp code, tài liệu, các mục báo cáo và nội dung slide do AI viết**, trong phiên của thành viên
-  phụ trách. Thành viên duyệt kế hoạch trước, rồi review, chạy lại và quyết định có nhận bản nháp hay không.
-- **Từ S40, AI gõ các lệnh đo chính thức** (benchmark, thời gian từng màn hình, kiểm tra tính đúng). Đắt duyệt
-  toàn bộ output thô trước khi merge (S41). Quy ước ban đầu là thành viên tự chạy phép đo, và nhật ký ghi rõ chỗ
-  đổi quy ước này.
-- Một số task được làm bằng AI trong phiên của Đắt, thay cho thành viên được giao: S34 và S37 (Tín), S36 và S38
-  (Khang), S39 (Khang, Nguyên, Tín), S41 (Nguyên, Tín). Ở S32 và S33, AI sửa các điểm review trên nhánh PR của
-  Khang và Nguyên theo yêu cầu của Đắt.
-- Các phần sau là của thành viên: chọn hướng thiết kế, các quyết định ở mục 4, review PR, chạy lại để kiểm
-  chứng, và bác bỏ những bản nháp lệch thiết kế (mục 5).
+  phụ trách. Bản nháp chỉ thành bài nộp sau khi thành viên duyệt kế hoạch, review, chạy lại và chấp nhận.
+- **Từ S40, AI gõ các lệnh đo chính thức** (benchmark, thời gian từng màn hình, kiểm tra tính đúng). Đắt chọn cách
+  làm này và duyệt toàn bộ output thô trước khi merge (S41). Quy ước ban đầu là thành viên tự chạy phép đo, và
+  nhật ký ghi rõ chỗ đổi quy ước này.
 
-## 3. Quy trình làm việc với AI
+## 3. Phần việc của từng thành viên
 
-- Phần lớn các phiên từ S8 bắt đầu ở *plan mode*. AI khảo sát repo và đề xuất kế hoạch, thành viên trả lời các
-  câu hỏi thiết kế và duyệt kế hoạch, sau đó AI mới viết.
-- Code SQL/Spark do AI viết chỉ được commit sau khi đã chạy thật (quy ước từ S1).
-- Mỗi con số đưa vào báo cáo kèm câu lệnh tạo ra nó. Các lệnh đo nằm trong `docs/evidence/` và
-  `benchmark/results/`, ai cũng chạy lại được.
-- Hook trong `.claude/hooks/` chặn AI xoá dữ liệu dưới `data/`, commit thẳng lên `main` hay force-push, và cảnh
-  báo khi code rơi vào các lỗi Spark đã biết (S3).
-- Mỗi phiên có một mục "AI sai ở đâu". Tổng cộng nhật ký ghi khoảng 200 lỗi AI đã mắc và được sửa.
+**Đắt** (BR1, BR2; nền tảng Spark, silver, warehouse, streaming)
+- Đưa ra hầu hết quyết định thiết kế ở mục 4: luật làm sạch silver, đặc tả `fact_event`, `fact_session_funnel`,
+  cách chạy streaming, ý nghĩa "so với kỳ trước" của BR1.
+- Review và merge PR của cả nhóm: #9 (Tín), #17 và #19 (Khang), #23 (Tín), #26 (Nguyên), #36 (Khang), #39 (Nguyên),
+  #50 (Khang) (S8, S17, S19, S22, S23, S32, S33, S45).
+- Chọn quy trình đo đạc (S40), duyệt toàn bộ output thô của phép đo trước khi merge (S41).
+- Chốt cấu trúc deck và thứ tự người nói, chốt slide và cách giao code cho giảng viên (S29, S30, S48, S49).
+
+**Khang** (BR3, BR4; báo cáo)
+- Tự lập kế hoạch phần việc của mình bằng GitHub spec-kit, tự review mọi thay đổi và tự chạy mọi lệnh git (S16).
+- Quyết định thiết kế RFM: snapshot theo tuần, `dim_user` SCD2 theo thiết kế 5.4, điểm F bằng `ntile(5)`; bác bản
+  chấm F theo ngưỡng của AI (S16).
+- Chọn cách BR3 tìm cửa sổ mới nhất mà không đổi schema hay hợp đồng API (S19).
+- Viết `gen_inventory.py` và đặt câu hỏi cho bản sửa của AI, bản đó được làm lại (S8, S16).
+- Chạy kiểm tra tính đúng trên máy mình (S31). Chủ trì báo cáo nộp: Google Doc của Khang là bản viết lại có cấu
+  trúc riêng, không phải bản chuyển từ `docs/REPORT.md`.
+
+**Nguyên** (BR5, BR7)
+- BR5 làm trọn ba lớp và đẩy lên PR #26. Nhật ký ghi: "Nguyen's code is as Nguyen pushed it" (S22).
+- Kiểm tra ground truth (T13) và cách sắp xếp BR7 theo lift trước, là thay đổi của Nguyên (PR #39, S33).
+- Tự chỉnh các trang 05–07 của deck trên bản PDF, được đưa vào deck bản 20 (13/11).
+
+**Tín** (BR6, BR8; khung ứng dụng)
+- Đẩy khung ứng dụng, hợp đồng API cố định với 8 bộ fixture, DDL Postgres và ba dimension nhỏ (PR #9, S8).
+- BR6, BR8 và bước 6 của warehouse (PR #23). Nhật ký ghi: phần truy vấn, endpoint và màn hình "is as Tin pushed
+  it" (S23).
+- Tự chỉnh lời thoại các trang của mình trong deck (commit `fb02c88`, 14/11).
 
 ## 4. Các quyết định thiết kế do thành viên đưa ra
 
@@ -59,19 +84,18 @@ Nhóm ghi thẳng:
 - `fact_session_funnel` giữ lag có dấu, không ép về 0 (S18, Đắt).
 - BR2 đếm theo phiên và thêm các cột `*_events`. Bảng theo ngành dựng từ endpoint có sẵn, không đổi hợp đồng (S21,
   Đắt).
+- RFM chụp snapshot theo tuần, `dim_user` làm SCD2, điểm F dùng `ntile(5)` (S16, Khang).
 
 **Streaming**
 - Replayer dùng Spark và `toLocalIterator`. BR1 chạy update mode với trigger 5 giây. Timestamp trong Cassandra
   theo giờ Việt Nam (S12, Đắt).
 - "So với kỳ trước" là 60 phút gần nhất so với 60 phút trước đó, nên API đọc tối đa 120 dòng (S13, Đắt).
 - `--fresh` làm rỗng cả các bảng streaming, Ctrl-C dừng giữa hai micro-batch (S14, Đắt).
-- BR3 tìm cửa sổ mới nhất mà không đổi schema (S19, Khang).
-
-**Phần của Khang (S16)**
-- RFM chụp snapshot theo tuần. `dim_user` làm SCD2 đúng thiết kế 5.4. Điểm F dùng `ntile(5)`.
+- BR3 tìm cửa sổ mới nhất bằng cách liệt kê partition key, không đổi schema (S19, Khang).
 
 **Nộp bài**
-- Giảng viên lấy code qua GitHub tag `submission-2026-11-15`. Không gửi kèm dữ liệu dựng sẵn (S48, Đắt).
+- Hướng dẫn chạy (`docs/RUN_GUIDE_VI.md`) cho giảng viên lấy code qua link GitHub, tag `submission-2026-11-15`.
+  Không gửi kèm dữ liệu dựng sẵn (S48, Đắt).
 
 ## 5. Những lần thành viên bắt lỗi hoặc bác bỏ AI
 
@@ -84,24 +108,25 @@ Nhóm ghi thẳng:
 - **S19:** Đắt review PR #19 và phát hiện câu mô tả 612 sản phẩm sai ở bốn chỗ (code đúng, câu chữ sai).
 - **S45:** Đắt review PR #50 và phát hiện thứ tự chạy ở mục 5.1 sai: trên máy mới, quy trình dừng ở bước nạp
   Postgres.
-- **S48:** Đắt đổi cách giao code từ file zip sang link GitHub.
+- **S48:** Đắt yêu cầu hướng dẫn chạy dùng link GitHub thay cho file zip mà AI đề xuất ban đầu.
 
 Nhóm không đưa vào báo cáo con số nào chưa đo được. Ví dụ, báo cáo ghi rõ là chưa có kết quả khảo sát người dùng,
 không ước lượng (S46).
 
-## 6. Những điểm nhóm ghi nhận thẳng thắn
+## 6. Quy trình làm việc với AI
 
-- Một số phiên trước đó không được ghi kịp thời và được bổ sung sau: S27 (hình và số liệu của bài thuyết trình
-  indexing, 23 và 26/10) và S49 (công việc ngày 14/11, ghi lại ngày 15/11 từ git và ghi chú phiên).
-- Các bước kiểm tra của AI trong nhiều phiên cũng do AI làm (các agent review độc lập). Bước chốt là thành viên
-  review PR và chạy lại.
-- Một số mục của nhật ký còn ghi "human review pending". Những mục đó chưa được thành viên phụ trách xác nhận.
+- Phần lớn các phiên từ S8 bắt đầu ở *plan mode*. AI khảo sát repo và đề xuất kế hoạch, thành viên trả lời các
+  câu hỏi thiết kế và duyệt kế hoạch, sau đó AI mới viết.
+- Code SQL/Spark do AI viết chỉ được commit sau khi đã chạy thật (quy ước từ S1).
+- Mỗi con số đưa vào báo cáo kèm câu lệnh tạo ra nó. Các lệnh đo nằm trong `docs/evidence/` và
+  `benchmark/results/`, ai cũng chạy lại được.
+- Hook trong `.claude/hooks/` chặn AI xoá dữ liệu dưới `data/`, commit thẳng lên `main` hay force-push, và cảnh
+  báo khi code rơi vào các lỗi Spark đã biết (S3).
+- Mỗi phiên có một mục "AI sai ở đâu". Tổng cộng nhật ký ghi khoảng 200 lỗi AI đã mắc và được sửa.
 
-## 7. Thành viên tự nhận xét
+## 7. Những điểm nhóm ghi nhận thẳng thắn
 
-Mỗi người viết 2–3 câu bằng lời của mình: phần mình hiểu rõ nhất và một quyết định mình đã đưa ra.
-
-- Đắt: …
-- Khang: …
-- Nguyên: …
-- Tín: …
+- Một số phiên không được ghi kịp thời và được bổ sung sau: S27 (hình và số liệu của bài thuyết trình indexing,
+  23 và 26/10) và S49 (công việc ngày 14/11, ghi lại ngày 15/11 từ git và ghi chú phiên).
+- Một số mục của nhật ký còn ghi "human review pending". Những mục đó chưa được thành viên phụ trách xác nhận
+  trong nhật ký.
