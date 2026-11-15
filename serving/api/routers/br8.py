@@ -69,7 +69,9 @@ def _latest_date() -> date:
             "SELECT DISTINCT event_date FROM order_velocity_alerts LIMIT 30"
         ))
         if rows:
-            return max(row.event_date for row in rows)
+            # The driver returns cassandra.util.Date, not datetime.date: without
+            # .date() the response's event_date.isoformat() raises a 500.
+            return max(row.event_date for row in rows).date()
     except Exception:
         pass
     return datetime.now(VIETNAM).date()
