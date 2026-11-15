@@ -210,15 +210,14 @@ Một số lưu ý riêng cho macOS:
 
 ## 3. Lấy mã nguồn và cài thư viện
 
-Mã nguồn nằm trên GitHub: <https://github.com/Dat-TG/shop-insight>. Bản nộp bài được gắn tag
-`submission-2026-11-15`, và lệnh dưới đây lấy đúng bản đó. Repo không chứa dữ liệu; thư mục `data/` chỉ có các thư
-mục con rỗng.
+Mã nguồn nằm trên GitHub: <https://github.com/Dat-TG/shop-insight>. Repo không chứa dữ liệu; thư mục `data/` chỉ có
+các thư mục con rỗng.
 
 Clone repo vào thư mục home rồi cài thư viện. Các lệnh giống nhau trên Linux, WSL2 và macOS:
 
 ```bash
 cd ~
-git clone --branch submission-2026-11-15 https://github.com/Dat-TG/shop-insight.git
+git clone https://github.com/Dat-TG/shop-insight.git
 cd ~/shop-insight
 python3.14 -m venv .venv
 source .venv/bin/activate
@@ -229,9 +228,8 @@ npm ci
 cd ..
 ```
 
-Vì lệnh clone lấy theo tag, Git có thể in thông báo `You are in 'detached HEAD' state`; đây là bình thường. Lệnh
-`python -c ...` phải in ra `4.1.3`. Lệnh `pip install` mất vài phút (nhóm đo được khoảng 4 phút) vì `pyspark` là gói
-mã nguồn nặng 455 MB.
+Lệnh `python -c ...` phải in ra `4.1.3`. Lệnh `pip install` mất vài phút (nhóm đo được khoảng 4 phút) vì `pyspark` là
+gói mã nguồn nặng 455 MB.
 
 > [!IMPORTANT]
 > Mọi lệnh `python ...` trong các mục sau chạy từ thư mục gốc `~/shop-insight`, với venv đã kích hoạt. Mỗi terminal mở
@@ -291,8 +289,8 @@ curl -L https://data.rees46.com/datasets/marketplace/2019-Nov.csv.gz \
 **Cách C:** tải bằng trình duyệt từ trang Kaggle (cần đăng nhập):
 <https://www.kaggle.com/datasets/mkechinov/ecommerce-behavior-data-from-multi-category-store>. Chọn tệp `2019-Nov.csv`;
 trình duyệt tải về tệp `2019-Nov.csv.zip`. Giải nén vào `data/raw/`: trên Linux và macOS dùng
-`unzip ~/Downloads/2019-Nov.csv.zip -d data/raw/`. Trên Windows, trình duyệt lưu tệp vào thư mục Downloads của
-Windows; hai lệnh dưới đây tìm thư mục người dùng Windows (kể cả khi tên có dấu cách) rồi giải nén từ đó:
+`unzip ~/Downloads/2019-Nov.csv.zip -d data/raw/`. Trên Windows, trình duyệt lưu tệp vào thư mục Downloads của Windows;
+giải nén từ Ubuntu bằng hai lệnh dưới đây (lệnh đầu tìm thư mục người dùng Windows, kể cả khi tên có dấu cách):
 
 ```bash
 WINHOME="$(wslpath "$(cmd.exe /c 'echo %USERPROFILE%' 2>/dev/null | tr -d '\r')")"
@@ -554,7 +552,7 @@ ra `9006762395`.
 
 ```bash
 cd ~
-git clone --branch submission-2026-11-15 https://github.com/Dat-TG/shop-insight.git
+git clone https://github.com/Dat-TG/shop-insight.git
 cd ~/shop-insight
 python3.14 -m venv .venv
 source .venv/bin/activate
