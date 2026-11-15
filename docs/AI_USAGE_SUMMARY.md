@@ -20,8 +20,6 @@ cầu ghi rõ công cụ cùng cách dùng. Nhóm khai báo theo ba cách:
   do thành viên đưa ra.
 - Báo cáo nhắc tới việc dùng Claude Code và dẫn tới nhật ký ở Phụ lục A.1. Câu đó viết ngắn. Mức độ tham gia của
   AI trong từng phần nằm ở nhật ký và ở mục 2 dưới đây.
-- Từ S3, commit không còn dòng co-author của AI, nên git không cho biết phần nào do AI viết. Nhật ký là nơi ghi
-  đầy đủ việc đó.
 
 ## 2. Phân vai giữa thành viên và AI
 
@@ -35,8 +33,9 @@ cầu ghi rõ công cụ cùng cách dùng. Nhóm khai báo theo ba cách:
 
 Nhóm ghi thẳng mức độ AI tham gia:
 
-- **Phần lớn bản nháp code, tài liệu, các mục báo cáo và nội dung slide do AI viết**, trong phiên của thành viên
-  phụ trách. Bản nháp chỉ thành bài nộp sau khi thành viên duyệt kế hoạch, review, chạy lại và chấp nhận.
+- **Phần lớn bản nháp code, tài liệu, các mục báo cáo và nội dung slide do AI viết theo hướng dẫn của nhóm**, trong
+  phiên của thành viên phụ trách: theo thiết kế, hợp đồng API, danh sách task và kế hoạch mà thành viên đã chốt.
+  Bản nháp chỉ thành bài nộp sau khi thành viên duyệt kế hoạch, review, chạy lại và chấp nhận.
 - **Từ S40, AI gõ các lệnh đo chính thức** (benchmark, thời gian từng màn hình, kiểm tra tính đúng). Đắt chọn cách
   làm này và duyệt toàn bộ output thô trước khi merge (S41). Quy ước ban đầu là thành viên tự chạy phép đo, và
   nhật ký ghi rõ chỗ đổi quy ước này.
