@@ -3319,3 +3319,68 @@ Made by AI, flagged for review:
   individual orders", and the BR8 screen's subtitle says "rolling" while the window is tumbling.
 - The final PDF for submission should come from the Slides app's own Export (Dat). A local render is at
   `logs/t25/final_pages/Nhom15_ShopInsight_Slide_2026-11-13.pdf` as a fallback.
+
+## Session 48 — 15 November 2026 (W46)
+
+**Tool:** Claude Code (Opus 5.5), main session plus two 6-agent workflows (research, then review).
+**Scope:** a Vietnamese run guide for the lecturer, `docs/RUN_GUIDE_VI.md`, rendered to
+`Group15_ShopInsight_RunGuide.pdf` in the submission Drive folder, so the product can be executed on Windows (WSL2),
+Linux and macOS. No application code was written; the session commits the `br8.py` fix that had sat uncommitted since
+14 Nov. No pipeline step was run.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| `docs/RUN_GUIDE_VI.md` — install per OS, data download, Docker, the 7 batch scripts with measured times and expected counts, streaming, API, web, the 8 screens, clean-up, troubleshooting, an appendix with every command | AI-drafted, reviewed by six AI reviewers (commands, numbers, Windows first-timer, macOS, Linux, Vietnamese); Dat's read pending. **Not run end to end on a clean machine** (Dat chose static checks) |
+| `serving/api/routers/br8.py` — `.date()` on the `cassandra.util.Date` that `_latest_date()` returns | Written before this session, committed in it on Dat's request. Mechanism checked in `.venv`: `cassandra.util.Date` has no `isoformat`; `logs/api_20261114_222506.log` shows the 500 it fixes |
+| `README.md` — two lines at the top pointing to the guide and the tag | AI-made |
+| Drive folder `Group15_SourceCode_RunGuide`: the PDF, plus `Group15_ShopInsight_source.zip` (the tag's content) as a fallback while the repo is private | Uploaded on Dat's request |
+| Tag `submission-2026-11-15` on the merge commit of this PR | Created on Dat's request |
+
+### How it was checked
+
+| Claim | How it was measured |
+|---|---|
+| The Kaggle download needs no account and is the right file | Unauthenticated `GET https://www.kaggle.com/api/v1/datasets/download/mkechinov/ecommerce-behavior-data-from-multi-category-store/2019-Nov.csv` answers 302 to a 2,874,125,107-byte zip; its central directory holds one entry, `2019-Nov.csv`, 9,006,762,395 bytes, CRC32 `24a6f0f1` |
+| The REES46 mirror is the same file | `curl -s -r -8 https://data.rees46.com/datasets/marketplace/2019-Nov.csv.gz \| od -An -tx1` prints `f1 f0 a6 24 9b 49 d8 18`: CRC32 `24a6f0f1`, size mod 2^32 `0x18d8499b` |
+| Every pin installs on Python 3.14 | `.venv/bin/pip install --dry-run --ignore-installed -r requirements.txt` resolves 26 packages on Linux x86_64; `pip download --only-binary=:all: --python-version 3.14 --platform macosx_11_0_arm64` (and three other macOS tags) succeeds for every pin; `uvloop==0.22.1` has no Windows wheel, which is why native Windows is not offered |
+| Batch times and expected counts | Copied from `docs/evidence/batch_timings.txt` (3 Nov run), not re-measured |
+| Seconds until each streaming screen shows rows | Read from `logs/stream_20261114_*.log` and the matching replayer logs |
+| WSL distro name, Windows Downloads path, `JAVA_HOME` line | `wsl.exe --list --online` lists `Ubuntu-26.04`; the `WINHOME=...` and `JAVA_HOME=/usr/lib/jvm/java-21-openjdk-$(dpkg --print-architecture)` lines were run on this machine |
+| Commands copied from the PDF do not break | The build refuses any code line over 95 columns, so no command wraps; every page was rendered and looked at |
+
+### What the AI got wrong, and was corrected on
+
+- **The downloads were called 2.7 GB.** They are 2,874,125,107 and 2,890,421,023 bytes: 2.9 GB in the decimal unit the
+  guide uses for the 9.0 GB CSV.
+- **The draft missed the midnight rollover.** `--start "2019-11-17 08:00:00"` is 15:00 Vietnam time, so after about
+  9 minutes at `--speed 60` new events fall on 2019-11-18, and BR1, BR5 and BR8, whose date pickers default to
+  2019-11-17, stop updating. The guide now says to switch the picker. Found by the command reviewer.
+- **The warning box said the stream warns if the replayer starts first.** With `--fresh` the stream deletes the landed
+  files instead, so the start of the replay is lost and no warning shows (`processing/streaming_gold.py:548-559,
+  628-633`). Rewritten.
+- **Linux order and `JAVA_HOME`.** The Ubuntu 22.04/24.04 step came after an apt line that fails as a whole on those
+  releases; it now comes first. `JAVA_HOME` was derived from whichever `java` is first on PATH, which can be an old
+  JDK; it is now the fixed Ubuntu path. Node from apt was replaced by nvm and Node 24, the team's own setup.
+- **macOS.** Homebrew bottles exist only for Apple Silicon on macOS 15 and later, not for every Apple Silicon Mac; and
+  without the venv the error is `command not found: python`, not a Python version mismatch.
+- **Rendering.** Code blocks inside numbered steps came out as inline text, and long commands wrapped, which breaks them
+  when copied. Fixed with `pymdownx.superfences` and the 95-column check.
+- **The source was first shipped as a zip only**, because the repo is private. Dat asked for the GitHub link instead;
+  the zip stays as a fallback.
+
+### Judgement that stayed with the team
+
+Decided by Dat (15 Nov):
+- The lecturer gets the code from GitHub at tag `submission-2026-11-15`; Dat makes the repo public himself.
+- No pre-built data bundle: the lecturer downloads the raw CSV.
+- No end-to-end test run on a clean clone; static checks only.
+
+Made by AI, flagged for review:
+- **The macOS steps have never been run on a Mac.** The guide says so in its first note.
+- **README "Getting started" still disagrees with the code in places** (it runs `kata.py` before the download step, and
+  says steps 1-2 take 15-25 minutes where `batch_timings.txt` measures 52.5 s). The guide follows the code; README was
+  not changed beyond the pointer.
+- **`docs/project_deck.md` has uncommitted changes that are Dat's, not this session's;** they were left out of this
+  commit.

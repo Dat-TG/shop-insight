@@ -6,6 +6,9 @@ a property of the file) becomes a dimensional warehouse, then pre-aggregated tab
 each answering one business question in under 2 seconds. That middle part is what the course requires to be **measured
 and proven**, not asserted. HCMUT, Semester 1 2026-2027. Group 15: Dat, Khang, Nguyen, Tin. Submit ISO W46 (9-15 Nov).
 
+**To install and run the whole system from a fresh clone** (Windows via WSL2, Linux, macOS), follow
+[docs/RUN_GUIDE_VI.md](docs/RUN_GUIDE_VI.md), in Vietnamese. The submitted version is tag `submission-2026-11-15`.
+
 ## Status
 
 > **2026-10-07 — ISO W41 of W38-W46.** Three things in this file go stale: this block, the `[x]`/`[ ]` marks under
