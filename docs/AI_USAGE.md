@@ -3384,3 +3384,109 @@ Made by AI, flagged for review:
   not changed beyond the pointer.
 - **`docs/project_deck.md` has uncommitted changes that are Dat's, not this session's;** they were left out of this
   commit.
+
+## Session 49 — 14 November 2026 (W46), logged on 15 November
+
+**Tool:** Claude Code (Opus 5.5), Dat's sessions of 14 Nov, including review and design workflows.
+**Scope:** the work of 14 Nov, which no session block recorded on the day. This block was reconstructed on 15 Nov
+(Session 50) from git (`adc1166`, `29b29d5`, `788804d`, all merged in PR #53) and the session notes, not written
+live, so it is shorter than a live log. It covers the report figures, the BR6 and BR8 product fix, the project deck
+from version 23 to app Version 39, and edits to the report Google Doc.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| `docs/REPORT.md` architecture figure (the deck's figure as PNG) and the star schema redrawn as a Mermaid `erDiagram`; `docs/evidence/review_20261113/` — the read-only scripts and outputs behind the numbers added to the report on 13 Nov (`adc1166`) | AI-made; scripts run, outputs committed beside them |
+| `GET /api/br6/summary` (API_CONTRACT 8.1) and the BR6 cards that read it; BR8's table opening on "Medium + High" (`29b29d5`, Tín's BR6 and BR8 code) | AI-written at Dat's request without Tín's sign-off (deadline authorisation); checked against `cqlsh`, `docs/evidence/br6_br8_fix_20261114.txt` |
+| Project deck: a 9-dimension review of version 23 with each finding verified by a second agent (`logs/t25/review_v23/REVIEW.md`, gitignored), then versions 24-26 (app Versions 29-33): the review fixes, pages 24-25 reframed, page 04 redesigned through 3 designs and 3 judges; `docs/project_deck.md` synced (`788804d`) | AI-made; Dat looked at every published version |
+| Project deck app Versions 35-39: Dat's six speaker notes (pages 08-11, 16-17) rewritten to walk the slide face, then rewritten again in spoken Vietnamese; slides frozen by Dat before this | AI-drafted; Dat's read; the md sync is uncommitted |
+| Edits to the report Google Doc (Khang's, the report of record), direct and as suggestions | AI-made under Dat's deadline authorisation; the exact edits are in the Doc's version history and are not reconstructed here |
+| `serving/api/routers/br8.py` `.date()` fix | Written 14 Nov, committed in Session 48 |
+
+### How it was checked
+
+| Claim | How it was checked |
+|---|---|
+| BR6 summary counts | `docs/evidence/br6_br8_fix_20261114.txt`: summary against `cqlsh` counts per warehouse, and timing |
+| Deck findings | each finding of the v23 review was second-voted by an independent agent before it was applied |
+| Spoken length | syllable counts of the live deck at 3.0 syllables/s: 4,273 syllables, about 23.7 min before demos |
+
+### What the AI got wrong, and was corrected on
+
+- **BR6's cards undercounted.** They counted the rows of `/api/br6/stockout`, at most 105 per warehouse (525 in all),
+  against a 63,655-row table. Fixed by the summary endpoint.
+- **Deck v23, from the review:** page 05 said no query finished under 2 s (DuckDB warm is 1.73 s); page 13 said
+  Cassandra was chosen for freshness (report 4.5.3: freshness comes from stream precompute); the BR screenshots were
+  not the report's gate2b images. All fixed in v24.
+- **Report Doc suggestions.** Subagents kept SUGGEST mode after Dat had authorised direct edits, leaving 26 pending
+  suggestions for Dat to accept.
+
+### Judgement that stayed with the team
+
+Decided by Dat (14 Nov): no teammate sign-off is waited for before submission when a change clearly improves the
+project (covering Tín's BR6/BR8 code, teammates' slides and Khang's report Doc); slides frozen in the evening, only
+speaker notes may change; "freshness" kept as an English term.
+
+Not covered here: Tín's own commit `fb02c88` (his slide scripts, 14 Nov). Whether he used an AI tool for it is not
+recorded in this file.
+
+## Session 50 — 15 November 2026 (W46)
+
+**Tool:** Claude Code (Opus 5.5), main session. A 10-agent audit workflow was started and stopped by Dat before
+it returned; nothing from it is used.
+**Scope:** a check of this file against the course's AI rules, a Vietnamese summary for the grader, and Session 49
+above. No application code changed; the submitted report was not edited.
+
+### What the AI produced
+
+| Artefact | Status |
+|---|---|
+| `docs/AI_USAGE_SUMMARY.md` — Vietnamese summary of this file: tool, scope of this log, extent of AI use, each member's own work with PR and session references, team decisions, corrections, workflow, open points | AI-drafted, revised at Dat's request (see Judgement); every session and PR it cites was checked against this file or `gh pr view` |
+| Session 49 (above) | AI-reconstructed from git and session notes |
+
+### How it was checked
+
+| Claim | How it was checked |
+|---|---|
+| The course rule | `DCMH.CO5173_Data Engineering.pdf` section 5.4, extracted with pypdf: AI only for supportive purposes (references, ideas, grammar, presentation); no work entirely or substantially AI-generated; the tool and its use must be stated in the references or footnotes. The project spec PDF says nothing on AI |
+| What the submitted report discloses | The report Google Doc read in full through the Docs connector on 15 Nov: references [1]-[18] have no AI entry, there are no footnotes, and Appendix A.1 says "Nhóm có dùng Claude Code để hỗ trợ viết một phần code và tài liệu" with a pointer to this file |
+| This file is append-only | `git log --numstat -- docs/AI_USAGE.md`: one commit removed lines, `5183073` (2 table rows of Session 45 widened during the PR #50 review, before merge) |
+| About 200 corrections are logged | bullets under the "What the AI got wrong" and "The correction that mattered most" headings: 201 |
+| The summary's session citations | each S-number checked against its block; an earlier draft (outside the repo) said Khang refused an AI estimate of the survey (S46) — the log says no score was estimated, not that Khang refused, so the summary says only that |
+
+### What the AI got wrong, and was corrected on
+
+- **The earlier draft summary listed S34, S36, S38, S39 and S41 as tasks done for teammates.** S37 (Tín) was
+  missing. The list was later removed from the summary at Dat's request; Sessions 32-41 above keep the record.
+- **The first per-member list cited S35 for the measurement protocol and S28 for the deck structure.** The protocol
+  decision is in Session 40 and the deck decisions in Sessions 29 and 30; Nguyên's edit of pages 05-07 is not in this
+  file at all (it reached the deck in version 20), so the summary cites the deck version instead.
+- **The summary first said "more than 300" corrections.** That counted every bullet in the file; the corrections
+  sections hold 201.
+- **The summary first spelled Dat's name "Đạt".** It is Đắt.
+
+### Judgement that stayed with the team
+
+Decided by Dat (15 Nov): the report is final and is not edited, so the Appendix A.1 sentence stays as it is and this
+file plus the summary carry the detail. Rewriting earlier sessions, or git history, was considered and not done;
+this file stays append-only.
+
+Decided by Dat (15 Nov), for the summary only: drop the list of tasks done in Dat's session for teammates, the
+self-reflection slot and the line saying many checks were themselves done by AI agents; add that members also
+coordinated and decided over the team chat, which this file cannot see; give each member's own work its own section;
+say the run guide uses the GitHub link. This file is unchanged on those points.
+
+Decided by Dat (15 Nov), for the run guide and the release: the GitHub link is enough, with no zip fallback; merge
+this branch into `main` and move tag `submission-2026-11-15` (was `92be460`) to the merge commit. A parallel session
+had already made the run guide change in PR #56 (`5013610`, where Dat also chose to clone `main` rather than the tag),
+so this branch takes `main`'s `docs/RUN_GUIDE_VI.md` unchanged; the tag now only marks the submitted state.
+
+Open, for the team:
+- **The report's disclosure sits in Appendix A.1, not in the references or a footnote**, which is where the course
+  rule asks for it, and it says "một phần" where this file records that AI drafted most code and documents.
+- **The repo must be public before grading** (PR #56 says Dat makes it public); the guide's `git clone` is the only
+  way in.
+- **The Drive copy of the guide (PDF) and `Group15_ShopInsight_source.zip`** describe the old tag and the fallback
+  until they are replaced.
+- **55 lines of this file still say "human review pending".**
